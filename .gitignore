@@ -1,1 +1,10 @@
 .opencode/
+node_modules/
+dist/
+.turbo/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+session-*.md
