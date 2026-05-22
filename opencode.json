@@ -1,4 +1,18 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["AGENTS.md"]
+  "instructions": ["AGENTS.md"],
+  "agent": {
+    "general": {
+      "model": "opencode-go/deepseek-v4-flash",
+      "options": {
+        "thinking": "medium"
+      }
+    },
+    "explore": {
+      "model": "opencode-go/deepseek-v4-flash",
+      "options": {
+        "thinking": "medium"
+      }
+    }
+  }
 }

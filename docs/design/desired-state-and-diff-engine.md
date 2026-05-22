@@ -198,4 +198,4 @@ diff(realState, desiredState):
 | Item in active with Discord ID, but missing from real state | Validation error — someone deleted it externally. Block plan. |
 | Item missing from active, no tombstone | Validation error — bug or data corruption. Block plan. |
 | Two active items claim same position | Assign sequential positions in execution order |
-| External changes during long planning session | Pre-execution validation re-checks assumptions against fresh Discord state |
+| External changes during long planning session | Pre-execution validation re-checks assumptions against fresh Discord state and compares the original fork point against current real state. If items touched by the plan were externally modified (not just deleted), the conflict is surfaced to the user: [Re-plan from fresh state] or [Force apply]. This is deferred to Phase 2.

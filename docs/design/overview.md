@@ -18,7 +18,7 @@ An AI-driven management platform that allows Discord Administrators to configure
 | Styling | Tailwind CSS | Discord dark theme |
 | Backend/API | Node.js / Hono | High-performance orchestration (co-located with Bot) |
 | Real-time | SSE via `hono/streaming` | Live execution status to frontend |
-| Orchestrator | Vercel AI SDK + OpenRouter | LLM-based planning via constrained tool-calling |
+| Orchestrator | OpenRouter (raw fetch) | LLM-based planning via constrained tool-calling |
 | Database | PostgreSQL + Drizzle ORM | Plans, snapshots, rules, templates, users |
 | Auth | Better Auth | Discord OAuth2, session management, multi-tenant |
 | Bot | Discord.js v14 | Stateful Bot Worker (same process as Hono) |

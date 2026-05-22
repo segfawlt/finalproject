@@ -25,10 +25,11 @@ The bot MUST have ADMINISTRATOR in every guild it operates in.
 
 Only one plan can execute per guild at a time.
 
-- `current_plan_id` column on `guilds` table
+- `current_plan_id` column on `guilds` table (exists in schema, locking logic to be implemented)
 - Simple lock — no distributed coordination needed in monolith
 - Later plans re-validated against state after earlier plans complete
 - Queue: plans wait naturally, no explicit queue structure needed yet
+- On process startup: clear all `current_plan_id` values (stale locks from crashes)
 
 ## Bot Role Hierarchy
 

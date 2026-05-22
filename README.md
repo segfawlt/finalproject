@@ -66,7 +66,7 @@ The web app will be available at `http://localhost:5173` and the API at `http://
 - **Frontend:** Vite + React, React Router v6, Zustand, Tailwind CSS
 - **Backend:** Hono, Discord.js v14, Better Auth
 - **Database:** PostgreSQL, Drizzle ORM
-- **AI:** Vercel AI SDK + OpenRouter
+- **AI:** OpenRouter (raw fetch)
 - **Real-time:** SSE (Server-Sent Events)
 
 ## Environment Variables

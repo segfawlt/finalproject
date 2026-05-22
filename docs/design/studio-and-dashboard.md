@@ -4,7 +4,7 @@
 
 A React-based Discord-like UI focused on server configuration (not messaging). Client-side SPA (Vite + React), no SSR needed.
 
-There is only **one mode — Plan Mode.** The user types a prompt, the LLM builds the desired state, and the Discord clone renders it with visual diff highlighting (green = new, red = deleted, yellow = modified). The user decides depth: click Approve immediately for quick execution, or iterate with more prompts and manual edits before approving.
+There is only **one mode — Plan Mode.** The user types a prompt, the LLM builds the desired state, and the Discord clone renders it with visual diff highlighting (green = new, red = deleted). The user decides depth: click Approve immediately for quick execution, or iterate with more prompts and manual edits before approving.
 
 ### Plan Preview
 
@@ -23,7 +23,21 @@ Users can:
 
 ### Iteration History
 
-Each user prompt or manual edit creates an iteration snapshot (versioned checkpoint of the desired state). Users can view any past iteration, revert to it, or continue from it. Reverting creates a new iteration that copies the old one's state — nothing is deleted. Git-like versioning within a plan.
+Each user prompt or manual edit creates an iteration snapshot — a versioned checkpoint of the desired state. Iterations live in memory during planning (fast, zero DB overhead) and are persisted to the `plan_iterations` table at approval. Reverting creates a new iteration that copies the old one's state — nothing is deleted. Git-like versioning within a plan.
+
+#### Diff Tabs
+
+Iterations are compared via IDE-style diff tabs:
+
+- **Default view**: Single panel showing the current DesiredState
+- **History**: Accessible via dropdown or timeline sidebar
+- **Clicking an iteration** opens it as a diff tab next to the current state
+- Multiple tabs can be open simultaneously (compare any two iterations)
+- Each tab shows a green/red diff against the current state:
+  - Green = item added since that iteration
+  - Red = item removed since that iteration
+- Each tab has a **[Revert to this]** button
+- Tabs can be opened, rearranged, and closed like browser tabs
 
 ### Approval
 

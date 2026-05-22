@@ -44,7 +44,7 @@ The `users` table SHALL be managed by Better Auth and include: `id` (TEXT, PK), 
 
 ### Requirement: Guilds table
 
-The `guilds` table SHALL store Discord server information with columns: `id` (TEXT, PK — Discord snowflake), `name` (TEXT), `icon` (TEXT, nullable), `serverType` (TEXT, nullable), `settings` (JSONB, default empty object), `createdAt` (TIMESTAMP), `updatedAt` (TIMESTAMP).
+The `guilds` table SHALL store Discord server information with columns: `id` (TEXT, PK — Discord snowflake), `name` (TEXT), `icon` (TEXT, nullable), `serverType` (TEXT, nullable), `settings` (JSONB, default empty object), `subscriptionTier` (TEXT, default 'free'), `currentPlanId` (UUID, nullable — locks guild to one executing plan at a time), `createdAt` (TIMESTAMP), `updatedAt` (TIMESTAMP).
 
 #### Scenario: Guild is registered on first bot join
 
@@ -58,7 +58,7 @@ The `guilds` table SHALL store Discord server information with columns: `id` (TE
 
 ### Requirement: Plans table
 
-The `plans` table SHALL store execution plans with columns: `id` (UUID, PK), `guildId` (TEXT, FK → guilds.id), `userId` (TEXT, FK → users.id), `status` (TEXT — draft/validated/approved/executing/completed/failed/rolled_back), `userPrompt` (TEXT), `serverType` (TEXT, nullable), `planData` (JSONB — full plan structure including steps, symbol_table, assumptions, llm_response, complexity_score), `createdAt` (TIMESTAMP), `updatedAt` (TIMESTAMP), `executedAt` (TIMESTAMP, nullable), `completedAt` (TIMESTAMP, nullable), `error` (JSONB, nullable).
+The `plans` table SHALL store execution plans with columns: `id` (UUID, PK), `guildId` (TEXT, FK → guilds.id), `userId` (TEXT, FK → users.id), `conversationId` (UUID, FK → conversations.id, nullable), `status` (TEXT — draft/validated/approved/executing/completed/failed/rolled_back), `userPrompt` (TEXT), `serverType` (TEXT, nullable), `planData` (JSONB — full plan structure including steps, symbol_table, assumptions, llm_response), `createdAt` (TIMESTAMP), `updatedAt` (TIMESTAMP), `executedAt` (TIMESTAMP, nullable), `completedAt` (TIMESTAMP, nullable), `error` (JSONB, nullable).
 
 #### Scenario: Plan is stored with full structure
 
@@ -69,6 +69,34 @@ The `plans` table SHALL store execution plans with columns: `id` (UUID, PK), `gu
 
 - **WHEN** a plan moves from draft to validated to approved to executing to completed
 - **THEN** the `status` column is updated and timestamps are set appropriately
+
+### Requirement: Conversations table
+
+The `conversations` table SHALL store LLM planning conversations as the top-level unit with columns: `id` (UUID, PK), `guildId` (TEXT, FK → guilds.id), `userId` (TEXT, FK → users.id), `status` (TEXT — active/paused/completed/expired), `userPrompt` (TEXT — original prompt that started the conversation), `createdAt` (TIMESTAMP), `updatedAt` (TIMESTAMP), `expiresAt` (TIMESTAMP, nullable). Plans SHALL belong to conversations via a `conversationId` FK.
+
+#### Scenario: Conversation is created when user starts planning
+
+- **WHEN** a user submits a prompt in Studio
+- **THEN** a conversation row is created with the user's prompt and status `active`
+
+#### Scenario: Conversation persists across server restarts
+
+- **WHEN** the server restarts and a user reopens a conversation
+- **THEN** the user sees their original prompt and can resume by clicking "Try Again"
+
+### Requirement: Plan iterations table
+
+The `plan_iterations` table SHALL store versioned snapshots of the desired state during planning with columns: `id` (UUID, PK), `conversationId` (UUID, FK → conversations.id, NOT NULL), `version` (INTEGER, NOT NULL), `type` (TEXT — llm_generated/manual_edit/revert), `desiredState` (JSONB, NOT NULL — full ServerState at this iteration), `createdAt` (TIMESTAMP).
+
+#### Scenario: Iteration is saved after each LLM turn or manual edit
+
+- **WHEN** the LLM completes a tool call loop iteration or the user makes a manual edit in Studio
+- **THEN** a new `plan_iterations` row is inserted with the current DesiredState snapshot
+
+#### Scenario: User views iteration history
+
+- **WHEN** a user opens iteration history for a conversation
+- **THEN** all iterations are queryable by `conversationId`, ordered by `version`
 
 ### Requirement: Snapshots table
 

@@ -11,7 +11,7 @@ AI-driven Discord server management platform. Administrators describe server con
 | Frontend   | Vite + React, React Router v6, Zustand, Tailwind CSS |
 | Backend    | Hono, Discord.js v14, Better Auth             |
 | Database   | PostgreSQL, Drizzle ORM                       |
-| AI         | Vercel AI SDK + OpenRouter                    |
+| AI         | OpenRouter (raw fetch)                        |
 | Real-time  | SSE (Server-Sent Events)                      |
 | Language   | TypeScript                                    |
 | Monorepo   | pnpm workspaces                               |

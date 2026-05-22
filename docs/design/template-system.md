@@ -56,15 +56,6 @@ Stored as JSONB in PostgreSQL with metadata:
 - Phase 2 (later): Visual template builder in Studio (drag-and-drop)
 - Phase 3 (community): Submission + review flow
 
-### Template Revision Diff Engine
-
-Code-based comparison engine (separate from plan diff engine):
-- Match template items to current server items (name similarity + type + parent)
-- Tag each item: `add` / `update` / `merge` / `keep`
-- Compute permission differences
-- Output: structured diff passed to LLM for plan generation
-- LLM decides HOW to apply, not WHAT to match
-
 ---
 
 ## LLM Guidance System
