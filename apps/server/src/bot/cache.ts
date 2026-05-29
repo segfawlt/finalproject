@@ -1,3 +1,5 @@
+import type { RoleTags } from "@repo/shared";
+
 export interface ChannelCacheEntry {
   id: string;
   name: string;
@@ -5,22 +7,32 @@ export interface ChannelCacheEntry {
   parentId: string | null;
   position: number;
   messageCount?: number;
+  lockPermissions?: boolean;
 }
 
 export interface RoleCacheEntry {
   id: string;
   name: string;
   position: number;
-  permissions: string;
+  permissions: string[];
   color: number;
+  hoist: boolean;
+  mentionable: boolean;
   memberCount?: number;
+  tags?: RoleTags;
+}
+
+export interface MemberCacheEntry {
+  id: string;
+  username: string;
+  roleIds: string[];
 }
 
 export interface PermissionCacheEntry {
   channelId: string;
   roleId: string;
-  allow: string;
-  deny: string;
+  allow: string[];
+  deny: string[];
 }
 
 export const guildCache = new Map<
@@ -29,6 +41,7 @@ export const guildCache = new Map<
     channels: Map<string, ChannelCacheEntry>;
     roles: Map<string, RoleCacheEntry>;
     permissions: Map<string, PermissionCacheEntry>;
+    members: Map<string, MemberCacheEntry>;
   }
 >();
 
@@ -38,6 +51,7 @@ export function initGuildCache(guildId: string) {
       channels: new Map(),
       roles: new Map(),
       permissions: new Map(),
+      members: new Map(),
     });
   }
   return guildCache.get(guildId)!;
@@ -47,10 +61,7 @@ export function getGuildCache(guildId: string) {
   return guildCache.get(guildId);
 }
 
-export function getChannelByName(
-  guildId: string,
-  name: string
-): ChannelCacheEntry | undefined {
+export function getChannelByName(guildId: string, name: string): ChannelCacheEntry | undefined {
   const cache = guildCache.get(guildId);
   if (!cache) return undefined;
   for (const channel of cache.channels.values()) {
@@ -59,10 +70,7 @@ export function getChannelByName(
   return undefined;
 }
 
-export function getChannelsByParent(
-  guildId: string,
-  parentId: string
-): ChannelCacheEntry[] {
+export function getChannelsByParent(guildId: string, parentId: string): ChannelCacheEntry[] {
   const cache = guildCache.get(guildId);
   if (!cache) return [];
   const result: ChannelCacheEntry[] = [];
@@ -72,17 +80,11 @@ export function getChannelsByParent(
   return result;
 }
 
-export function getChildrenCount(
-  guildId: string,
-  parentId: string
-): number {
+export function getChildrenCount(guildId: string, parentId: string): number {
   return getChannelsByParent(guildId, parentId).length;
 }
 
-export function getRoleByName(
-  guildId: string,
-  name: string
-): RoleCacheEntry | undefined {
+export function getRoleByName(guildId: string, name: string): RoleCacheEntry | undefined {
   const cache = guildCache.get(guildId);
   if (!cache) return undefined;
   for (const role of cache.roles.values()) {
@@ -91,10 +93,7 @@ export function getRoleByName(
   return undefined;
 }
 
-export function getChannelsByType(
-  guildId: string,
-  type: number
-): ChannelCacheEntry[] {
+export function getChannelsByType(guildId: string, type: number): ChannelCacheEntry[] {
   const cache = guildCache.get(guildId);
   if (!cache) return [];
   const result: ChannelCacheEntry[] = [];

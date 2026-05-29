@@ -2,18 +2,35 @@ export {
   createCategorySchema,
   editCategorySchema,
   deleteCategorySchema,
+  planCategoryCreate,
+  planCategoryEdit,
+  planCategoryDelete,
+  executeCategoryCreate,
+  executeCategoryEdit,
+  executeCategoryDelete,
+  getCategoryCreateAssumptions,
+  getCategoryEditAssumptions,
+  getCategoryDeleteAssumptions,
 } from "./categories";
-export type {
-  CreateCategoryParams,
-  EditCategoryParams,
-  DeleteCategoryParams,
-} from "./categories";
+export type { CreateCategoryParams, EditCategoryParams, DeleteCategoryParams } from "./categories";
 
 export {
   createChannelSchema,
   editChannelSchema,
   deleteChannelSchema,
   moveChannelSchema,
+  planChannelCreate,
+  planChannelEdit,
+  planChannelDelete,
+  planChannelMove,
+  executeChannelCreate,
+  executeChannelEdit,
+  executeChannelDelete,
+  executeChannelMove,
+  getChannelCreateAssumptions,
+  getChannelEditAssumptions,
+  getChannelDeleteAssumptions,
+  getChannelMoveAssumptions,
 } from "./channels";
 export type {
   CreateChannelParams,
@@ -27,16 +44,52 @@ export {
   editRoleSchema,
   deleteRoleSchema,
   moveRoleSchema,
+  planRoleCreate,
+  planRoleEdit,
+  planRoleDelete,
+  planRoleMove,
+  executeRoleCreate,
+  executeRoleEdit,
+  executeRoleDelete,
+  executeRoleMove,
+  getRoleCreateAssumptions,
+  getRoleEditAssumptions,
+  getRoleDeleteAssumptions,
+  getRoleMoveAssumptions,
 } from "./roles";
-export type {
-  CreateRoleParams,
-  EditRoleParams,
-  DeleteRoleParams,
-  MoveRoleParams,
-} from "./roles";
+export type { CreateRoleParams, EditRoleParams, DeleteRoleParams, MoveRoleParams } from "./roles";
 
-export { setOverwriteSchema, removeOverwriteSchema } from "./permissions";
-export type { SetOverwriteParams, RemoveOverwriteParams } from "./permissions";
+export {
+  setOverwriteSchema,
+  removeOverwriteSchema,
+  batchSetOverwriteSchema,
+  planOverwriteSet,
+  planOverwriteRemove,
+  planOverwriteBatch,
+  executeOverwriteSet,
+  executeOverwriteRemove,
+  getOverwriteSetAssumptions,
+  getOverwriteRemoveAssumptions,
+  getOverwriteBatchAssumptions,
+} from "./permissions";
+export type { SetOverwriteParams, RemoveOverwriteParams, BatchSetOverwriteParams } from "./permissions";
 
-export { askUserSchema } from "./interaction";
-export type { AskUserParams } from "./interaction";
+export {
+  createMemberRoleSchema,
+  removeMemberRoleSchema,
+  planMemberRoleAdd,
+  planMemberRoleRemove,
+  executeMemberRoleAdd,
+  executeMemberRoleRemove,
+  getMemberRoleAddAssumptions,
+  getMemberRoleRemoveAssumptions,
+} from "./members";
+export type { CreateMemberRoleParams, RemoveMemberRoleParams } from "./members";
+
+export { askUserSchema, planAskUser } from "./interaction";
+export type { AskUserParams, AskUserResult } from "./interaction";
+
+export { TOOL_REGISTRY, getTool, getOpenAIFunctionDefinitions } from "./registry";
+export type { ToolDefinition } from "./registry";
+export { evaluateAssumptions } from "./evaluate-assumptions";
+export type { AssumptionResult } from "./evaluate-assumptions";

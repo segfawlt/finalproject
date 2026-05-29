@@ -1,0 +1,2 @@
+DROP TABLE "role_snapshot_members" CASCADE;--> statement-breakpoint
+ALTER TABLE "guilds" ADD COLUMN "phase_progress" jsonb DEFAULT '{"foundation":false,"layout":false,"access":false,"people":false}'::jsonb NOT NULL;

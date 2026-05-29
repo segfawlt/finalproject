@@ -7,6 +7,12 @@ import { db } from "@repo/db";
 import type { AppVariables } from "../types";
 import guildsApp from "./routes/guilds";
 import rulesApp from "./routes/rules";
+import stateApp from "./routes/state";
+import plansApp from "./routes/plans";
+import conversationsApp from "./routes/conversations";
+import templatesApp from "./routes/templates";
+import botApp from "./routes/bot";
+import { rateLimit } from "./middleware/rate-limit";
 
 const app = new Hono();
 
@@ -17,6 +23,8 @@ app.use(
     credentials: true,
   })
 );
+
+app.use("/api/*", rateLimit({ maxRequests: 100, windowMs: 60 * 1000 }));
 
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
@@ -49,9 +57,67 @@ api.get("/plan/:id/stream", async (c) => {
   const planId = c.req.param("id");
 
   return streamSSE(c, async (stream) => {
+    const { subscribeToPlan } = await import("../planning/event-bus");
+
     await stream.writeSSE({
       event: "status",
       data: JSON.stringify({ planId, status: "streaming_ready" }),
+    });
+
+    // Subscribe to execution events for this plan
+    const unsubscribe = subscribeToPlan(planId, async (event) => {
+      await stream.writeSSE({
+        event: event.type,
+        data: JSON.stringify({
+          planId: event.planId,
+          stepIndex: event.stepIndex,
+          error: event.error,
+          result: event.result,
+        }),
+      });
+    });
+
+    // Keep alive with heartbeat every 30s
+    while (!stream.aborted) {
+      await stream.sleep(30000);
+      await stream.writeSSE({
+        event: "heartbeat",
+        data: JSON.stringify({ timestamp: Date.now() }),
+      });
+    }
+
+    unsubscribe();
+  });
+});
+
+api.get("/conversations/:id/stream", async (c) => {
+  const conversationId = c.req.param("id");
+
+  return streamSSE(c, async (stream) => {
+    const { subscribeToConversation } = await import("../planning/planning-event-bus");
+
+    await stream.writeSSE({
+      event: "status",
+      data: JSON.stringify({ conversationId, status: "streaming_ready" }),
+    });
+
+    const unsubscribe = subscribeToConversation(conversationId, async (event) => {
+      await stream.writeSSE({
+        event: event.type,
+        data: JSON.stringify({
+          conversationId,
+          toolName: event.toolName,
+          params: event.params,
+          result: event.result,
+          question: event.question,
+          options: event.options,
+          multiSelect: event.multiSelect,
+          allowCustom: event.allowCustom,
+          summary: event.summary,
+          reasoning: event.reasoning,
+          error: event.error,
+        }),
+      });
     });
 
     while (!stream.aborted) {
@@ -61,11 +127,18 @@ api.get("/plan/:id/stream", async (c) => {
         data: JSON.stringify({ timestamp: Date.now() }),
       });
     }
+
+    unsubscribe();
   });
 });
 
 api.route("/guilds", guildsApp);
 api.route("/guilds/:guildId/rules", rulesApp);
+api.route("/guilds/:guildId", stateApp);
+api.route("/guilds/:guildId/plans", plansApp);
+api.route("/guilds/:guildId/conversations", conversationsApp);
+api.route("/guilds/:guildId/templates", templatesApp);
+api.route("/bot", botApp);
 
 app.route("/api", api);
 

@@ -5,13 +5,24 @@
 Two tightly coupled subsystems that form the core execution pipeline:
 
 ```
-PLANNING PHASE                APPROVAL PHASE              EXECUTION PHASE
+PLANNING STAGE              APPROVAL STAGE            EXECUTION STAGE
 ┌──────────────┐              ┌──────────────┐            ┌──────────────┐
 │ DesiredState │  ──────────▶ │ Diff Engine  │ ────────▶ │ Symbol       │
 │ (LLM edits)  │  snapshot   │ (dumb,       │  steps   │ Resolver +   │
 │              │             │  deterministic│          │ Discord API  │
 └──────────────┘              └──────────────┘            └──────────────┘
 ```
+
+> **Phase mapping:** This document describes the **3-stage pipeline** (technical implementation).
+> These map to the 6-phase user flow in [overview.md](./overview.md#the-6-phase-flow):
+>
+> | 3-Stage Pipeline | 6-Phase User Flow                        |
+> | ---------------- | ---------------------------------------- |
+> | Planning Phase   | Phase 2 (Planning) + Phase 3 (Iteration) |
+> | Approval Phase   | Phase 4 (Approval)                       |
+> | Execution Phase  | Phase 5 (Execution)                      |
+>
+> Post-Execution (Phase 6) is outside this pipeline — it runs after execution completes.
 
 ---
 
@@ -27,9 +38,9 @@ DesiredState {
   guildName: string
 
   active: {                    // items that should exist after execution
-    channels: Map<id, Channel>
-    roles: Map<id, Role>
-    overwrites: Map<compositeKey, Overwrite>
+    channels: Record<string, Channel>
+    roles: Record<string, Role>
+    overwrites: Record<string, Overwrite>
   }
 
   tombstones: [                // items explicitly deleted during planning
@@ -37,26 +48,28 @@ DesiredState {
       discordId: string         // real Discord ID of deleted item
       resourceType: "channel" | "role" | "category"
       name: string              // name at time of deletion
-      deletedInIteration: number
+      deletedInVersion: number
     }
   ]
 
   symbolCounter: number         // for generating $ch_0, $ch_1, $role_0...
-  currentIteration: number
+  version: number               // iteration version, matches plan_iterations.version
 }
 ```
 
 ### Key invariants
 
-1. **Every deletion creates a tombstone.** When the LLM calls `delete_channel`, the item moves from `active` to `tombstones`. It is never silently removed.
+1. **Every deletion creates a tombstone** (channels and roles only). When the LLM calls `delete_channel`, the item moves from `active` to `tombstones`. It is never silently removed.
 
-2. **Existing items keep their Discord ID.** The `id` field in active items is the real Discord ID for existing resources. New items get a symbol (`$ch_0`).
+2. **Overwrites use symmetric diffing** — no tombstones. Overwrites are simple composite-key entries with no hierarchy or audit-trail value. The diff engine scans real-state overwrites absent from desired state and emits `remove_overwrite` steps. `removeOverwrite` deletes from active directly; the diff engine handles the Discord side.
 
-3. **Symbols are assigned on creation.** When the LLM calls `create_channel`, the system assigns a symbol and adds the item to `active`.
+3. **Existing items keep their Discord ID.** The `id` field in active items is the real Discord ID for existing resources. New items get a symbol (`$ch_0`).
 
-4. **No item appears in `active` without either a Discord ID or a symbol.** This gives the diff engine a clear discriminator.
+4. **Symbols are assigned on creation.** When the LLM calls `create_channel`, the system assigns a symbol and adds the item to `active`.
 
-### Why tombstones?
+5. **No item appears in `active` without either a Discord ID or a symbol.** This gives the diff engine a clear discriminator.
+
+### Why tombstones? (channels and roles)
 
 Without tombstones, the diff engine must SCAN real state for items missing from desired state — inferring deletions from absence. This is fragile:
 
@@ -65,9 +78,24 @@ Without tombstones, the diff engine must SCAN real state for items missing from 
 - There's no audit trail for what was deleted or why
 
 With tombstones:
+
 - Deletions are explicit, recorded facts
 - The diff engine reads a list, doesn't guess
 - If an item is missing from `active` but has no tombstone → VALIDATION ERROR (plan blocked)
+- Tombstones power the approval UI: they are the "deletions" column shown alongside "creations" so the user can visually compare and catch unintended delete+create patterns
+
+Tombstones are data, not logic. They record what happened during planning. The system presents them — the human judges them.
+
+### Why symmetric diffing for overwrites?
+
+Overwrites are structurally simpler than channels/roles:
+
+- No hierarchy (no parent-child relationships)
+- No audit value (no message counts, no member counts)
+- Keyed by composite `channelId:roleId` — deterministic identity
+- The approval UI doesn't show overwrites in the deletions/creations comparison
+
+Symmetric diffing (scan real for absent → delete) is simpler, faster, and doesn't require a tombstone mechanism for a resource type that gains nothing from it. The invariant "every deletion creates a tombstone" applies to channels and roles only.
 
 ---
 
@@ -88,11 +116,15 @@ Before we reach the diff engine, multiple layers handle the delete+create proble
                     │   delete+create when you want to    │
                     │   destroy and replace a resource."   │
                     ├─────────────────────────────────────┤
-   LAYER 3          │  User warning at approval           │
-   (safety net)     │  If delete+create pair exists in    │
-                    │  same category with same type:      │
-                    │  "⚠ You are deleting #X and making  │
-                    │   #Y in the same place. Rename?"     │
+   LAYER 3          │  Approval UI: present, don't judge  │
+   (safety net)     │  Show deletions (tombstones) and    │
+                    │  creations (symbols) side by side.  │
+                    │  Always show message count for       │
+                    │  deleted text channels.             │
+                    │                                     │
+                    │  No heuristics. No scoring. No      │
+                    │  thresholds. The human compares     │
+                    │  and decides.                       │
                     ├─────────────────────────────────────┤
    LAYER 4          │  Diff engine: dumb & deterministic  │
    (execution)      │  Executes exactly what's specified. │
@@ -103,9 +135,51 @@ Before we reach the diff engine, multiple layers handle the delete+create proble
 
 **Layer 1 is the real fix.** If the right tools exist and the system prompt guides the LLM correctly, 95% of the problem disappears.
 
-**Layer 3 is the safety net for the remaining 5%.** If the LLM still does delete+create, the system flags the ambiguity to the user at approval. The user decides.
+**Layer 3 is the safety net for the remaining 5%.** Instead of algorithmic heuristics (which are brittle, require tuning thresholds, and produce false positives), the approval UI simply presents the facts:
+
+```
+  DELETIONS                    CREATIONS
+  #general — 12,847 msgs       #announcements (text, in Info)
+  #old-chat — 3 msgs           #team-chat (text, in Info)
+```
+
+The juxtaposition of deletions and creations, plus the message count for each deleted channel, gives the user everything they need to spot a mistaken delete+create pattern. The system presents facts — the human judges them.
+
+Message count is always shown for deleted text channels (no configurable threshold). A single number is all the user needs to assess deletion impact. The cost is one `<span>` in the UI.
 
 **Layer 4 does NOT auto-convert.** The diff engine never guesses whether a delete+create pair "was really a rename." It executes what's specified, and Layer 3 already gave the user a chance to catch it.
+
+---
+
+## Rejected Approaches
+
+These were considered and explicitly rejected:
+
+### Content hashing for change detection
+
+Hashing a resource's properties into a fingerprint (`hash({name, type, parentId, ...})`) and comparing fingerprints to detect changes. Rejected because:
+
+- The hash almost never skips work (if the LLM put the item in the plan, something probably changed)
+- It's just field-by-field comparison with extra steps — no real performance or correctness win
+- The only useful concept is the **canonical fingerprint** (which properties define a resource's identity for diffing), but the hash on top adds nothing
+
+### Scoring-based rename detection
+
+Using weighted heuristics (name similarity, same category, same type, permission overlap) to algorithmically detect delete+create rename patterns. Rejected because:
+
+- Every signal is noisy in isolation (e.g., "same category" is common even for unrelated changes)
+- Weights and thresholds must be tuned per server — no single configuration works everywhere
+- Produces both false positives (warning on intentional replace) and false negatives (missing a rename in a different category)
+- Becomes a maintenance burden: every Discord API change risks breaking the scoring heuristic
+- The user looking at the before/after in the Studio is the only reliable rename detector — no algorithm can beat human judgment for assessing intent
+
+### Configurable message count thresholds
+
+Letting users set a threshold for when to flag deletion message counts as "high." Rejected because:
+
+- No single number works across all servers (100 msgs is a lot for a friend server, noise for a large public server)
+- The cost of always showing the number is a single `<span>` — hiding it requires extra config UI, extra state, extra edge cases
+- Showing the count unconditionally gives the user all the signal they need, with zero configuration
 
 ---
 
@@ -116,12 +190,14 @@ Before we reach the diff engine, multiple layers handle the delete+create proble
 The diff engine is a pure function: `(RealState, DesiredState) → ExecutionSteps`.
 
 It does not:
+
 - Use heuristics to detect rename patterns
 - Score items for matching
 - Auto-convert delete+create to edit
 - Make any decisions
 
 It does:
+
 - Read explicit state (active items, tombstones, symbols)
 - Generate the corresponding Discord API steps
 - Sort topologically
@@ -143,6 +219,19 @@ diff(realState, desiredState):
       │
       └─ Has symbol ($ch_N, $role_N) → NEW
           → create_* step (params contain symbol)
+
+    For each overwrite in desiredState.active.overwrites:
+      ┌─ Contains symbol → NEW overwrite → set_overwrite step
+      │   (depends on the symbols it references)
+      │
+      └─ All Discord IDs → EXISTING overwrite
+          Match by composite key (channelId:roleId) in realState
+          If found and different → set_overwrite step
+          If not found in realState → set_overwrite (create new)
+          If match → skip
+
+    For each real overwrite NOT in desiredState.active.overwrites:
+      → remove_overwrite step (symmetric diffing — absence = deletion)
 
     For each tombstone in desiredState.tombstones:
       → delete_* step (uses tombstone.discordId)
@@ -193,9 +282,9 @@ diff(realState, desiredState):
 
 ### Edge cases
 
-| Case | Handling |
-|------|----------|
-| Item in active with Discord ID, but missing from real state | Validation error — someone deleted it externally. Block plan. |
-| Item missing from active, no tombstone | Validation error — bug or data corruption. Block plan. |
-| Two active items claim same position | Assign sequential positions in execution order |
-| External changes during long planning session | Pre-execution validation re-checks assumptions against fresh Discord state and compares the original fork point against current real state. If items touched by the plan were externally modified (not just deleted), the conflict is surfaced to the user: [Re-plan from fresh state] or [Force apply]. This is deferred to Phase 2.
+| Case                                                        | Handling                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Item in active with Discord ID, but missing from real state | Validation error — someone deleted it externally. Block plan.                                                                                                                                                                                                                                                                                                                                                                                         |
+| Item missing from active, no tombstone                      | Validation error — bug or data corruption. Block plan.                                                                                                                                                                                                                                                                                                                                                                                                |
+| Two active items claim same position                        | Assign sequential positions in execution order                                                                                                                                                                                                                                                                                                                                                                                                        |
+| External changes during long planning session               | Pre-execution validation re-checks assumptions against fresh Discord state and compares the original fork point against current real state. If items touched by the plan were externally modified, the conflict blocks execution. The user must re-plan from fresh state: the DesiredState is re-forked, the LLM receives the conflict summary + fresh state + conversation history, and adapts the plan in-place (same conversation, new iteration). |

@@ -32,13 +32,34 @@ function App() {
           isAuthenticated ? <Navigate to="/studio" replace /> : <Navigate to="/login" replace />
         }
       />
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/studio" replace /> : <Login />} />
-      <Route path="/studio" element={isAuthenticated ? <Studio /> : <Navigate to="/login" replace />} />
-      <Route path="/studio/:guildId" element={isAuthenticated ? <Studio /> : <Navigate to="/login" replace />} />
-      <Route path="/dashboard" element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" replace />} />
-      <Route path="/dashboard/:guildId" element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" replace />} />
-      <Route path="/setup" element={isAuthenticated ? <Setup /> : <Navigate to="/login" replace />} />
-      <Route path="/setup/:guildId" element={isAuthenticated ? <Setup /> : <Navigate to="/login" replace />} />
+      <Route
+        path="/login"
+        element={isAuthenticated ? <Navigate to="/studio" replace /> : <Login />}
+      />
+      <Route
+        path="/studio"
+        element={isAuthenticated ? <Studio /> : <Navigate to="/login" replace />}
+      />
+      <Route
+        path="/studio/:guildId"
+        element={isAuthenticated ? <Studio /> : <Navigate to="/login" replace />}
+      />
+      <Route
+        path="/dashboard"
+        element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" replace />}
+      />
+      <Route
+        path="/dashboard/:guildId"
+        element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" replace />}
+      />
+      <Route
+        path="/setup"
+        element={isAuthenticated ? <Setup /> : <Navigate to="/login" replace />}
+      />
+      <Route
+        path="/setup/:guildId"
+        element={isAuthenticated ? <Setup /> : <Navigate to="/login" replace />}
+      />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

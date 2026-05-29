@@ -3,18 +3,15 @@ import { botClient } from "../bot/client";
 import { PermissionFlagsBits } from "discord.js";
 
 export async function getUserDiscordId(userId: string): Promise<string | null> {
-  const result = await queryClient<[{ providerAccountId: string }?]>`
-    SELECT "providerAccountId" FROM "account"
-    WHERE "userId" = ${userId} AND "providerId" = 'discord'
+  const result = await queryClient<[{ provider_account_id: string }?]>`
+    SELECT "provider_account_id" FROM "account"
+    WHERE "user_id" = ${userId} AND "provider_id" = 'discord'
     LIMIT 1
   `;
-  return result[0]?.providerAccountId ?? null;
+  return result[0]?.provider_account_id ?? null;
 }
 
-export async function userHasManageGuild(
-  userId: string,
-  guildId: string,
-): Promise<boolean> {
+export async function userHasManageGuild(userId: string, guildId: string): Promise<boolean> {
   const discordId = await getUserDiscordId(userId);
   if (!discordId) return false;
 

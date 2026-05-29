@@ -6,11 +6,17 @@ interface PanelState {
   showProgress: boolean;
 }
 
+interface ActiveTemplate {
+  id: string;
+  name: string;
+}
+
 interface StudioState {
   selectedGuild: string | null;
   selectedItems: string[];
   panelState: PanelState;
   isDragging: boolean;
+  activeTemplates: ActiveTemplate[];
   setSelectedGuild: (guildId: string | null) => void;
   toggleSelectedItem: (itemId: string) => void;
   clearSelectedItems: () => void;
@@ -18,6 +24,8 @@ interface StudioState {
   setRightPanel: (panel: "preview" | "diff") => void;
   toggleProgress: () => void;
   setIsDragging: (dragging: boolean) => void;
+  addTemplate: (template: ActiveTemplate) => void;
+  removeTemplate: (templateId: string) => void;
 }
 
 export const useStudioStore = create<StudioState>((set) => ({
@@ -29,6 +37,7 @@ export const useStudioStore = create<StudioState>((set) => ({
     showProgress: false,
   },
   isDragging: false,
+  activeTemplates: [],
   setSelectedGuild: (guildId) => set({ selectedGuild: guildId }),
   toggleSelectedItem: (itemId) =>
     set((state) => ({
@@ -46,4 +55,14 @@ export const useStudioStore = create<StudioState>((set) => ({
       panelState: { ...state.panelState, showProgress: !state.panelState.showProgress },
     })),
   setIsDragging: (dragging) => set({ isDragging: dragging }),
+  addTemplate: (template) =>
+    set((state) => ({
+      activeTemplates: state.activeTemplates.some((t) => t.id === template.id)
+        ? state.activeTemplates
+        : [...state.activeTemplates, template],
+    })),
+  removeTemplate: (templateId) =>
+    set((state) => ({
+      activeTemplates: state.activeTemplates.filter((t) => t.id !== templateId),
+    })),
 }));

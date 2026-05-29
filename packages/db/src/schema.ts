@@ -35,6 +35,14 @@ export const guilds = pgTable("guilds", {
   settings: jsonb("settings").notNull().default({}),
   subscriptionTier: text("subscription_tier").notNull().default("free"),
   currentPlanId: uuid("current_plan_id"),
+  phaseProgress: jsonb("phase_progress")
+    .notNull()
+    .default({
+      foundation: false,
+      layout: false,
+      access: false,
+      people: false,
+    }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -49,6 +57,7 @@ export const plans = pgTable("plans", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id),
+  conversationId: uuid("conversation_id").references(() => conversations.id),
   status: text("status").notNull().default("draft"),
   userPrompt: text("user_prompt").notNull(),
   serverType: text("server_type"),
@@ -83,6 +92,43 @@ export const snapshots = pgTable(
   ]
 );
 
+// ── Conversations ─────────────────────────────────────────────────────────────
+
+export const conversations = pgTable("conversations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  guildId: text("guild_id")
+    .notNull()
+    .references(() => guilds.id),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  status: text("status").notNull().default("active"),
+  userPrompt: text("user_prompt").notNull(),
+  messages: jsonb("messages").notNull().default([]),
+  forkStateHash: text("fork_state_hash").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ── Plan Iterations ────────────────────────────────────────────────────────────
+
+export const planIterations = pgTable(
+  "plan_iterations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id),
+    version: integer("version").notNull(),
+    type: text("type").notNull(),
+    desiredState: jsonb("desired_state").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_plan_iterations_conversation_version").on(table.conversationId, table.version),
+  ]
+);
+
 // ── Rules ──────────────────────────────────────────────────────────────────────
 
 export const rules = pgTable("rules", {
@@ -107,22 +153,12 @@ export const templates = pgTable("templates", {
   validationRules: jsonb("validation_rules").notNull().default([]),
   category: text("category"),
   tags: text("tags").array().notNull().default([]),
+  guildId: text("guild_id").references(() => guilds.id),
   authorId: text("author_id").references(() => users.id),
   isOfficial: boolean("is_official").notNull().default(false),
   status: text("status").notNull().default("draft"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
-
-// ── Role Snapshot Members ──────────────────────────────────────────────────────
-
-export const roleSnapshotMembers = pgTable("role_snapshot_members", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  snapshotId: uuid("snapshot_id")
-    .notNull()
-    .references(() => snapshots.id),
-  userId: text("user_id").notNull(),
-  username: text("username").notNull(),
 });
 
 // ── Relations ──────────────────────────────────────────────────────────────────
@@ -136,11 +172,17 @@ export const guildsRelations = relations(guilds, ({ many }) => ({
   plans: many(plans),
   snapshots: many(snapshots),
   rules: many(rules),
+  conversations: many(conversations),
+  templates: many(templates),
 }));
 
 export const plansRelations = relations(plans, ({ one, many }) => ({
   guild: one(guilds, { fields: [plans.guildId], references: [guilds.id] }),
   user: one(users, { fields: [plans.userId], references: [users.id] }),
+  conversation: one(conversations, {
+    fields: [plans.conversationId],
+    references: [conversations.id],
+  }),
   snapshots: many(snapshots),
 }));
 
@@ -149,17 +191,25 @@ export const snapshotsRelations = relations(snapshots, ({ one }) => ({
   plan: one(plans, { fields: [snapshots.planId], references: [plans.id] }),
 }));
 
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  guild: one(guilds, { fields: [conversations.guildId], references: [guilds.id] }),
+  user: one(users, { fields: [conversations.userId], references: [users.id] }),
+  plans: many(plans),
+  planIterations: many(planIterations),
+}));
+
+export const planIterationsRelations = relations(planIterations, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [planIterations.conversationId],
+    references: [conversations.id],
+  }),
+}));
+
 export const rulesRelations = relations(rules, ({ one }) => ({
   guild: one(guilds, { fields: [rules.guildId], references: [guilds.id] }),
 }));
 
 export const templatesRelations = relations(templates, ({ one }) => ({
+  guild: one(guilds, { fields: [templates.guildId], references: [guilds.id] }),
   author: one(users, { fields: [templates.authorId], references: [users.id] }),
-}));
-
-export const roleSnapshotMembersRelations = relations(roleSnapshotMembers, ({ one }) => ({
-  snapshot: one(snapshots, {
-    fields: [roleSnapshotMembers.snapshotId],
-    references: [snapshots.id],
-  }),
 }));

@@ -1,29 +1,9 @@
-import {
-  DISCORD_PERMISSIONS,
-  CHANNEL_TYPES,
-} from "@repo/shared";
-import {
-  guildCache,
-  type ChannelCacheEntry,
-} from "./cache";
+import { CHANNEL_TYPES } from "@repo/shared";
+import { guildCache, type ChannelCacheEntry } from "./cache";
 import { botClient } from "./client";
 
-function bitfieldToPermissionNames(bitfield: string): string[] {
-  const names: string[] = [];
-  try {
-    const bits = BigInt(bitfield);
-    for (const [name, { bit }] of Object.entries(DISCORD_PERMISSIONS)) {
-      if (bits & bit) names.push(name);
-    }
-  } catch {
-    return [];
-  }
-  return names;
-}
-
-function formatPermissions(permissions: string): string {
-  const names = bitfieldToPermissionNames(permissions);
-  return names.join(", ");
+function formatPermissions(permissions: string[]): string {
+  return permissions.join(", ");
 }
 
 function shortenPermissionName(name: string): string {
@@ -34,10 +14,7 @@ function shortenPermissionName(name: string): string {
     .replace(/ /g, "");
 }
 
-function formatOverwrites(
-  channelId: string,
-  guildId: string
-): string {
+function formatOverwrites(channelId: string, guildId: string): string {
   const cache = guildCache.get(guildId);
   if (!cache) return "";
 
@@ -47,16 +24,18 @@ function formatOverwrites(
     if (perm.channelId !== channelId) continue;
 
     const role = cache.roles.get(perm.roleId);
-    const roleName = role ? (role.name === "@everyone" ? "@everyone" : `@${role.name}`) : perm.roleId;
+    const roleName = role
+      ? role.name === "@everyone"
+        ? "@everyone"
+        : `@${role.name}`
+      : perm.roleId;
 
     const parts: string[] = [];
-    const allowedPerms = bitfieldToPermissionNames(perm.allow);
-    const deniedPerms = bitfieldToPermissionNames(perm.deny);
 
-    for (const p of allowedPerms) {
+    for (const p of perm.allow) {
       parts.push(`+${shortenPermissionName(p)}`);
     }
-    for (const p of deniedPerms) {
+    for (const p of perm.deny) {
       parts.push(`-${shortenPermissionName(p)}`);
     }
 
@@ -74,11 +53,16 @@ function channelTypeLabel(type: number): string {
 
 function channelPrefix(type: number): string {
   switch (type) {
-    case 2: return "🔊";
-    case 13: return "🎤";
-    case 15: return "📋";
-    case 5: return "📢";
-    default: return "#";
+    case 2:
+      return "🔊";
+    case 13:
+      return "🎤";
+    case 15:
+      return "📋";
+    case 5:
+      return "📢";
+    default:
+      return "#";
   }
 }
 
@@ -113,16 +97,21 @@ function formatChannels(guildId: string): string {
     for (const sub of subs) {
       const prefix = channelPrefix(sub.type);
       const overwrites = formatOverwrites(sub.id, guildId);
+      const lockLabel = sub.lockPermissions === false ? " [unsynced]" : "";
+      // messageCount is approximate — see bot/index.ts for limitation notes
       const msgInfo = sub.messageCount != null ? `, ${sub.messageCount} msgs` : "";
-      lines.push(`    ${prefix}${sub.name} — ${channelTypeLabel(sub.type)}${msgInfo}${overwrites}`);
+      lines.push(`    ${prefix}${sub.name} — ${channelTypeLabel(sub.type)}${lockLabel}${msgInfo}${overwrites}`);
     }
   }
 
   for (const orphan of orphans.sort((a, b) => a.position - b.position)) {
     const prefix = channelPrefix(orphan.type);
     const overwrites = formatOverwrites(orphan.id, guildId);
+    const lockLabel = orphan.lockPermissions === false ? " [unsynced]" : "";
     const msgInfo = orphan.messageCount != null ? `, ${orphan.messageCount} msgs` : "";
-    lines.push(`  ${prefix}${orphan.name} — ${channelTypeLabel(orphan.type)}${msgInfo}${overwrites}`);
+    lines.push(
+      `  ${prefix}${orphan.name} — ${channelTypeLabel(orphan.type)}${lockLabel}${msgInfo}${overwrites}`
+    );
   }
 
   if (lines.length === 0) {
@@ -141,9 +130,7 @@ function formatRoles(guildId: string): string {
 
   const everyoneRole = roles.find((r) => r.name === "@everyone");
   const sortedRoles = [
-    ...roles
-      .filter((r) => r.name !== "@everyone")
-      .sort((a, b) => b.position - a.position),
+    ...roles.filter((r) => r.name !== "@everyone").sort((a, b) => b.position - a.position),
   ];
 
   const lines: string[] = [];
@@ -160,6 +147,54 @@ function formatRoles(guildId: string): string {
     const memberStr = everyoneRole.memberCount != null ? `${everyoneRole.memberCount} members` : "";
     const parts = [memberStr, `pos:${everyoneRole.position}`, permStr].filter(Boolean);
     lines.push(`  @everyone — ${parts.join(", ")}`);
+  }
+
+  return lines.join("\n");
+}
+
+function formatMemberRoles(guildId: string): string {
+  const cache = guildCache.get(guildId);
+  if (!cache) return "  (none)";
+
+  const members = Array.from(cache.members.values());
+  if (members.length === 0) return "  (none)";
+
+  // Build role → members[] map
+  const roleMembers = new Map<string, string[]>();
+  for (const member of members) {
+    for (const roleId of member.roleIds) {
+      const existing = roleMembers.get(roleId) ?? [];
+      existing.push(`${member.username} (${member.id})`);
+      roleMembers.set(roleId, existing);
+    }
+  }
+
+  const roles = Array.from(cache.roles.values());
+  const everyoneRole = roles.find((r) => r.name === "@everyone");
+  const sortedRoles = [
+    ...roles.filter((r) => r.name !== "@everyone").sort((a, b) => b.position - a.position),
+  ];
+
+  const lines: string[] = [];
+
+  for (const role of sortedRoles) {
+    const usernames = roleMembers.get(role.id) ?? [];
+    if (usernames.length === 0) continue;
+
+    const display =
+      usernames.length <= 5
+        ? usernames.join(", ")
+        : `${usernames.slice(0, 5).join(", ")}, +${usernames.length - 5} more`;
+
+    lines.push(`  ${role.name} (${usernames.length}): ${display}`);
+  }
+
+  if (everyoneRole) {
+    lines.push(`  @everyone (${members.length}): (all members)`);
+  }
+
+  if (lines.length === 0) {
+    lines.push("  (none)");
   }
 
   return lines.join("\n");
@@ -182,6 +217,9 @@ export function formatGuildForLLM(
   lines.push("");
   lines.push("Roles:");
   lines.push(formatRoles(guildId));
+  lines.push("");
+  lines.push("Member Roles:");
+  lines.push(formatMemberRoles(guildId));
 
   return lines.join("\n");
 }

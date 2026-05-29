@@ -1,18 +1,41 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["AGENTS.md"],
+  "plugin": ["superpowers@git+https://github.com/obra/superpowers.git"],
   "agent": {
     "general": {
-      "model": "opencode-go/deepseek-v4-flash",
+      "model": "opencode-go/deepseek-v4-pro",
       "options": {
-        "thinking": "medium"
+        "thinking": { "type": "enabled" }
       }
     },
     "explore": {
+      "description": "Fast codebase exploration",
       "model": "opencode-go/deepseek-v4-flash",
+      "mode": "subagent",
+      "hidden": true,
+      "permission": {
+        "task": "deny"
+      },
       "options": {
-        "thinking": "medium"
+        "thinking": { "type": "enabled" }
       }
+    },
+    "executor": {
+      "description": "Default execution subagent for bash commands, tests, builds, and validation",
+      "model": "opencode-go/deepseek-v4-flash",
+      "mode": "subagent",
+      "hidden": true,
+      "permission": {
+        "task": "deny"
+      }
+    }
+  },
+  "mcp": {
+    "grepai": {
+      "type": "local",
+      "command": ["grepai", "mcp-serve"],
+      "enabled": true
     }
   }
 }

@@ -41,10 +41,7 @@ rulesApp.post("/", zValidator("json", createRuleSchema), async (c) => {
   const guildId = c.req.param("guildId")!;
   const { ruleText } = c.req.valid("json");
 
-  const [rule] = await db
-    .insert(rules)
-    .values({ guildId, ruleText })
-    .returning();
+  const [rule] = await db.insert(rules).values({ guildId, ruleText }).returning();
 
   return c.json(rule, 201);
 });

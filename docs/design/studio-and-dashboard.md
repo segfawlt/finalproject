@@ -8,11 +8,51 @@ There is only **one mode — Plan Mode.** The user types a prompt, the LLM build
 
 ### Plan Preview
 
-The Discord clone IS the plan preview. As the LLM calls tools, the desired state updates and the clone re-renders. User sees changes accumulate live. No separate preview panel needed.
+The Discord clone IS the plan preview. As the LLM calls tools, the desired state updates
+and the clone re-renders. User sees changes accumulate live. No separate preview panel needed.
+
+During planning, the conversation UI shows:
+
+- **Thinking block** — collapsed `<details>` by default. LLM reasoning text shown when expanded.
+- **Tool call list** — live as tools are dispatched (tool name + params + result symbol)
+- **Answer text** — streamed after all tool calls complete (or shown at once)
+
+### Template Sidebar
+
+A toggleable sidebar within the Studio shows the per-server template library:
+
+- Browse/search templates by name, description, tags
+- Card preview for each template
+- **"Add to context"** button — only visible when a conversation is active
+  Injects the template summary into the system prompt as "Available ideas"
+- **"Merge Template"** button — sends a crafted merge prompt via `revise`
+- **"View in Studio"** — opens the template in a read-only Studio view
+- **"Fork & Edit"** — creates a copy, opens editable Studio with auto-save
+
+### View in Studio (Template Viewer)
+
+Read-only Studio view accessible from the template library, sidebar, or detail page:
+
+- Shows the template layout as a Discord clone (channels, categories, roles)
+- No editing — view only
+- **[Fork & Edit]** button → creates a new template entry, opens editable mode
+- **[Add to context]** button → adds to active conversation's system prompt
+
+### Fork & Edit (Template Editor)
+
+When the user forks a template into an editable Studio:
+
+- A new template entry is created immediately: "Fork of {template name}"
+- Edits are auto-saved via the DesiredStateStore snapshot pattern (same as conversations)
+- **[Revert]** rewinds to the fork point (original template content)
+- **[Discard]** deletes the forked entry entirely
+- **[Save as]** allows renaming the forked template
+- No explicit save needed — closing the tab preserves work
 
 ### Manual Editing (Limited)
 
 Users can:
+
 - Rename items
 - Reorder channels/categories
 - Delete proposed changes
@@ -23,7 +63,7 @@ Users can:
 
 ### Iteration History
 
-Each user prompt or manual edit creates an iteration snapshot — a versioned checkpoint of the desired state. Iterations live in memory during planning (fast, zero DB overhead) and are persisted to the `plan_iterations` table at approval. Reverting creates a new iteration that copies the old one's state — nothing is deleted. Git-like versioning within a plan.
+Each user prompt or manual edit creates an iteration snapshot — a versioned checkpoint of the desired state. Iterations are persisted to the `plan_iterations` table in the database, surviving server restarts. The current DesiredState displayed in Studio is the latest iteration for the active conversation. Reverting creates a new iteration that copies the old one's state — nothing is deleted. Git-like versioning within a conversation.
 
 #### Diff Tabs
 
@@ -48,6 +88,7 @@ Iterations are compared via IDE-style diff tabs:
 ### Execution View
 
 During execution, the clone shows real-time status:
+
 - Completed steps rendered in green
 - In-progress with spinner
 - Pending greyed out
@@ -67,8 +108,10 @@ After execution, each plan has a [Rollback] button. Generates inverse plan from 
 ### State Management
 
 Zustand for all UI state:
+
 - DesiredState (rendered in clone)
 - Iteration history
+- Active templates (template IDs currently in context for the conversation)
 - Panel sync (left/right panels)
 - Execution progress
 - Multi-select (for scoped revision)
@@ -88,6 +131,7 @@ Reduced scope — plan history and basic management:
 - Basic stats (plans run, success rate)
 
 **Deferred (not Phase 1):**
+
 - Full admin management tool
 - Subscription/billing
 - Detailed audit logs

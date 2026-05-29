@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { guildCache } from "../../bot/cache";
 import { botClient } from "../../bot/client";
 import { userHasManageGuild } from "../../auth/helpers";
+import { checkGuildOperable } from "../../planning/guild-check";
 import type { AppVariables } from "../../types";
 
 const guildsApp = new Hono<{ Variables: AppVariables }>();
@@ -13,6 +14,14 @@ const guildsApp = new Hono<{ Variables: AppVariables }>();
 const updateGuildSchema = z.object({
   serverType: z.string().nullable().optional(),
   settings: z.record(z.unknown()).optional(),
+  phaseProgress: z
+    .object({
+      foundation: z.boolean(),
+      layout: z.boolean(),
+      access: z.boolean(),
+      people: z.boolean(),
+    })
+    .optional(),
 });
 
 guildsApp.get("/", async (c) => {
@@ -29,6 +38,9 @@ guildsApp.get("/", async (c) => {
   }
 
   for (const [guildId] of guildCache) {
+    const operable = checkGuildOperable(guildId);
+    if (!operable.ok) continue;
+
     const hasAccess = await userHasManageGuild(user.id, guildId);
     if (!hasAccess) continue;
 
@@ -48,8 +60,9 @@ guildsApp.get("/:guildId", async (c) => {
   const user = c.get("user") as { id: string } | undefined;
   const guildId = c.req.param("guildId")!;
 
-  if (!guildCache.has(guildId)) {
-    return c.json({ error: "Guild not found" }, 404);
+  const operable = checkGuildOperable(guildId);
+  if (!operable.ok) {
+    return c.json({ error: operable.error }, operable.status);
   }
 
   if (user) {
@@ -59,10 +72,7 @@ guildsApp.get("/:guildId", async (c) => {
     }
   }
 
-  const [row] = await db
-    .select()
-    .from(guilds)
-    .where(eq(guilds.id, guildId));
+  const [row] = await db.select().from(guilds).where(eq(guilds.id, guildId));
 
   if (row) {
     return c.json(row);
@@ -86,8 +96,9 @@ guildsApp.patch("/:guildId", zValidator("json", updateGuildSchema), async (c) =>
   const guildId = c.req.param("guildId")!;
   const body = c.req.valid("json");
 
-  if (!guildCache.has(guildId)) {
-    return c.json({ error: "Guild not found" }, 404);
+  const operable = checkGuildOperable(guildId);
+  if (!operable.ok) {
+    return c.json({ error: operable.error }, operable.status);
   }
 
   if (user) {
@@ -104,11 +115,9 @@ guildsApp.patch("/:guildId", zValidator("json", updateGuildSchema), async (c) =>
   };
   if (body.serverType !== undefined) data.serverType = body.serverType;
   if (body.settings !== undefined) data.settings = body.settings;
+  if (body.phaseProgress !== undefined) data.phaseProgress = body.phaseProgress;
 
-  const [existing] = await db
-    .select()
-    .from(guilds)
-    .where(eq(guilds.id, guildId));
+  const [existing] = await db.select().from(guilds).where(eq(guilds.id, guildId));
 
   if (!existing) {
     await db.insert(guilds).values(data as typeof guilds.$inferInsert);
@@ -116,10 +125,7 @@ guildsApp.patch("/:guildId", zValidator("json", updateGuildSchema), async (c) =>
     await db.update(guilds).set(data).where(eq(guilds.id, guildId));
   }
 
-  const [updated] = await db
-    .select()
-    .from(guilds)
-    .where(eq(guilds.id, guildId));
+  const [updated] = await db.select().from(guilds).where(eq(guilds.id, guildId));
 
   return c.json(updated);
 });

@@ -16,7 +16,7 @@ The bot MUST have ADMINISTRATOR in every guild it operates in.
 - Better Auth with Discord OAuth2 provider (self-hosted, open source, type-safe)
 - Hono middleware validates session on every request
 - Session stored as HTTP-only cookie on app domain
-- User must have "Manage Server" permission in Discord to access guild dashboard
+- User must have `MANAGE_GUILD` permission in Discord to access guild dashboard
 - User roles: `super_admin`, `admin`, `user`
 - Multi-tenant via Better Auth organizations feature
 - Subscription tiers: `free`, `pro`, `enterprise` (feature flags, deferred)
@@ -33,9 +33,19 @@ Only one plan can execute per guild at a time.
 
 ## Bot Role Hierarchy
 
-- Bot should be at highest role position
-- If it cannot execute an action due to hierarchy: reports problem, suggests fixes
-- Manual setup step guided by onboarding flow
+The bot MUST be at the highest role position in every guild it operates in,
+alongside the ADMINISTRATOR requirement. Both are hard requirements — neither
+can be a warning.
+
+- On startup: check each guild for both ADMINISTRATOR and highest role position
+- Lacking either → guild marked as blocked
+- Validation BLOCK: any plan step that modifies a role above the bot's position
+  is rejected with a clear error message
+- Error message: "Bot cannot execute this plan. Its highest role (position X)
+  is below a role this plan modifies (position Y). Move the bot's role to the
+  top of the role list and try again."
+- Manual setup step guided by onboarding flow — bot's role should be dragged
+  to the top of the role list in Discord server settings
 
 ## Least Privilege
 
@@ -44,6 +54,7 @@ Requests only specific permissions per action via Discord OAuth2 scope. The bot'
 ## Pre-Execution Validation
 
 Fresh state read from Discord API before execution:
+
 - Bot role position still matches?
 - Referenced roles/channels still exist?
 - No name conflicts for new items?
@@ -54,6 +65,7 @@ Any assumption fails → conflict flagged → user chooses how to proceed.
 ## Destructive Action Warnings
 
 Before executing plans with destructive actions:
+
 - Deleted items shown in red in the clone
 - Message count / category child count displayed
 - IMPORTANT channels require explicit confirmation to delete
@@ -61,7 +73,7 @@ Before executing plans with destructive actions:
 ## Error Handling Safety
 
 - No partial state ever left on Discord server
-- Full rollback on permanent failure
-- Hardcoded fix map for known errors (403, 404, 429, 500)
-- LLM fallback for unknown errors
+- Full rollback on permanent failure via tracked Discord IDs from completedSteps
+- Hardcoded fix map for known errors (403, 404, 429, 500, 502, 503, timeout)
+- Unknown errors: fail, rollback, offer re-plan — never consult the LLM for runtime diagnosis
 - Retry with backoff for transient errors
