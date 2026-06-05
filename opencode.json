@@ -8,27 +8,6 @@
       "options": {
         "thinking": { "type": "enabled" }
       }
-    },
-    "explore": {
-      "description": "Fast codebase exploration",
-      "model": "opencode-go/deepseek-v4-flash",
-      "mode": "subagent",
-      "hidden": true,
-      "permission": {
-        "task": "deny"
-      },
-      "options": {
-        "thinking": { "type": "enabled" }
-      }
-    },
-    "executor": {
-      "description": "Default execution subagent for bash commands, tests, builds, and validation",
-      "model": "opencode-go/deepseek-v4-flash",
-      "mode": "subagent",
-      "hidden": true,
-      "permission": {
-        "task": "deny"
-      }
     }
   },
   "mcp": {
