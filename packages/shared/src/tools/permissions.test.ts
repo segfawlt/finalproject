@@ -78,6 +78,6 @@ describe("getOverwriteBatchAssumptions", () => {
     const assumptions = getOverwriteBatchAssumptions(params);
     const warns = assumptions.filter((a) => a.type === "warn_everyone_view");
     expect(warns).toHaveLength(1);
-    expect(warns[0].value).toBe("ch1");
+    expect(warns[0].value).toBe("@everyone");
   });
 });

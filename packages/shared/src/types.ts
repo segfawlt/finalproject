@@ -198,6 +198,7 @@ export interface Assumption {
   resourceType: string;
   checked: boolean;
   status: AssumptionStatus;
+  excludeId?: string;
 }
 
 export type IterationType = "llm_generated" | "manual_edit" | "revert";

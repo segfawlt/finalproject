@@ -67,20 +67,21 @@ describe("DesiredStateStore.removeMemberRole", () => {
 
   it("throws if the member does not exist", () => {
     const store = new DesiredStateStore();
+    const roleId = store.addRole({ name: "Some Role" });
 
-    expect(() => store.removeMemberRole("user-1", "some-role")).toThrow(
+    expect(() => store.removeMemberRole("user-1", roleId)).toThrow(
       "Member user-1 not found in desired state"
     );
   });
 
   it("throws if the role is not assigned to the member", () => {
     const store = new DesiredStateStore();
-    store.addRole({ name: "Admin" });
-    const roleSymbol = Object.keys(store.getState().active.roles)[0];
-    store.addMemberRole("user-1", roleSymbol);
+    const roleId = store.addRole({ name: "Admin" });
+    const otherRoleId = store.addRole({ name: "Other" });
+    store.addMemberRole("user-1", roleId);
 
-    expect(() => store.removeMemberRole("user-1", "other-role")).toThrow(
-      "Role other-role not found in member user-1's roles"
+    expect(() => store.removeMemberRole("user-1", otherRoleId)).toThrow(
+      `Role ${otherRoleId} not found in member user-1's roles`
     );
   });
 });

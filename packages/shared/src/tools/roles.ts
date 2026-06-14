@@ -2,10 +2,11 @@ import { z } from "zod";
 import type { ExecuteContext, CreateRoleResult } from "../execute-context";
 import type { Assumption, PlanResult } from "../types";
 import { DesiredStateStore } from "../state";
+import { permissionNameSchema } from "../constants";
 
 export const createRoleSchema = z.object({
   name: z.string().min(1).max(100),
-  permissions: z.array(z.string()).optional(),
+  permissions: z.array(permissionNameSchema).optional(),
   color: z
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/)
@@ -18,7 +19,7 @@ export const createRoleSchema = z.object({
 export const editRoleSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(100).optional(),
-  permissions: z.array(z.string()).optional(),
+  permissions: z.array(permissionNameSchema).optional(),
   color: z
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/)
@@ -165,6 +166,7 @@ export function getRoleEditAssumptions(params: EditRoleParams): Assumption[] {
       resourceType: "role",
       checked: false,
       status: "pending",
+      excludeId: params.id,
     });
   }
   return assumptions;

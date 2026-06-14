@@ -337,6 +337,7 @@ export class DesiredStateStore {
   }
 
   removeMemberRole(memberId: string, roleId: string): void {
+    this.validateReference(roleId, "role");
     const existing = this.state.active.memberRoles?.[memberId];
     if (!existing) {
       throw new Error(`Member ${memberId} not found in desired state`);
@@ -377,6 +378,14 @@ export class DesiredStateStore {
       if (!this.state.active.roles[id]) {
         throw new Error(`Role ${id} not found in desired state`);
       }
+    }
+  }
+
+  validateReferences(
+    refs: Array<{ id: string; type: "channel" | "role" }>
+  ): void {
+    for (const { id, type } of refs) {
+      this.validateReference(id, type);
     }
   }
 }

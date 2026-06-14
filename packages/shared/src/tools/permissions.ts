@@ -2,12 +2,13 @@ import { z } from "zod";
 import type { ExecuteContext } from "../execute-context";
 import type { Assumption, PlanResult } from "../types";
 import { DesiredStateStore } from "../state";
+import { permissionNameSchema } from "../constants";
 
 export const setOverwriteSchema = z.object({
   channel_id: z.string().min(1),
   role_id: z.string().min(1),
-  allow: z.array(z.string()).optional(),
-  deny: z.array(z.string()).optional(),
+  allow: z.array(permissionNameSchema).optional(),
+  deny: z.array(permissionNameSchema).optional(),
 });
 
 export const removeOverwriteSchema = z.object({
@@ -20,8 +21,8 @@ export const batchSetOverwriteSchema = z.object({
     z.object({
       channel_id: z.string().min(1),
       role_id: z.string().min(1),
-      allow: z.array(z.string()).optional(),
-      deny: z.array(z.string()).optional(),
+      allow: z.array(permissionNameSchema).optional(),
+      deny: z.array(permissionNameSchema).optional(),
     })
   ).min(1),
 });
@@ -49,6 +50,12 @@ export function planOverwriteBatch(
   params: BatchSetOverwriteParams,
   store: DesiredStateStore
 ): PlanResult {
+  store.validateReferences(
+    params.overwrites.flatMap((ow) => [
+      { id: ow.channel_id, type: "channel" as const },
+      { id: ow.role_id, type: "role" as const },
+    ])
+  );
   for (const ow of params.overwrites) {
     store.setOverwrite(ow.channel_id, ow.role_id, ow.allow, ow.deny);
   }
@@ -93,10 +100,10 @@ export function getOverwriteSetAssumptions(params: SetOverwriteParams): Assumpti
       status: "pending",
     },
   ];
-  if (params.deny?.includes("VIEW_CHANNEL") && params.role_id === "@everyone") {
+  if (params.deny?.includes("VIEW_CHANNEL")) {
     assumptions.push({
       type: "warn_everyone_view",
-      value: params.channel_id,
+      value: params.role_id,
       resourceType: "channel",
       checked: false,
       status: "pending",
@@ -141,10 +148,10 @@ export function getOverwriteBatchAssumptions(params: BatchSetOverwriteParams): A
       checked: false,
       status: "pending",
     });
-    if (ow.deny?.includes("VIEW_CHANNEL") && ow.role_id === "@everyone") {
+    if (ow.deny?.includes("VIEW_CHANNEL")) {
       assumptions.push({
         type: "warn_everyone_view",
-        value: ow.channel_id,
+        value: ow.role_id,
         resourceType: "channel",
         checked: false,
         status: "pending",

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export const DISCORD_PERMISSIONS = {
   CREATE_INSTANT_INVITE: { bit: 1n, description: "Create instant invites" },
   KICK_MEMBERS: { bit: 2n, description: "Kick members" },
@@ -53,6 +55,11 @@ export const DISCORD_PERMISSIONS = {
 
 export type DiscordPermissionName = keyof typeof DISCORD_PERMISSIONS;
 
+export const permissionNameSchema = z.string().refine(
+  (name) => name in DISCORD_PERMISSIONS,
+  (name) => ({ message: `Unknown permission name: ${name}` })
+);
+
 /**
  * Convert a Discord permission bitfield string to an array of permission names.
  * If the input looks like a comma-joined name list (contains letters, not just digits),
@@ -97,6 +104,7 @@ export const CHANNEL_TYPES = {
   5: "announcement",
   13: "stage",
   15: "forum",
+  16: "media",
 } as const;
 
 export type DiscordChannelType = keyof typeof CHANNEL_TYPES;

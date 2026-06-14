@@ -19,7 +19,7 @@ export function evaluateAssumptions(
 }
 
 function evaluateOne(assumption: Assumption, state: ServerState): AssumptionResult {
-  const { type, value, resourceType } = assumption;
+  const { type, value, resourceType, excludeId } = assumption;
 
   switch (type) {
     case "exists": {
@@ -46,19 +46,21 @@ function evaluateOne(assumption: Assumption, state: ServerState): AssumptionResu
 
     case "unique_name": {
       if (resourceType === "channel") {
-        const dup = state.channels.find((ch) => ch.name === value);
+        const dup = state.channels.find((ch) => ch.name === value && ch.id !== excludeId);
         return dup
           ? { passed: false, message: `Channel name "${value}" already in use` }
           : { passed: true, message: `Channel name "${value}" is unique` };
       }
       if (resourceType === "role") {
-        const dup = state.roles.find((r) => r.name === value);
+        const dup = state.roles.find((r) => r.name === value && r.id !== excludeId);
         return dup
           ? { passed: false, message: `Role name "${value}" already in use` }
           : { passed: true, message: `Role name "${value}" is unique` };
       }
       if (resourceType === "category") {
-        const dup = state.channels.find((ch) => ch.type === 4 && ch.name === value);
+        const dup = state.channels.find(
+          (ch) => ch.type === 4 && ch.name === value && ch.id !== excludeId,
+        );
         return dup
           ? { passed: false, message: `Category name "${value}" already in use` }
           : { passed: true, message: `Category name "${value}" is unique` };
@@ -105,8 +107,13 @@ function evaluateOne(assumption: Assumption, state: ServerState): AssumptionResu
     }
 
     case "warn_everyone_view": {
-      // Block-only policy: treat warning as block
-      return { passed: false, message: `Denying VIEW_CHANNEL to @everyone on channel ${value}` };
+      // value is the role_id being targeted. Block when it is the @everyone role,
+      // identified either by the literal string Discord.js exposes or by the
+      // guild ID (which is the @everyone role's actual ID in Discord).
+      const isEveryone = value === "@everyone" || value === state.guildId;
+      return isEveryone
+        ? { passed: false, message: `Denying VIEW_CHANNEL to @everyone on channel` }
+        : { passed: true, message: "Not denying VIEW_CHANNEL to @everyone" };
     }
 
     case "member_exists": {

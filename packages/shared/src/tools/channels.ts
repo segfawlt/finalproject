@@ -294,6 +294,7 @@ export function getChannelEditAssumptions(params: EditChannelParams): Assumption
       resourceType: "channel",
       checked: false,
       status: "pending",
+      excludeId: params.id,
     });
   }
   if (params.parent_id) {

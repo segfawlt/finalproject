@@ -117,6 +117,7 @@ export function getCategoryEditAssumptions(params: EditCategoryParams): Assumpti
       resourceType: "category",
       checked: false,
       status: "pending",
+      excludeId: params.id,
     });
   }
   return assumptions;
