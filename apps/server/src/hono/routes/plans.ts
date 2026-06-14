@@ -8,7 +8,7 @@ import { requireUser } from "../../auth/middleware";
 import { checkGuildOperable } from "../../planning/guild-check";
 import { acquireGuildLock, releaseGuildLock, heartbeatGuildLock } from "../../planning/locking";
 import { diffEngine } from "../../planning/diff-engine";
-import { executePlan } from "../../planning/execution-engine";
+import { executePlan, buildCurrentStateFromDiscord, rollbackFull } from "../../planning/execution-engine";
 import { validatePlan } from "../../planning/validation";
 import { emitPlanEvent } from "../../planning/event-bus";
 import { emitConversationEvent } from "../../planning/planning-event-bus";
@@ -16,6 +16,7 @@ import { getSessionsByGuild, removeSession } from "../../planning/session-manage
 import { DiscordExecuteContext } from "../../bot/execute-context";
 import { botClient } from "../../bot/client";
 import { guildCache } from "../../bot/cache";
+import { logger } from "../../utils/logger";
 import type { AppVariables } from "../../types";
 import type { ServerState, PlanData, DesiredState } from "@repo/shared";
 import { hashServerState, getTool, evaluateAssumptions, fork } from "@repo/shared";
@@ -283,10 +284,21 @@ plansApp.post("/:planId/execute", async (c) => {
   });
   executionAbortControllers.set(planId, abortController);
 
+  // Heartbeat the lock so long executions don't get cleared by the stale-lock job
+  const ownerId = process.pid.toString();
+  const heartbeat = setInterval(() => {
+    heartbeatGuildLock(guildId, ownerId).catch((err) => {
+      logger.error(err, "[plans] heartbeat failed");
+    });
+  }, 60_000);
+
   await db.update(plans).set({ status: "executing" }).where(eq(plans.id, planId));
+
+  let beforeSnapshot: ServerState | null = null;
 
   try {
     // 6. Create before snapshot
+    beforeSnapshot = serverState;
     await db.insert(snapshots).values({
       type: "execution_before",
       guildId,
@@ -308,16 +320,23 @@ plansApp.post("/:planId/execute", async (c) => {
       beforeSnapshot: serverState,
     });
 
-    // 7. Create after snapshot
-    const afterCache = guildCache.get(guildId);
-    const afterState: ServerState = {
-      guildId,
-      guildName: guild?.name ?? guildId,
-      memberCount: guild?.memberCount ?? 0,
-      channels: afterCache ? Array.from(afterCache.channels.values()) : [],
-      roles: afterCache ? Array.from(afterCache.roles.values()) : [],
-      overwrites: afterCache ? Array.from(afterCache.permissions.values()) : [],
-    };
+    // 7. Create after snapshot — fetch fresh from Discord so the
+    //    execution_after row reflects what actually happened, not whatever
+    //    the in-memory cache had not yet absorbed from async events.
+    let afterState: ServerState;
+    try {
+      afterState = await buildCurrentStateFromDiscord(guildId);
+    } catch (err) {
+      logger.error(err, "[plans] failed to build after-snapshot from Discord");
+      afterState = {
+        guildId,
+        guildName: guild?.name ?? guildId,
+        memberCount: guild?.memberCount ?? 0,
+        channels: [],
+        roles: [],
+        overwrites: [],
+      };
+    }
 
     await db.insert(snapshots).values({
       type: "execution_after",
@@ -344,9 +363,7 @@ plansApp.post("/:planId/execute", async (c) => {
       .where(eq(plans.id, planId));
 
     // Mark sibling conversations as stale if forkStateHash no longer matches
-    const currentHash = hashServerState(
-      buildServerState(guildId) as unknown as Record<string, unknown>
-    );
+    const currentHash = hashServerState(afterState as unknown as Record<string, unknown>);
     await db
       .update(conversations)
       .set({ status: "stale" })
@@ -380,10 +397,25 @@ plansApp.post("/:planId/execute", async (c) => {
       })
       .where(eq(plans.id, planId));
 
+    // Roll back if we got far enough to capture a before-snapshot but failed
+    // somewhere after execution started (or in the post-execute bookkeeping).
+    if (beforeSnapshot) {
+      try {
+        const ctx = new DiscordExecuteContext(guild);
+        await emitPlanEvent(planId, { type: "rollback_started", planId });
+        await rollbackFull(beforeSnapshot, planId, ctx, async (event) => {
+          emitPlanEvent(planId, event);
+        });
+      } catch (rollbackErr) {
+        logger.error(rollbackErr, "[plans] rollback after failure also failed");
+      }
+    }
+
     return c.json({ error }, 500);
   } finally {
+    clearInterval(heartbeat);
     executionAbortControllers.delete(planId);
-    await releaseGuildLock(guildId, process.pid.toString());
+    await releaseGuildLock(guildId, ownerId);
   }
 });
 

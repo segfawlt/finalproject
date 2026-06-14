@@ -242,10 +242,10 @@ const MAX_RETRIES = 3;
 
 // ── Rollback ─────────────────────────────────────────────────────────────────
 
-async function buildCurrentStateFromDiscord(guildId: string): Promise<ServerState> {
+export async function buildCurrentStateFromDiscord(guildId: string): Promise<ServerState> {
   const guild = botClient.guilds.cache.get(guildId);
   if (!guild) {
-    throw new Error(`Guild ${guildId} not found during rollback state capture`);
+    throw new Error(`Guild ${guildId} not found during state capture`);
   }
 
   // Fetch fresh data directly from Discord — do NOT use stale guild cache
@@ -305,7 +305,7 @@ async function buildCurrentStateFromDiscord(guildId: string): Promise<ServerStat
  * Full rollback using diff engine: computes reverse diff from current state
  * to before-snapshot, then executes it. Handles all change types uniformly.
  */
-async function rollbackFull(
+export async function rollbackFull(
   beforeSnapshot: ServerState,
   planId: string,
   ctx: ExecuteContext,
