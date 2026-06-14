@@ -36,6 +36,20 @@
       "when": 1779911850587,
       "tag": "0004_quiet_mach_iv",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781250343283,
+      "tag": "0005_nervous_mojo",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781425928460,
+      "tag": "0006_dry_natasha_romanoff",
+      "breakpoints": true
     }
   ]
 }

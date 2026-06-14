@@ -35,6 +35,9 @@ export const guilds = pgTable("guilds", {
   settings: jsonb("settings").notNull().default({}),
   subscriptionTier: text("subscription_tier").notNull().default("free"),
   currentPlanId: uuid("current_plan_id"),
+  lockAcquiredAt: timestamp("lock_acquired_at"),
+  lockAcquiredBy: text("lock_acquired_by"),
+  lockLastHeartbeatAt: timestamp("lock_last_heartbeat_at"),
   phaseProgress: jsonb("phase_progress")
     .notNull()
     .default({
@@ -161,6 +164,28 @@ export const templates = pgTable("templates", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ── Drift Events ──────────────────────────────────────────────────────────────
+
+export const driftEvents = pgTable(
+  "drift_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id),
+    severity: text("severity").notNull(),
+    kind: text("kind").notNull(),
+    summary: text("summary").notNull(),
+    details: jsonb("details").notNull().default({}),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at"),
+  },
+  (table) => [
+    index("idx_drift_events_guild_created").on(table.guildId, table.createdAt),
+    index("idx_drift_events_unresolved").on(table.guildId, table.resolvedAt),
+  ]
+);
+
 // ── Relations ──────────────────────────────────────────────────────────────────
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -212,4 +237,8 @@ export const rulesRelations = relations(rules, ({ one }) => ({
 export const templatesRelations = relations(templates, ({ one }) => ({
   guild: one(guilds, { fields: [templates.guildId], references: [guilds.id] }),
   author: one(users, { fields: [templates.authorId], references: [users.id] }),
+}));
+
+export const driftEventsRelations = relations(driftEvents, ({ one }) => ({
+  guild: one(guilds, { fields: [driftEvents.guildId], references: [guilds.id] }),
 }));
