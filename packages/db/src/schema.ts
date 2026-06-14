@@ -7,6 +7,7 @@ import {
   uuid,
   integer,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -50,25 +51,32 @@ export const guilds = pgTable("guilds", {
 
 // ── Plans ──────────────────────────────────────────────────────────────────────
 
-export const plans = pgTable("plans", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  guildId: text("guild_id")
-    .notNull()
-    .references(() => guilds.id),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id),
-  conversationId: uuid("conversation_id").references(() => conversations.id),
-  status: text("status").notNull().default("draft"),
-  userPrompt: text("user_prompt").notNull(),
-  serverType: text("server_type"),
-  planData: jsonb("plan_data").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  executedAt: timestamp("executed_at"),
-  completedAt: timestamp("completed_at"),
-  error: jsonb("error"),
-});
+export const plans = pgTable(
+  "plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    conversationId: uuid("conversation_id").references(() => conversations.id),
+    status: text("status").notNull().default("draft"),
+    userPrompt: text("user_prompt").notNull(),
+    serverType: text("server_type"),
+    planData: jsonb("plan_data").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    executedAt: timestamp("executed_at"),
+    completedAt: timestamp("completed_at"),
+    error: jsonb("error"),
+  },
+  (table) => [
+    index("idx_plans_guild_id").on(table.guildId),
+    index("idx_plans_user_id").on(table.userId),
+  ]
+);
 
 // ── Snapshots ──────────────────────────────────────────────────────────────────
 
@@ -95,21 +103,25 @@ export const snapshots = pgTable(
 
 // ── Conversations ─────────────────────────────────────────────────────────────
 
-export const conversations = pgTable("conversations", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  guildId: text("guild_id")
-    .notNull()
-    .references(() => guilds.id),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id),
-  status: text("status").notNull().default("active"),
-  userPrompt: text("user_prompt").notNull(),
-  messages: jsonb("messages").notNull().default([]),
-  forkStateHash: text("fork_state_hash").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    status: text("status").notNull().default("active"),
+    userPrompt: text("user_prompt").notNull(),
+    messages: jsonb("messages").notNull().default([]),
+    forkStateHash: text("fork_state_hash").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [index("idx_conversations_guild_id").on(table.guildId)]
+);
 
 // ── Plan Iterations ────────────────────────────────────────────────────────────
 
@@ -126,41 +138,53 @@ export const planIterations = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [
-    index("idx_plan_iterations_conversation_version").on(table.conversationId, table.version),
+    index("idx_plan_iterations_conversation_id").on(table.conversationId),
+    uniqueIndex("uniq_plan_iterations_conversation_version").on(
+      table.conversationId,
+      table.version
+    ),
   ]
 );
 
 // ── Rules ──────────────────────────────────────────────────────────────────────
 
-export const rules = pgTable("rules", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  guildId: text("guild_id")
-    .notNull()
-    .references(() => guilds.id),
-  ruleText: text("rule_text").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const rules = pgTable(
+  "rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id),
+    ruleText: text("rule_text").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [index("idx_rules_guild_id").on(table.guildId)]
+);
 
 // ── Templates ──────────────────────────────────────────────────────────────────
 
-export const templates = pgTable("templates", {
-  id: text("id").primaryKey(),
-  version: integer("version").notNull().default(1),
-  name: text("name").notNull(),
-  description: text("description").notNull(),
-  structure: jsonb("structure").notNull(),
-  questions: jsonb("questions").notNull().default([]),
-  validationRules: jsonb("validation_rules").notNull().default([]),
-  category: text("category"),
-  tags: text("tags").array().notNull().default([]),
-  guildId: text("guild_id").references(() => guilds.id),
-  authorId: text("author_id").references(() => users.id),
-  isOfficial: boolean("is_official").notNull().default(false),
-  status: text("status").notNull().default("draft"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const templates = pgTable(
+  "templates",
+  {
+    id: text("id").primaryKey(),
+    version: integer("version").notNull().default(1),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    structure: jsonb("structure").notNull(),
+    questions: jsonb("questions").notNull().default([]),
+    validationRules: jsonb("validation_rules").notNull().default([]),
+    category: text("category"),
+    tags: text("tags").array().notNull().default([]),
+    guildId: text("guild_id").references(() => guilds.id),
+    authorId: text("author_id").references(() => users.id),
+    isOfficial: boolean("is_official").notNull().default(false),
+    status: text("status").notNull().default("draft"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [index("idx_templates_guild_id").on(table.guildId)]
+);
 
 // ── Drift Events ──────────────────────────────────────────────────────────────
 
