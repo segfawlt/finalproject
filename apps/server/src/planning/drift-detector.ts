@@ -46,11 +46,23 @@ export function emitDriftEvent(event: DriftEvent): void {
 export interface DriftCheckInput {
   guildId: string;
   cache: {
-    channels: { id: string; name: string; type: number; parentId: string | null; position: number }[];
+    channels: {
+      id: string;
+      name: string;
+      type: number;
+      parentId: string | null;
+      position: number;
+    }[];
     roles: { id: string; name: string; position: number }[];
   };
   live: {
-    channels: { id: string; name: string; type: number; parentId: string | null; position: number }[];
+    channels: {
+      id: string;
+      name: string;
+      type: number;
+      parentId: string | null;
+      position: number;
+    }[];
     roles: { id: string; name: string; position: number }[];
   };
 }
@@ -132,7 +144,11 @@ export function detectDrift(input: DriftCheckInput): DriftEvent[] {
         severity: "info",
         kind: "role_field_mismatch",
         summary: `Role "${live.name}" cache differs from Discord.`,
-        details: { roleId: id, cached: { name: cached.name, position: cached.position }, live: { name: live.name, position: live.position } },
+        details: {
+          roleId: id,
+          cached: { name: cached.name, position: cached.position },
+          live: { name: live.name, position: live.position },
+        },
         detectedAt: now,
       });
     }

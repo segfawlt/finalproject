@@ -1,4 +1,10 @@
-import type { PlanStep, SymbolTable, DesiredState, ChannelBase, PermissionOverwrite } from "@repo/shared";
+import type {
+  PlanStep,
+  SymbolTable,
+  DesiredState,
+  ChannelBase,
+  PermissionOverwrite,
+} from "@repo/shared";
 import { DISCORD_PERMISSIONS } from "@repo/shared";
 import { botHasAdministrator, getBotHighestRolePosition } from "../bot/permissions";
 import { guildCache } from "../bot/cache";
@@ -220,10 +226,7 @@ function validateResourceConstraints(
   const memberRoleOps = new Map<string, string[]>(); // "memberId:roleId" → step indices
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
-    if (
-      step.toolName === "add_role_to_member" ||
-      step.toolName === "remove_role_from_member"
-    ) {
+    if (step.toolName === "add_role_to_member" || step.toolName === "remove_role_from_member") {
       const memberId = step.params.member_id as string;
       const roleId = step.params.role_id as string;
       const key = `${memberId}:${roleId}`;

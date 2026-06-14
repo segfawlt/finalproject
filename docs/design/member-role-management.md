@@ -121,11 +121,11 @@ removeMemberRole(memberId: string, roleId: string): void
 
 ### Validation (Store-Level)
 
-| Operation           | Store-Level Checks                           |
-| ------------------- | -------------------------------------------- |
-| addMemberRole       | Role reference exists in active.roles        |
-| removeMemberRole    | Member entry exists in active.memberRoles    |
-| addMemberRole       | No duplicate role assignment                 |
+| Operation        | Store-Level Checks                        |
+| ---------------- | ----------------------------------------- |
+| addMemberRole    | Role reference exists in active.roles     |
+| removeMemberRole | Member entry exists in active.memberRoles |
+| addMemberRole    | No duplicate role assignment              |
 
 ## Fork Extension
 
@@ -157,7 +157,7 @@ function generateMemberRoleSteps(
   real: MemberRoleAssignment[]
 ): RawStep[] {
   const steps: RawStep[] = [];
-  const realByMember = new Map(real.map(m => [m.memberId, new Set(m.roleIds)]));
+  const realByMember = new Map(real.map((m) => [m.memberId, new Set(m.roleIds)]));
 
   for (const [memberId, assignment] of Object.entries(desired)) {
     const desiredRoles = new Set(assignment.roleIds);
@@ -272,24 +272,24 @@ New member-specific checks in validation groups:
 
 ### Group A: Permission
 
-| Check | Severity |
-|---|---|
-| Bot tries to assign/remove role above its own position | BLOCK |
-| Bot role position < target role position (can't assign higher roles) | BLOCK |
+| Check                                                                | Severity |
+| -------------------------------------------------------------------- | -------- |
+| Bot tries to assign/remove role above its own position               | BLOCK    |
+| Bot role position < target role position (can't assign higher roles) | BLOCK    |
 
 ### Group B: Dependency
 
-| Check | Severity |
-|---|---|
-| Role ID doesn't exist in plan or guild (real IDs) | BLOCK |
-| Symbol role referenced but not created in same plan | BLOCK |
+| Check                                               | Severity |
+| --------------------------------------------------- | -------- |
+| Role ID doesn't exist in plan or guild (real IDs)   | BLOCK    |
+| Symbol role referenced but not created in same plan | BLOCK    |
 
 ### Group C: Resource
 
-| Check | Severity |
-|---|---|
-| Member ID not in guild (fetched fresh at validation time) | BLOCK |
-| Duplicate add + remove for same (member, role) pair | BLOCK |
+| Check                                                     | Severity |
+| --------------------------------------------------------- | -------- |
+| Member ID not in guild (fetched fresh at validation time) | BLOCK    |
+| Duplicate add + remove for same (member, role) pair       | BLOCK    |
 
 ## System Prompt Design
 
@@ -335,6 +335,7 @@ Member Roles (25 total):
 ```
 
 Formatting rules:
+
 - Roles ordered by position (highest first), then alphabetical
 - Max 5 usernames per role; beyond that shows "N members"
 - `@everyone` always shown last with "(all members)"
@@ -382,12 +383,14 @@ const updateGuildSchema = z.object({
   serverType: z.string().nullable().optional(),
   settings: z.record(z.unknown()).optional(),
   guidedSetupCompleted: z.boolean().optional(),
-  phaseProgress: z.object({
-    foundation: z.boolean(),
-    layout: z.boolean(),
-    access: z.boolean(),
-    people: z.boolean(),
-  }).optional(),
+  phaseProgress: z
+    .object({
+      foundation: z.boolean(),
+      layout: z.boolean(),
+      access: z.boolean(),
+      people: z.boolean(),
+    })
+    .optional(),
 });
 ```
 
@@ -431,12 +434,12 @@ Each phase uses a **predefined, well-tested prompt** crafted by the system, not
 the LLM. The prompt is assembled from actual server state and scoped to forbid
 touching other phases.
 
-| Phase | Prompt |
-|-------|--------|
-| Foundation | `Define roles only. Set names, colors, base permissions, position. Do NOT create categories, channels, or set overwrites.` |
-| Layout | `Create categories and channels within the Foundation roles established. Set types, positions, parents, forum tags. Do NOT modify roles or set permission overwrites.` |
+| Phase          | Prompt                                                                                                                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Foundation     | `Define roles only. Set names, colors, base permissions, position. Do NOT create categories, channels, or set overwrites.`                                                                                                     |
+| Layout         | `Create categories and channels within the Foundation roles established. Set types, positions, parents, forum tags. Do NOT modify roles or set permission overwrites.`                                                         |
 | Access Control | `Set permission overwrites on categories and channels. Default: lock_permissions: true — permissions go on categories. Only un-sync channels that genuinely need different access. Do NOT create or modify channels or roles.` |
-| People | `Assign members to existing roles. Do NOT create roles or modify permissions or channels.` |
+| People         | `Assign members to existing roles. Do NOT create roles or modify permissions or channels.`                                                                                                                                     |
 
 Each prompt includes a summary of what was built in previous phases (role list,
 channel tree) so the LLM has the full picture without needing conversation history.
@@ -517,44 +520,44 @@ Each warning has a [Fix This] button.
 
 ### Member Role Management (implemented)
 
-| # | File | Change |
-|---|---|---|
-| 1 | `packages/shared/src/types.ts` | `Member`, `MemberRoleAssignment` types. Extend `DesiredStateActive` + `ServerState` |
-| 2 | `packages/shared/src/state/fork.ts` | Fork member roles from ServerState into DesiredState |
-| 3 | `packages/shared/src/state/desired-state-store.ts` | `addMemberRole()`, `removeMemberRole()` + validation |
-| 4 | `packages/shared/src/execute-context.ts` | `addRoleToMember()`, `removeRoleFromMember()` interface |
-| 5 | `packages/shared/src/tools/members.ts` | **NEW** — schemas, plan(), execute(), getAssumptions() |
-| 6 | `packages/shared/src/tools/registry.ts` | Register 2 new member tools |
-| 7 | `packages/shared/src/tools/index.ts` | Export member tool exports |
-| 8 | `packages/shared/src/tools/evaluate-assumptions.ts` | `member_exists`, `role_assigned` assumption types |
-| 9 | `apps/server/src/bot/execute-context.ts` | Discord.js `addRoleToMember()`, `removeRoleFromMember()` |
-| 10 | `apps/server/src/bot/formatter.ts` | Role-centric member summary for LLM context |
-| 11 | `apps/server/src/planning/diff-engine.ts` | `generateMemberRoleSteps()`, TOOL_ORDER, wire into diffEngine() |
-| 12 | `apps/server/src/planning/execution-engine.ts` | Dispatch cases for add/remove_role_to_member |
-| 13 | `apps/server/src/planning/validation.ts` | Member existence, bot hierarchy, duplicate checks |
-| 14 | `apps/server/src/planning/planning-session.ts` | Phased planning system prompt + member summary injection |
-| 15 | `apps/server/src/bot/index.ts` | Fetch guild members on startup + gateway event updates |
+| #   | File                                                | Change                                                                              |
+| --- | --------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 1   | `packages/shared/src/types.ts`                      | `Member`, `MemberRoleAssignment` types. Extend `DesiredStateActive` + `ServerState` |
+| 2   | `packages/shared/src/state/fork.ts`                 | Fork member roles from ServerState into DesiredState                                |
+| 3   | `packages/shared/src/state/desired-state-store.ts`  | `addMemberRole()`, `removeMemberRole()` + validation                                |
+| 4   | `packages/shared/src/execute-context.ts`            | `addRoleToMember()`, `removeRoleFromMember()` interface                             |
+| 5   | `packages/shared/src/tools/members.ts`              | **NEW** — schemas, plan(), execute(), getAssumptions()                              |
+| 6   | `packages/shared/src/tools/registry.ts`             | Register 2 new member tools                                                         |
+| 7   | `packages/shared/src/tools/index.ts`                | Export member tool exports                                                          |
+| 8   | `packages/shared/src/tools/evaluate-assumptions.ts` | `member_exists`, `role_assigned` assumption types                                   |
+| 9   | `apps/server/src/bot/execute-context.ts`            | Discord.js `addRoleToMember()`, `removeRoleFromMember()`                            |
+| 10  | `apps/server/src/bot/formatter.ts`                  | Role-centric member summary for LLM context                                         |
+| 11  | `apps/server/src/planning/diff-engine.ts`           | `generateMemberRoleSteps()`, TOOL_ORDER, wire into diffEngine()                     |
+| 12  | `apps/server/src/planning/execution-engine.ts`      | Dispatch cases for add/remove_role_to_member                                        |
+| 13  | `apps/server/src/planning/validation.ts`            | Member existence, bot hierarchy, duplicate checks                                   |
+| 14  | `apps/server/src/planning/planning-session.ts`      | Phased planning system prompt + member summary injection                            |
+| 15  | `apps/server/src/bot/index.ts`                      | Fetch guild members on startup + gateway event updates                              |
 
 ### Configuration Procedure (to implement)
 
-| # | File | Change |
-|---|---|---|
-| 16 | `packages/db/src/schema.ts` | `phaseProgress` JSONB column on guilds table |
-| 17 | `apps/server/src/hono/routes/guilds.ts` | Add `guidedSetupCompleted`, `phaseProgress` to PATCH schema |
-| 18 | `apps/web/src/...` | Procedure sidebar component + prompt preview card |
+| #   | File                                    | Change                                                      |
+| --- | --------------------------------------- | ----------------------------------------------------------- |
+| 16  | `packages/db/src/schema.ts`             | `phaseProgress` JSONB column on guilds table                |
+| 17  | `apps/server/src/hono/routes/guilds.ts` | Add `guidedSetupCompleted`, `phaseProgress` to PATCH schema |
+| 18  | `apps/web/src/...`                      | Procedure sidebar component + prompt preview card           |
 
 ### lockPermissions (to implement — see next section)
 
-| # | File | Change |
-|---|---|---|
-| 19 | `packages/shared/src/types.ts` | `lockPermissions?: boolean` on `ChannelBase` |
-| 20 | `packages/shared/src/tools/channels.ts` | `lock_permissions` param on create/edit schemas |
-| 21 | `packages/shared/src/tools/registry.ts` | Update `edit_channel` tool description |
-| 22 | `packages/shared/src/state/desired-state-store.ts` | Pass lockPermissions through addChannel/editChannel |
-| 23 | `apps/server/src/planning/diff-engine.ts` | Skip overwrite generation for synced channels; include lockPermissions in edit diff |
-| 24 | `apps/server/src/bot/execute-context.ts` | Pass lockPermissions to Discord.js channel methods |
-| 25 | `apps/server/src/planning/planning-session.ts` | Add PERMISSION STRATEGY section to system prompt |
-| 26 | `apps/server/src/planning/validation.ts` | Group D detection of identical overwrites without sync |
+| #   | File                                               | Change                                                                              |
+| --- | -------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 19  | `packages/shared/src/types.ts`                     | `lockPermissions?: boolean` on `ChannelBase`                                        |
+| 20  | `packages/shared/src/tools/channels.ts`            | `lock_permissions` param on create/edit schemas                                     |
+| 21  | `packages/shared/src/tools/registry.ts`            | Update `edit_channel` tool description                                              |
+| 22  | `packages/shared/src/state/desired-state-store.ts` | Pass lockPermissions through addChannel/editChannel                                 |
+| 23  | `apps/server/src/planning/diff-engine.ts`          | Skip overwrite generation for synced channels; include lockPermissions in edit diff |
+| 24  | `apps/server/src/bot/execute-context.ts`           | Pass lockPermissions to Discord.js channel methods                                  |
+| 25  | `apps/server/src/planning/planning-session.ts`     | Add PERMISSION STRATEGY section to system prompt                                    |
+| 26  | `apps/server/src/planning/validation.ts`           | Group D detection of identical overwrites without sync                              |
 
 ## lockPermissions — Category-Level Permission Inheritance
 
@@ -641,10 +644,10 @@ to skip per-channel overwrite generation. The function signature is extended:
 
 ```typescript
 // Before:
-function generateOverwriteSteps(desired, real): RawStep[]
+function generateOverwriteSteps(desired, real): RawStep[];
 
 // After:
-function generateOverwriteSteps(desired, real, channels, categoriesByName): RawStep[]
+function generateOverwriteSteps(desired, real, channels, categoriesByName): RawStep[];
 //                                               ↑ new                  ↑ new
 ```
 

@@ -64,7 +64,17 @@ describe("evaluateAssumptions — member types", () => {
       guildName: "Test",
       memberCount: 0,
       channels: [],
-      roles: [{ id: "role-1", name: "Admin", position: 1, permissions: [], color: 0, hoist: false, mentionable: false }],
+      roles: [
+        {
+          id: "role-1",
+          name: "Admin",
+          position: 1,
+          permissions: [],
+          color: 0,
+          hoist: false,
+          mentionable: false,
+        },
+      ],
       overwrites: [],
       memberRoles: [],
     };
@@ -185,9 +195,7 @@ describe("evaluateAssumptions — unique_name with excludeId", () => {
   });
 
   it("fails category unique_name when a channel has the same name", () => {
-    const state = makeState([
-      { id: "ch-1", name: "Discussion", type: 0 },
-    ]);
+    const state = makeState([{ id: "ch-1", name: "Discussion", type: 0 }]);
     const results = evaluateAssumptions(
       [
         {

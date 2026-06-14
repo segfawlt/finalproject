@@ -114,10 +114,7 @@ describe("planChannelEdit", () => {
   it("updates forum properties on existing channel", () => {
     const store = new DesiredStateStore();
     // Create a channel first
-    const createResult = planChannelCreate(
-      { name: "original", type: "forum" as const },
-      store
-    );
+    const createResult = planChannelCreate({ name: "original", type: "forum" as const }, store);
     const symbol = createResult.symbol!;
 
     // Edit with forum properties
@@ -179,10 +176,7 @@ describe("editChannelSchema — lock_permissions", () => {
 describe("planChannelCreate — lockPermissions", () => {
   it("stores lockPermissions: true on channel", () => {
     const store = new DesiredStateStore();
-    planChannelCreate(
-      { name: "synced", type: "text" as const, lock_permissions: true },
-      store
-    );
+    planChannelCreate({ name: "synced", type: "text" as const, lock_permissions: true }, store);
     const state = store.getState();
     const channel = Object.values(state.active.channels)[0];
     expect(channel.lockPermissions).toBe(true);
@@ -190,10 +184,7 @@ describe("planChannelCreate — lockPermissions", () => {
 
   it("stores lockPermissions: false on channel", () => {
     const store = new DesiredStateStore();
-    planChannelCreate(
-      { name: "unsynced", type: "text" as const, lock_permissions: false },
-      store
-    );
+    planChannelCreate({ name: "unsynced", type: "text" as const, lock_permissions: false }, store);
     const state = store.getState();
     const channel = Object.values(state.active.channels)[0];
     expect(channel.lockPermissions).toBe(false);
@@ -207,10 +198,7 @@ describe("planChannelEdit — lockPermissions", () => {
       { name: "test", type: "text" as const, lock_permissions: true },
       store
     );
-    planChannelEdit(
-      { id: result.symbol!, lock_permissions: false },
-      store
-    );
+    planChannelEdit({ id: result.symbol!, lock_permissions: false }, store);
     const state = store.getState();
     const channel = state.active.channels[result.symbol!];
     expect(channel.lockPermissions).toBe(false);
@@ -235,10 +223,7 @@ describe("executeChannelCreate — lockPermissions", () => {
       removeRoleFromMember: vi.fn(),
     } as ExecuteContext;
 
-    await executeChannelCreate(
-      { name: "synced", type: "text", lock_permissions: true },
-      ctx
-    );
+    await executeChannelCreate({ name: "synced", type: "text", lock_permissions: true }, ctx);
     expect(ctx.createChannel).toHaveBeenCalledWith(
       "synced",
       0,
@@ -265,10 +250,7 @@ describe("executeChannelEdit — lockPermissions", () => {
       removeRoleFromMember: vi.fn(),
     } as ExecuteContext;
 
-    await executeChannelEdit(
-      { id: "ch-1", lock_permissions: false },
-      ctx
-    );
+    await executeChannelEdit({ id: "ch-1", lock_permissions: false }, ctx);
     expect(ctx.editChannel).toHaveBeenCalledWith(
       "ch-1",
       expect.objectContaining({ lockPermissions: false })

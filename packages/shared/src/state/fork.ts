@@ -1,4 +1,11 @@
-import type { ServerState, DesiredState, ChannelBase, Role, PermissionOverwrite, MemberRoleAssignment } from "../types";
+import type {
+  ServerState,
+  DesiredState,
+  ChannelBase,
+  Role,
+  PermissionOverwrite,
+  MemberRoleAssignment,
+} from "../types";
 
 /**
  * Fork a ServerState (flat arrays, real Discord IDs) into a DesiredState

@@ -62,7 +62,7 @@ export async function executeCategoryEdit(
 
 export function planCategoryDelete(
   params: DeleteCategoryParams,
-  store: DesiredStateStore,
+  store: DesiredStateStore
 ): PlanResult {
   try {
     store.removeCategory(params.id);

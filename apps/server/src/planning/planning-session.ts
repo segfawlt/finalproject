@@ -476,83 +476,37 @@ export class PlanningSession {
     );
     lines.push("");
     lines.push("Planning phases (complete each before moving to the next):");
-    lines.push(
-      "  Phase 1 — Foundation: Roles only (create/edit/delete/move_role)."
-    );
-    lines.push(
-      "           Do NOT create categories, channels, or set overwrites in this phase."
-    );
-    lines.push(
-      "  Phase 2 — Server Layout: Categories + channel structure."
-    );
+    lines.push("  Phase 1 — Foundation: Roles only (create/edit/delete/move_role).");
+    lines.push("           Do NOT create categories, channels, or set overwrites in this phase.");
+    lines.push("  Phase 2 — Server Layout: Categories + channel structure.");
     lines.push(
       "           Tools: create/edit/delete/move_category, create/edit/delete/move_channel."
     );
-    lines.push(
-      "           Default lock_permissions: true on channels under categories."
-    );
-    lines.push(
-      "           Do NOT modify roles or set permission overwrites in this phase."
-    );
-    lines.push(
-      "  Phase 3 — Access Control: Channel/category overwrites."
-    );
-    lines.push(
-      "           Tools: set_overwrite, remove_overwrite, batch_set_overwrite."
-    );
+    lines.push("           Default lock_permissions: true on channels under categories.");
+    lines.push("           Do NOT modify roles or set permission overwrites in this phase.");
+    lines.push("  Phase 3 — Access Control: Channel/category overwrites.");
+    lines.push("           Tools: set_overwrite, remove_overwrite, batch_set_overwrite.");
     lines.push("");
     lines.push("  PERMISSION STRATEGY:");
-    lines.push(
-      "  - Convention: channels with no lock marker are synced to their category."
-    );
-    lines.push(
-      "    Only [unsynced] channels have independent overwrites."
-    );
-    lines.push(
-      "  - Default: lock_permissions: true on channels under a category."
-    );
-    lines.push(
-      "    Set overwrites on the CATEGORY, not individual channels."
-    );
-    lines.push(
-      "  - Scan channels within each category for identical overwrite patterns."
-    );
-    lines.push(
-      "    When found, propose consolidation: move overwrites to the category"
-    );
+    lines.push("  - Convention: channels with no lock marker are synced to their category.");
+    lines.push("    Only [unsynced] channels have independent overwrites.");
+    lines.push("  - Default: lock_permissions: true on channels under a category.");
+    lines.push("    Set overwrites on the CATEGORY, not individual channels.");
+    lines.push("  - Scan channels within each category for identical overwrite patterns.");
+    lines.push("    When found, propose consolidation: move overwrites to the category");
     lines.push("    level and sync the channels.");
-    lines.push(
-      "  - If ONE channel needs different permissions than its category:"
-    );
-    lines.push(
-      "    lock_permissions: false on that channel, add specific overwrites."
-    );
-    lines.push(
-      "  - If MOST channels in a category need different permissions:"
-    );
-    lines.push(
-      "    skip category-level overwrites entirely. Set per-channel."
-    );
-    lines.push(
-      "  - When uncertain whether a channel should be synced or independent,"
-    );
+    lines.push("  - If ONE channel needs different permissions than its category:");
+    lines.push("    lock_permissions: false on that channel, add specific overwrites.");
+    lines.push("  - If MOST channels in a category need different permissions:");
+    lines.push("    skip category-level overwrites entirely. Set per-channel.");
+    lines.push("  - When uncertain whether a channel should be synced or independent,");
     lines.push("    use ask_user to clarify. Do not guess.");
-    lines.push(
-      "  - Do NOT set the same overwrites on every channel in a category."
-    );
+    lines.push("  - Do NOT set the same overwrites on every channel in a category.");
     lines.push("    Put them on the category once.");
-    lines.push(
-      "  - Do NOT create new channels or modify roles in this phase."
-    );
-    lines.push(
-      "  Phase 4 — People: Member role assignments."
-    );
-    lines.push(
-      "           Tools: add_role_to_member, remove_role_from_member."
-    );
-    lines.push(
-      "           Do NOT create roles or modify permissions in this phase."
-    );
+    lines.push("  - Do NOT create new channels or modify roles in this phase.");
+    lines.push("  Phase 4 — People: Member role assignments.");
+    lines.push("           Tools: add_role_to_member, remove_role_from_member.");
+    lines.push("           Do NOT create roles or modify permissions in this phase.");
     lines.push("");
     lines.push("Important rules:");
     lines.push(

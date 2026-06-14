@@ -535,7 +535,11 @@ export function diffEngine(realState: ServerState, desiredState: DesiredState): 
     ...generateChannelSteps(desiredState.active.channels, realState.channels),
     ...generateRoleSteps(desiredState.active.roles, realState.roles),
     ...generateMemberRoleSteps(desiredState.active.memberRoles ?? {}, realState.memberRoles ?? []),
-    ...generateOverwriteSteps(desiredState.active.overwrites, realState.overwrites, desiredState.active.channels),
+    ...generateOverwriteSteps(
+      desiredState.active.overwrites,
+      realState.overwrites,
+      desiredState.active.channels
+    ),
     ...generateTombstoneSteps(desiredState.tombstones),
   ];
 

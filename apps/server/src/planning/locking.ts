@@ -147,10 +147,7 @@ export async function clearStaleLocks(
       )
     );
 
-  logger.info(
-    { clearedCount: stale.length, heartbeatStaleMs, ttlMs },
-    "Cleared stale guild locks"
-  );
+  logger.info({ clearedCount: stale.length, heartbeatStaleMs, ttlMs }, "Cleared stale guild locks");
   return stale.length;
 }
 

@@ -38,14 +38,12 @@ export const guilds = pgTable("guilds", {
   lockAcquiredAt: timestamp("lock_acquired_at"),
   lockAcquiredBy: text("lock_acquired_by"),
   lockLastHeartbeatAt: timestamp("lock_last_heartbeat_at"),
-  phaseProgress: jsonb("phase_progress")
-    .notNull()
-    .default({
-      foundation: false,
-      layout: false,
-      access: false,
-      people: false,
-    }),
+  phaseProgress: jsonb("phase_progress").notNull().default({
+    foundation: false,
+    layout: false,
+    access: false,
+    people: false,
+  }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

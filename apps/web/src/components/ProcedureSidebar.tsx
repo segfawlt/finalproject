@@ -26,8 +26,7 @@ const PHASE_PROMPTS: Record<string, string> = {
     "Do NOT create new channels or modify roles.",
 
   people:
-    "Assign members to existing roles. " +
-    "Do NOT create roles or modify permissions or channels.",
+    "Assign members to existing roles. " + "Do NOT create roles or modify permissions or channels.",
 };
 
 export interface PhaseProgress {
@@ -44,11 +43,8 @@ interface ProcedureSidebarProps {
   onSelectPhase: (phase: string | null) => void;
 }
 
-function getDeprecationWarning(
-  selected: string,
-  progress: PhaseProgress
-): string | null {
-  const idx = PHASE_ORDER.indexOf(selected as typeof PHASE_ORDER[number]);
+function getDeprecationWarning(selected: string, progress: PhaseProgress): string | null {
+  const idx = PHASE_ORDER.indexOf(selected as (typeof PHASE_ORDER)[number]);
   const later = PHASE_ORDER.slice(idx + 1).filter((p) => progress[p]);
   if (later.length === 0) return null;
 
@@ -102,9 +98,7 @@ export default function ProcedureSidebar({
 
   return (
     <div className="w-64 shrink-0 bg-gray-900 border-l border-gray-800 p-4 flex flex-col h-full">
-      <div className="text-sm font-semibold text-gray-300 mb-3">
-        Recommended order
-      </div>
+      <div className="text-sm font-semibold text-gray-300 mb-3">Recommended order</div>
 
       <div className="space-y-2 mb-4">
         {PHASE_ORDER.map((phase) => {
@@ -134,9 +128,7 @@ export default function ProcedureSidebar({
 
       {selectedPhase ? (
         <div className="flex-1 flex flex-col">
-          <div className="text-sm text-purple-300 mb-2">
-            Phase: {PHASE_NAMES[selectedPhase]}
-          </div>
+          <div className="text-sm text-purple-300 mb-2">Phase: {PHASE_NAMES[selectedPhase]}</div>
           <button
             onClick={handleSendPrompt}
             className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded text-sm transition"
@@ -146,8 +138,7 @@ export default function ProcedureSidebar({
         </div>
       ) : (
         <div className="text-xs text-gray-500">
-          Select a phase above to use its predefined prompt, or type your own
-          prompt below.
+          Select a phase above to use its predefined prompt, or type your own prompt below.
         </div>
       )}
 

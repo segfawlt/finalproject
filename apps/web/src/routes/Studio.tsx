@@ -547,242 +547,244 @@ export default function Studio() {
     <div className="min-h-screen bg-discord-bg flex">
       <div className="flex-1 p-6">
         <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Studio {guildId ? `— ${guildId}` : ""}</h1>
-        {conversationId && (
-          <button
-            onClick={() => setShowTemplatePanel(!showTemplatePanel)}
-            className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white rounded text-sm transition"
-          >
-            Templates ({activeTemplates.length})
-          </button>
+          <h1 className="text-2xl font-bold text-white">Studio {guildId ? `— ${guildId}` : ""}</h1>
+          {conversationId && (
+            <button
+              onClick={() => setShowTemplatePanel(!showTemplatePanel)}
+              className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white rounded text-sm transition"
+            >
+              Templates ({activeTemplates.length})
+            </button>
+          )}
+        </div>
+
+        {/* Template context panel */}
+        {showTemplatePanel && conversationId && (
+          <div className="mb-6 p-4 bg-gray-800 rounded-lg border border-gray-700 max-w-2xl">
+            <div className="text-sm text-gray-300 mb-3">Active Templates</div>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {activeTemplates.map((tmpl) => (
+                <span
+                  key={tmpl.id}
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-purple-900/50 text-purple-200 rounded-full text-xs"
+                >
+                  {tmpl.name}
+                  <button
+                    onClick={() => removeTemplateFromContext(tmpl.id)}
+                    className="text-purple-300 hover:text-white ml-1"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              {activeTemplates.length === 0 && (
+                <span className="text-gray-500 text-xs">No templates in context</span>
+              )}
+            </div>
+            <div className="text-xs text-gray-500">
+              Templates are added as ideas for the LLM. They are not merged automatically.
+            </div>
+          </div>
         )}
-      </div>
 
-      {/* Template context panel */}
-      {showTemplatePanel && conversationId && (
-        <div className="mb-6 p-4 bg-gray-800 rounded-lg border border-gray-700 max-w-2xl">
-          <div className="text-sm text-gray-300 mb-3">Active Templates</div>
-          <div className="flex flex-wrap gap-2 mb-3">
-            {activeTemplates.map((tmpl) => (
-              <span
-                key={tmpl.id}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-purple-900/50 text-purple-200 rounded-full text-xs"
-              >
-                {tmpl.name}
-                <button
-                  onClick={() => removeTemplateFromContext(tmpl.id)}
-                  className="text-purple-300 hover:text-white ml-1"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-            {activeTemplates.length === 0 && (
-              <span className="text-gray-500 text-xs">No templates in context</span>
-            )}
+        {/* Phase 1: Input */}
+        {phase === "input" && (
+          <div className="space-y-4 max-w-2xl">
+            <label className="block text-discord-text-muted text-sm">
+              What would you like to configure?
+            </label>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="e.g., Create a staff channel and a moderator role..."
+              className="w-full p-4 rounded bg-gray-800 text-white border border-gray-700 focus:border-blue-500 focus:outline-none"
+              rows={3}
+            />
+            <button
+              onClick={createConversation}
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded transition"
+            >
+              Create & Plan
+            </button>
           </div>
-          <div className="text-xs text-gray-500">
-            Templates are added as ideas for the LLM. They are not merged automatically.
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* Phase 1: Input */}
-      {phase === "input" && (
-        <div className="space-y-4 max-w-2xl">
-          <label className="block text-discord-text-muted text-sm">
-            What would you like to configure?
-          </label>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="e.g., Create a staff channel and a moderator role..."
-            className="w-full p-4 rounded bg-gray-800 text-white border border-gray-700 focus:border-blue-500 focus:outline-none"
-            rows={3}
-          />
-          <button
-            onClick={createConversation}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded transition"
-          >
-            Create & Plan
-          </button>
-        </div>
-      )}
-
-      {/* Phase 2: Planning in progress */}
-      {phase === "planning" && (
-        <div className="space-y-3 max-w-2xl">
-          <div className="flex items-center gap-2 text-green-400">
-            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-            Planning in progress...
-          </div>
-          <div className="bg-gray-900 rounded p-4 max-h-64 overflow-auto font-mono text-xs space-y-1">
-            {planningEvents.map((ev, i) => (
-              <div key={i} className="text-gray-300">
-                {ev.type === "turn_started" && (
-                  <span className="text-blue-400">→ Turn started</span>
-                )}
-                {ev.type === "tool_called" && (
-                  <span className="text-yellow-400">→ Tool: {(ev as PlanningEvent).toolName}</span>
-                )}
-                {ev.type === "tool_result" && (
-                  <span className="text-green-400">
-                    ← Result: {JSON.stringify((ev as PlanningEvent).result)}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-          <button
-            onClick={cancelPlanning}
-            className="px-4 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-sm transition"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {/* Phase 3: Ask user */}
-      {phase === "ask_user" && askUserData && (
-        <div className="space-y-4 max-w-2xl p-6 bg-gray-800 rounded-lg border border-gray-700">
-          <div className="text-lg text-white font-medium">{askUserData.question}</div>
-          {askUserData.options && askUserData.options.length > 0 && (
-            <div className="flex gap-2 flex-wrap">
-              {askUserData.options.map((opt) => (
-                <button
-                  key={opt.label}
-                  onClick={() => setAskUserAnswer(opt.label)}
-                  className={`px-4 py-2 rounded transition ${
-                    askUserAnswer === opt.label
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-700 text-gray-200 hover:bg-gray-600"
-                  }`}
-                >
-                  {opt.label}
-                </button>
+        {/* Phase 2: Planning in progress */}
+        {phase === "planning" && (
+          <div className="space-y-3 max-w-2xl">
+            <div className="flex items-center gap-2 text-green-400">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+              Planning in progress...
+            </div>
+            <div className="bg-gray-900 rounded p-4 max-h-64 overflow-auto font-mono text-xs space-y-1">
+              {planningEvents.map((ev, i) => (
+                <div key={i} className="text-gray-300">
+                  {ev.type === "turn_started" && (
+                    <span className="text-blue-400">→ Turn started</span>
+                  )}
+                  {ev.type === "tool_called" && (
+                    <span className="text-yellow-400">
+                      → Tool: {(ev as PlanningEvent).toolName}
+                    </span>
+                  )}
+                  {ev.type === "tool_result" && (
+                    <span className="text-green-400">
+                      ← Result: {JSON.stringify((ev as PlanningEvent).result)}
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
-          )}
-          {(!askUserData.options || askUserData.options.length === 0) && (
-            <input
-              value={askUserAnswer}
-              onChange={(e) => setAskUserAnswer(e.target.value)}
-              className="w-full p-3 rounded bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
-              placeholder="Your answer..."
-            />
-          )}
-          <button
-            onClick={submitAskUser}
-            disabled={!askUserAnswer.trim()}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 text-white rounded transition"
-          >
-            Submit Answer
-          </button>
-        </div>
-      )}
-
-      {/* Phase 4: Completed → Approve / Revise */}
-      {phase === "completed" && (
-        <div className="space-y-4 max-w-2xl">
-          <div className="text-green-400 text-lg font-medium">Planning complete!</div>
-          {summary && <div className="text-white">{summary}</div>}
-          {desiredState !== null && (
-            <div className="bg-gray-900 rounded p-4 overflow-auto max-h-96">
-              <pre className="text-xs text-gray-300">{JSON.stringify(desiredState, null, 2)}</pre>
-            </div>
-          )}
-          <div className="flex gap-3 flex-wrap">
             <button
-              onClick={approve}
-              className="px-6 py-2 bg-green-600 hover:bg-green-500 text-white rounded transition"
+              onClick={cancelPlanning}
+              className="px-4 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-sm transition"
             >
-              Approve & Execute
-            </button>
-            <button
-              onClick={revise}
-              className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded transition"
-            >
-              Revise
-            </button>
-            <button
-              onClick={() => setPhase("input")}
-              className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
-            >
-              New Prompt
+              Cancel
             </button>
           </div>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Enter a revision prompt (optional)..."
-            className="w-full p-3 rounded bg-gray-800 text-white border border-gray-700 focus:border-purple-500 focus:outline-none text-sm"
-            rows={2}
-          />
-        </div>
-      )}
+        )}
 
-      {/* Phase 5: Executing */}
-      {phase === "executing" && (
-        <div className="space-y-3 max-w-2xl">
-          <div className="flex items-center gap-2 text-yellow-400">
-            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-            Executing plan...
-          </div>
-          <div className="bg-gray-900 rounded p-4 max-h-64 overflow-auto font-mono text-xs space-y-1">
-            {execEvents.map((ev, i) => (
-              <div key={i} className="text-gray-300">
-                {ev.type === "step_started" && (
-                  <span className="text-yellow-400">
-                    → Step {(ev as ExecEvent).stepIndex} started
-                  </span>
-                )}
-                {ev.type === "step_completed" && (
-                  <span className="text-green-400">
-                    ← Step {(ev as ExecEvent).stepIndex} completed
-                  </span>
-                )}
-                {ev.type === "step_failed" && (
-                  <span className="text-red-400">
-                    ✗ Step {(ev as ExecEvent).stepIndex} failed: {(ev as ExecEvent).error}
-                  </span>
-                )}
-                {ev.type === "step_retry" && (
-                  <span className="text-orange-400">
-                    ⟳ Step {(ev as ExecEvent).stepIndex} retrying: {(ev as ExecEvent).error}
-                  </span>
-                )}
-                {ev.type === "rollback_started" && (
-                  <span className="text-purple-400">↺ Rollback started...</span>
-                )}
-                {ev.type === "rollback_completed" && (
-                  <span className="text-green-400">↺ Rollback completed</span>
-                )}
+        {/* Phase 3: Ask user */}
+        {phase === "ask_user" && askUserData && (
+          <div className="space-y-4 max-w-2xl p-6 bg-gray-800 rounded-lg border border-gray-700">
+            <div className="text-lg text-white font-medium">{askUserData.question}</div>
+            {askUserData.options && askUserData.options.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {askUserData.options.map((opt) => (
+                  <button
+                    key={opt.label}
+                    onClick={() => setAskUserAnswer(opt.label)}
+                    className={`px-4 py-2 rounded transition ${
+                      askUserAnswer === opt.label
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-700 text-gray-200 hover:bg-gray-600"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
-            ))}
+            )}
+            {(!askUserData.options || askUserData.options.length === 0) && (
+              <input
+                value={askUserAnswer}
+                onChange={(e) => setAskUserAnswer(e.target.value)}
+                className="w-full p-3 rounded bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+                placeholder="Your answer..."
+              />
+            )}
+            <button
+              onClick={submitAskUser}
+              disabled={!askUserAnswer.trim()}
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 text-white rounded transition"
+            >
+              Submit Answer
+            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Phase 6: Executed → Rollback */}
-      {phase === "executed" && (
-        <div className="space-y-4 max-w-2xl">
-          <div className="text-green-400 text-lg font-medium">Execution complete!</div>
-          <div className="flex gap-3">
-            <button
-              onClick={rollback}
-              className="px-6 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded transition"
-            >
-              Rollback
-            </button>
-            <button
-              onClick={() => setPhase("input")}
-              className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
-            >
-              New Plan
-            </button>
+        {/* Phase 4: Completed → Approve / Revise */}
+        {phase === "completed" && (
+          <div className="space-y-4 max-w-2xl">
+            <div className="text-green-400 text-lg font-medium">Planning complete!</div>
+            {summary && <div className="text-white">{summary}</div>}
+            {desiredState !== null && (
+              <div className="bg-gray-900 rounded p-4 overflow-auto max-h-96">
+                <pre className="text-xs text-gray-300">{JSON.stringify(desiredState, null, 2)}</pre>
+              </div>
+            )}
+            <div className="flex gap-3 flex-wrap">
+              <button
+                onClick={approve}
+                className="px-6 py-2 bg-green-600 hover:bg-green-500 text-white rounded transition"
+              >
+                Approve & Execute
+              </button>
+              <button
+                onClick={revise}
+                className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded transition"
+              >
+                Revise
+              </button>
+              <button
+                onClick={() => setPhase("input")}
+                className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
+              >
+                New Prompt
+              </button>
+            </div>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Enter a revision prompt (optional)..."
+              className="w-full p-3 rounded bg-gray-800 text-white border border-gray-700 focus:border-purple-500 focus:outline-none text-sm"
+              rows={2}
+            />
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Phase 5: Executing */}
+        {phase === "executing" && (
+          <div className="space-y-3 max-w-2xl">
+            <div className="flex items-center gap-2 text-yellow-400">
+              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+              Executing plan...
+            </div>
+            <div className="bg-gray-900 rounded p-4 max-h-64 overflow-auto font-mono text-xs space-y-1">
+              {execEvents.map((ev, i) => (
+                <div key={i} className="text-gray-300">
+                  {ev.type === "step_started" && (
+                    <span className="text-yellow-400">
+                      → Step {(ev as ExecEvent).stepIndex} started
+                    </span>
+                  )}
+                  {ev.type === "step_completed" && (
+                    <span className="text-green-400">
+                      ← Step {(ev as ExecEvent).stepIndex} completed
+                    </span>
+                  )}
+                  {ev.type === "step_failed" && (
+                    <span className="text-red-400">
+                      ✗ Step {(ev as ExecEvent).stepIndex} failed: {(ev as ExecEvent).error}
+                    </span>
+                  )}
+                  {ev.type === "step_retry" && (
+                    <span className="text-orange-400">
+                      ⟳ Step {(ev as ExecEvent).stepIndex} retrying: {(ev as ExecEvent).error}
+                    </span>
+                  )}
+                  {ev.type === "rollback_started" && (
+                    <span className="text-purple-400">↺ Rollback started...</span>
+                  )}
+                  {ev.type === "rollback_completed" && (
+                    <span className="text-green-400">↺ Rollback completed</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Phase 6: Executed → Rollback */}
+        {phase === "executed" && (
+          <div className="space-y-4 max-w-2xl">
+            <div className="text-green-400 text-lg font-medium">Execution complete!</div>
+            <div className="flex gap-3">
+              <button
+                onClick={rollback}
+                className="px-6 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded transition"
+              >
+                Rollback
+              </button>
+              <button
+                onClick={() => setPhase("input")}
+                className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
+              >
+                New Plan
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Error banner */}
         {error && (

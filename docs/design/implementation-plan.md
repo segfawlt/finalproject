@@ -20,6 +20,7 @@ depend on the LLM understanding the correct phase model and permission strategy.
 **File:** `apps/server/src/planning/planning-session.ts` (lines 478–502)
 
 The code's system prompt uses the old phase model:
+
 - Phase 1: Server Structure (Roles + Categories + Channels)
 - Phase 2: Channel Configuration
 - Phase 3: Permissions
@@ -39,84 +40,40 @@ Phase 4 — People (Member role assignments)
 Replace lines 478–502 of `apps/server/src/planning/planning-session.ts`:
 
 ```ts
-    lines.push("Planning phases (complete each before moving to the next):");
-    lines.push(
-      "  Phase 1 — Foundation: Roles only (create/edit/delete/move_role)."
-    );
-    lines.push(
-      "           Do NOT create categories, channels, or set overwrites in this phase."
-    );
-    lines.push(
-      "  Phase 2 — Server Layout: Categories + channel structure."
-    );
-    lines.push(
-      "           Tools: create/edit/delete/move_category, create/edit/delete/move_channel."
-    );
-    lines.push(
-      "           Default lock_permissions: true on channels under categories."
-    );
-    lines.push(
-      "           Do NOT modify roles or set permission overwrites in this phase."
-    );
-    lines.push(
-      "  Phase 3 — Access Control: Channel/category overwrites."
-    );
-    lines.push(
-      "           Tools: set_overwrite, remove_overwrite, batch_set_overwrite."
-    );
-    lines.push("");
-    lines.push("  PERMISSION STRATEGY:");
-    lines.push(
-      "  - Default: lock_permissions: true on channels under a category."
-    );
-    lines.push(
-      "    Set overwrites on the CATEGORY, not individual channels."
-    );
-    lines.push(
-      "  - Scan channels within each category for identical overwrite patterns."
-    );
-    lines.push(
-      "    When found, propose consolidation: move overwrites to the category"
-    );
-    lines.push("    level and sync the channels.");
-    lines.push(
-      "  - If ONE channel needs different permissions than its category:"
-    );
-    lines.push(
-      "    lock_permissions: false on that channel, add specific overwrites."
-    );
-    lines.push(
-      "  - If MOST channels in a category need different permissions:"
-    );
-    lines.push(
-      "    skip category-level overwrites entirely. Set per-channel."
-    );
-    lines.push(
-      "  - When uncertain whether a channel should be synced or independent,"
-    );
-    lines.push("    use ask_user to clarify. Do not guess.");
-    lines.push(
-      "  - Do NOT set the same overwrites on every channel in a category."
-    );
-    lines.push("    Put them on the category once.");
-    lines.push(
-      "  - Do NOT create new channels or modify roles in this phase."
-    );
-    lines.push(
-      "  Phase 4 — People: Member role assignments."
-    );
-    lines.push(
-      "           Tools: add_role_to_member, remove_role_from_member."
-    );
-    lines.push(
-      "           Do NOT create roles or modify permissions in this phase."
-    );
+lines.push("Planning phases (complete each before moving to the next):");
+lines.push("  Phase 1 — Foundation: Roles only (create/edit/delete/move_role).");
+lines.push("           Do NOT create categories, channels, or set overwrites in this phase.");
+lines.push("  Phase 2 — Server Layout: Categories + channel structure.");
+lines.push("           Tools: create/edit/delete/move_category, create/edit/delete/move_channel.");
+lines.push("           Default lock_permissions: true on channels under categories.");
+lines.push("           Do NOT modify roles or set permission overwrites in this phase.");
+lines.push("  Phase 3 — Access Control: Channel/category overwrites.");
+lines.push("           Tools: set_overwrite, remove_overwrite, batch_set_overwrite.");
+lines.push("");
+lines.push("  PERMISSION STRATEGY:");
+lines.push("  - Default: lock_permissions: true on channels under a category.");
+lines.push("    Set overwrites on the CATEGORY, not individual channels.");
+lines.push("  - Scan channels within each category for identical overwrite patterns.");
+lines.push("    When found, propose consolidation: move overwrites to the category");
+lines.push("    level and sync the channels.");
+lines.push("  - If ONE channel needs different permissions than its category:");
+lines.push("    lock_permissions: false on that channel, add specific overwrites.");
+lines.push("  - If MOST channels in a category need different permissions:");
+lines.push("    skip category-level overwrites entirely. Set per-channel.");
+lines.push("  - When uncertain whether a channel should be synced or independent,");
+lines.push("    use ask_user to clarify. Do not guess.");
+lines.push("  - Do NOT set the same overwrites on every channel in a category.");
+lines.push("    Put them on the category once.");
+lines.push("  - Do NOT create new channels or modify roles in this phase.");
+lines.push("  Phase 4 — People: Member role assignments.");
+lines.push("           Tools: add_role_to_member, remove_role_from_member.");
+lines.push("           Do NOT create roles or modify permissions in this phase.");
 ```
 
 Also update the risk note on line 501:
 
 ```ts
-      "- If the user asks for Phase N+1 work without Phases 1..N complete, you MAY proceed but MUST note the risk in your summary."
+"- If the user asks for Phase N+1 work without Phases 1..N complete, you MAY proceed but MUST note the risk in your summary.";
 ```
 
 ### Verification
@@ -134,13 +91,13 @@ after deploy.
 
 Discord.js v14 has full native support:
 
-| API | Type | Used for |
-|-----|------|----------|
-| `channel.permissionsLocked` | Getter (`boolean \| null`) | Read sync state. `null` = no parent category |
-| `channel.edit({ lockPermissions })` | Param in `GuildChannelEditOptions` | Set via edit |
-| `guild.channels.create({ lockPermissions })` | Param in create options | Set at creation |
-| `channel.lockPermissions()` | Method | Trigger re-sync |
-| `channel.setParent(cat, { lockPermissions })` | `SetParentOptions` | Sync on category change |
+| API                                           | Type                               | Used for                                     |
+| --------------------------------------------- | ---------------------------------- | -------------------------------------------- |
+| `channel.permissionsLocked`                   | Getter (`boolean \| null`)         | Read sync state. `null` = no parent category |
+| `channel.edit({ lockPermissions })`           | Param in `GuildChannelEditOptions` | Set via edit                                 |
+| `guild.channels.create({ lockPermissions })`  | Param in create options            | Set at creation                              |
+| `channel.lockPermissions()`                   | Method                             | Trigger re-sync                              |
+| `channel.setParent(cat, { lockPermissions })` | `SetParentOptions`                 | Sync on category change                      |
 
 ### B1. `packages/shared/src/types.ts`
 
@@ -287,14 +244,14 @@ function arraysEqualSorted(a: string[], b: string[]): boolean {
 function generateOverwriteSteps(
   desired: Record<string, PermissionOverwrite>,
   real: PermissionOverwrite[]
-): RawStep[]
+): RawStep[];
 
 // After:
 function generateOverwriteSteps(
   desired: Record<string, PermissionOverwrite>,
   real: PermissionOverwrite[],
   desiredChannels: Record<string, ChannelBase>
-): RawStep[]
+): RawStep[];
 ```
 
 **c) Skip overwrite generation for synced channels.**
@@ -468,11 +425,12 @@ Props:
 ```
 
 **Behavior:**
+
 - Each phase row shows a checkmark if `phaseProgress[phase]` is true, empty circle if false
 - Clicking a phase highlights it and shows `[Use prompt →]` button
 - `[Use prompt →]` sends the predefined scoped prompt via a new conversation
 - Selecting an earlier phase after later phases are complete shows a warning dialog:
-  *"You've already completed Access Control and People. Going back to Foundation may affect resources created since. Continue anyway?"* — [Continue] [Cancel]
+  _"You've already completed Access Control and People. Going back to Foundation may affect resources created since. Continue anyway?"_ — [Continue] [Cancel]
 - No explicit "exit procedure" action — user just types their own prompt
 - Sidebar is a persistent panel, always visible when in Studio
 
@@ -496,12 +454,12 @@ const PHASE_PROMPTS: Record<string, string> = {
     "Do NOT create new channels or modify roles.",
 
   people:
-    "Assign members to existing roles. " +
-    "Do NOT create roles or modify permissions or channels.",
+    "Assign members to existing roles. " + "Do NOT create roles or modify permissions or channels.",
 };
 ```
 
 **Prompt preview card** (sub-component):
+
 ```
 ┌──────────────────────────────────────┐
 │ Phase 3 — Access Control             │
@@ -540,20 +498,23 @@ Option B is preferred — single source of truth, no race conditions.
 When the user selects a phase N and any phase > N has `phaseProgress: true`:
 
 ```ts
-function getDeprecationWarning(
-  selected: string,
-  progress: PhaseProgress
-): string | null {
+function getDeprecationWarning(selected: string, progress: PhaseProgress): string | null {
   const order = ["foundation", "layout", "access", "people"];
   const idx = order.indexOf(selected);
   const later = order.slice(idx + 1).filter((p) => progress[p]);
   if (later.length === 0) return null;
 
-  const names = { foundation: "Foundation", layout: "Layout",
-                  access: "Access Control", people: "People" };
+  const names = {
+    foundation: "Foundation",
+    layout: "Layout",
+    access: "Access Control",
+    people: "People",
+  };
   const laterNames = later.map((p) => names[p]).join(" and ");
-  return `You've already completed ${laterNames}. ` +
-    `Going back to ${names[selected]} may affect resources created since.`;
+  return (
+    `You've already completed ${laterNames}. ` +
+    `Going back to ${names[selected]} may affect resources created since.`
+  );
 }
 ```
 
@@ -580,20 +541,20 @@ pnpm db:migrate
 
 ## File Change Summary
 
-| # | File | Change | Part |
-|---|---|---|---|
-| 1 | `apps/server/src/planning/planning-session.ts` | Replace phase model + add PERMISSION STRATEGY | A |
-| 2 | `packages/shared/src/types.ts` | `lockPermissions?: boolean` on `ChannelBase` | B |
-| 3 | `packages/shared/src/tools/channels.ts` | `lock_permissions` param on create/edit schemas | B |
-| 4 | `packages/shared/src/tools/registry.ts` | Update `edit_channel` description | B |
-| 5 | `packages/shared/src/state/desired-state-store.ts` | Pass lockPermissions through addChannel/editChannel | B |
-| 6 | `packages/shared/src/state/fork.ts` | Read `permissionsLocked` from Discord.js channel | B |
-| 7 | `packages/shared/src/execute-context.ts` | Add lockPermissions to create/edit channel params | B |
-| 8 | `apps/server/src/bot/execute-context.ts` | Pass lockPermissions to Discord.js methods | B |
-| 9 | `apps/server/src/planning/diff-engine.ts` | `arraysEqualSorted`, skip overwrites for synced channels, emit lockPermissions in edit steps | B |
-| 10 | `apps/server/src/planning/validation.ts` | Group D: overwrite consolidation detection | B |
-| 11 | `packages/db/src/schema.ts` | `phaseProgress` JSONB column on guilds | C |
-| 12 | `apps/server/src/hono/routes/guilds.ts` | Add `phaseProgress` to PATCH schema | C |
-| 13 | `apps/web/src/components/ProcedureSidebar.tsx` | **NEW** — sidebar component | C |
+| #   | File                                               | Change                                                                                       | Part |
+| --- | -------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---- |
+| 1   | `apps/server/src/planning/planning-session.ts`     | Replace phase model + add PERMISSION STRATEGY                                                | A    |
+| 2   | `packages/shared/src/types.ts`                     | `lockPermissions?: boolean` on `ChannelBase`                                                 | B    |
+| 3   | `packages/shared/src/tools/channels.ts`            | `lock_permissions` param on create/edit schemas                                              | B    |
+| 4   | `packages/shared/src/tools/registry.ts`            | Update `edit_channel` description                                                            | B    |
+| 5   | `packages/shared/src/state/desired-state-store.ts` | Pass lockPermissions through addChannel/editChannel                                          | B    |
+| 6   | `packages/shared/src/state/fork.ts`                | Read `permissionsLocked` from Discord.js channel                                             | B    |
+| 7   | `packages/shared/src/execute-context.ts`           | Add lockPermissions to create/edit channel params                                            | B    |
+| 8   | `apps/server/src/bot/execute-context.ts`           | Pass lockPermissions to Discord.js methods                                                   | B    |
+| 9   | `apps/server/src/planning/diff-engine.ts`          | `arraysEqualSorted`, skip overwrites for synced channels, emit lockPermissions in edit steps | B    |
+| 10  | `apps/server/src/planning/validation.ts`           | Group D: overwrite consolidation detection                                                   | B    |
+| 11  | `packages/db/src/schema.ts`                        | `phaseProgress` JSONB column on guilds                                                       | C    |
+| 12  | `apps/server/src/hono/routes/guilds.ts`            | Add `phaseProgress` to PATCH schema                                                          | C    |
+| 13  | `apps/web/src/components/ProcedureSidebar.tsx`     | **NEW** — sidebar component                                                                  | C    |
 
 **Total: 13 files (1 delete-only, 11 additive touches, 1 new file)**

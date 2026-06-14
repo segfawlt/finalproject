@@ -48,16 +48,16 @@ describe("DesiredStateStore.validateReferences", () => {
 
   it("throws when a channel reference is missing", () => {
     const store = new DesiredStateStore();
-    expect(() =>
-      store.validateReferences([{ id: "missing", type: "channel" }])
-    ).toThrow(/Channel or category missing not found/);
+    expect(() => store.validateReferences([{ id: "missing", type: "channel" }])).toThrow(
+      /Channel or category missing not found/
+    );
   });
 
   it("throws when a role reference is missing", () => {
     const store = new DesiredStateStore();
-    expect(() =>
-      store.validateReferences([{ id: "missing", type: "role" }])
-    ).toThrow(/Role missing not found/);
+    expect(() => store.validateReferences([{ id: "missing", type: "role" }])).toThrow(
+      /Role missing not found/
+    );
   });
 });
 

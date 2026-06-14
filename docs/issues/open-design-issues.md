@@ -430,6 +430,7 @@ channel overwrites but cannot assign roles to members — a critical gap for ser
 management.
 
 **Implementation complete:**
+
 - Two new tools: `add_role_to_member` and `remove_role_to_member` (both `planning_and_execution`)
 - Member role data model in `DesiredState.active.memberRoles` + `ServerState.memberRoles`
 - `fork()` extended to populate member roles from real server state
@@ -442,6 +443,7 @@ management.
 - TOOL_ORDER updated: member steps run after role creation, before overwrites
 
 **Remaining for #22:**
+
 - Configuration procedure (#24) — guided setup flow replaced with passive sidebar
 - `phaseProgress` JSONB column on guilds table (was originally `guided_setup_completed`)
 

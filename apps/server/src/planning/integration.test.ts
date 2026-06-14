@@ -77,7 +77,17 @@ describe("integration — ServerState → diff → validate pipeline", () => {
         makeChannel({ id: "cat-1", name: "Staff", type: 4, parentId: null }),
         makeChannel({ id: "ch-1", name: "staff-chat", parentId: "cat-1", lockPermissions: true }),
       ],
-      roles: [{ id: "role-1", name: "Mod", position: 3, permissions: [], color: 0, hoist: false, mentionable: false }],
+      roles: [
+        {
+          id: "role-1",
+          name: "Mod",
+          position: 3,
+          permissions: [],
+          color: 0,
+          hoist: false,
+          mentionable: false,
+        },
+      ],
       overwrites: [],
     });
 
@@ -85,14 +95,29 @@ describe("integration — ServerState → diff → validate pipeline", () => {
       active: {
         channels: {
           "cat-1": makeChannel({ id: "cat-1", name: "Staff", type: 4, parentId: null }),
-          "ch-1": makeChannel({ id: "ch-1", name: "staff-chat", parentId: "cat-1", lockPermissions: true }),
+          "ch-1": makeChannel({
+            id: "ch-1",
+            name: "staff-chat",
+            parentId: "cat-1",
+            lockPermissions: true,
+          }),
         },
         roles: {
-          "role-1": { id: "role-1", name: "Mod", position: 3, permissions: [], color: 0, hoist: false, mentionable: false },
+          "role-1": {
+            id: "role-1",
+            name: "Mod",
+            position: 3,
+            permissions: [],
+            color: 0,
+            hoist: false,
+            mentionable: false,
+          },
         },
         overwrites: {
           "cat-1:role-1": makeOverwrite("cat-1", "role-1"),
-          "ch-1:role-1": makeOverwrite("ch-1", "role-1", { allow: ["VIEW_CHANNEL", "SEND_MESSAGES"] }),
+          "ch-1:role-1": makeOverwrite("ch-1", "role-1", {
+            allow: ["VIEW_CHANNEL", "SEND_MESSAGES"],
+          }),
         },
         memberRoles: {},
       },
@@ -129,7 +154,17 @@ describe("integration — ServerState → diff → validate pipeline", () => {
         makeChannel({ id: "cat-1", name: "Staff", type: 4, parentId: null }),
         makeChannel({ id: "ch-1", name: "staff-chat", parentId: "cat-1", lockPermissions: false }),
       ],
-      roles: [{ id: "role-1", name: "Mod", position: 3, permissions: [], color: 0, hoist: false, mentionable: false }],
+      roles: [
+        {
+          id: "role-1",
+          name: "Mod",
+          position: 3,
+          permissions: [],
+          color: 0,
+          hoist: false,
+          mentionable: false,
+        },
+      ],
       overwrites: [],
     });
 
@@ -137,10 +172,23 @@ describe("integration — ServerState → diff → validate pipeline", () => {
       active: {
         channels: {
           "cat-1": makeChannel({ id: "cat-1", name: "Staff", type: 4, parentId: null }),
-          "ch-1": makeChannel({ id: "ch-1", name: "staff-chat", parentId: "cat-1", lockPermissions: false }),
+          "ch-1": makeChannel({
+            id: "ch-1",
+            name: "staff-chat",
+            parentId: "cat-1",
+            lockPermissions: false,
+          }),
         },
         roles: {
-          "role-1": { id: "role-1", name: "Mod", position: 3, permissions: [], color: 0, hoist: false, mentionable: false },
+          "role-1": {
+            id: "role-1",
+            name: "Mod",
+            position: 3,
+            permissions: [],
+            color: 0,
+            hoist: false,
+            mentionable: false,
+          },
         },
         overwrites: {
           "ch-1:role-1": makeOverwrite("ch-1", "role-1"),
@@ -179,7 +227,12 @@ describe("integration — ServerState → diff → validate pipeline", () => {
     const desired = makeDesiredState({
       active: {
         channels: {
-          "ch-1": makeChannel({ id: "ch-1", name: "staff-chat", parentId: "cat-1", lockPermissions: true }),
+          "ch-1": makeChannel({
+            id: "ch-1",
+            name: "staff-chat",
+            parentId: "cat-1",
+            lockPermissions: true,
+          }),
         },
         roles: {},
         overwrites: {},
@@ -210,7 +263,17 @@ describe("integration — ServerState → diff → validate pipeline", () => {
         makeChannel({ id: "ch-1", name: "staff-chat", parentId: "cat-1", lockPermissions: false }),
         makeChannel({ id: "ch-2", name: "mod-chat", parentId: "cat-1", lockPermissions: false }),
       ],
-      roles: [{ id: "role-1", name: "Mod", position: 3, permissions: [], color: 0, hoist: false, mentionable: false }],
+      roles: [
+        {
+          id: "role-1",
+          name: "Mod",
+          position: 3,
+          permissions: [],
+          color: 0,
+          hoist: false,
+          mentionable: false,
+        },
+      ],
       overwrites: [],
     });
 
@@ -218,11 +281,29 @@ describe("integration — ServerState → diff → validate pipeline", () => {
       active: {
         channels: {
           "cat-1": makeChannel({ id: "cat-1", name: "Staff", type: 4, parentId: null }),
-          "ch-1": makeChannel({ id: "ch-1", name: "staff-chat", parentId: "cat-1", lockPermissions: false }),
-          "ch-2": makeChannel({ id: "ch-2", name: "mod-chat", parentId: "cat-1", lockPermissions: false }),
+          "ch-1": makeChannel({
+            id: "ch-1",
+            name: "staff-chat",
+            parentId: "cat-1",
+            lockPermissions: false,
+          }),
+          "ch-2": makeChannel({
+            id: "ch-2",
+            name: "mod-chat",
+            parentId: "cat-1",
+            lockPermissions: false,
+          }),
         },
         roles: {
-          "role-1": { id: "role-1", name: "Mod", position: 3, permissions: [], color: 0, hoist: false, mentionable: false },
+          "role-1": {
+            id: "role-1",
+            name: "Mod",
+            position: 3,
+            permissions: [],
+            color: 0,
+            hoist: false,
+            mentionable: false,
+          },
         },
         overwrites: {
           "ch-1:role-1": makeOverwrite("ch-1", "role-1"),

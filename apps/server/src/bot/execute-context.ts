@@ -25,7 +25,12 @@ export class DiscordExecuteContext implements ExecuteContext {
       userLimit?: number;
       nsfw?: boolean;
       rateLimitPerUser?: number;
-      availableTags?: Array<{ name: string; moderated?: boolean; emojiId?: string | null; emojiName?: string | null }>;
+      availableTags?: Array<{
+        name: string;
+        moderated?: boolean;
+        emojiId?: string | null;
+        emojiName?: string | null;
+      }>;
       defaultReactionEmoji?: { emojiId?: string | null; emojiName?: string | null } | null;
       defaultSortOrder?: number | null;
       defaultForumLayout?: number;
@@ -88,7 +93,12 @@ export class DiscordExecuteContext implements ExecuteContext {
       userLimit?: number;
       nsfw?: boolean;
       rateLimitPerUser?: number;
-      availableTags?: Array<{ name: string; moderated?: boolean; emojiId?: string | null; emojiName?: string | null }>;
+      availableTags?: Array<{
+        name: string;
+        moderated?: boolean;
+        emojiId?: string | null;
+        emojiName?: string | null;
+      }>;
       defaultReactionEmoji?: { emojiId?: string | null; emojiName?: string | null } | null;
       defaultSortOrder?: number | null;
       defaultForumLayout?: number;

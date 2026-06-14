@@ -141,7 +141,15 @@ describe("diffEngine — member roles", () => {
       active: {
         channels: {},
         roles: {
-          "$role_0": { id: "$role_0", name: "Admin", position: 1, permissions: [], color: 0, hoist: false, mentionable: false },
+          $role_0: {
+            id: "$role_0",
+            name: "Admin",
+            position: 1,
+            permissions: [],
+            color: 0,
+            hoist: false,
+            mentionable: false,
+          },
         },
         overwrites: {},
         memberRoles: {
@@ -181,7 +189,7 @@ describe("diffEngine — lockPermissions", () => {
     const desired = makeDesiredState({
       active: {
         channels: {
-          "$ch_0": makeChannel({ id: "$ch_0", lockPermissions: true }),
+          $ch_0: makeChannel({ id: "$ch_0", lockPermissions: true }),
         },
         roles: {},
         overwrites: {},
@@ -230,7 +238,10 @@ describe("diffEngine — lockPermissions", () => {
         },
         roles: {},
         overwrites: {
-          "ch-1:role-1": { ...makeOverwrite("ch-1", "role-1"), allow: ["VIEW_CHANNEL", "SEND_MESSAGES"] },
+          "ch-1:role-1": {
+            ...makeOverwrite("ch-1", "role-1"),
+            allow: ["VIEW_CHANNEL", "SEND_MESSAGES"],
+          },
         },
         memberRoles: {},
       },
@@ -256,7 +267,10 @@ describe("diffEngine — lockPermissions", () => {
         },
         roles: {},
         overwrites: {
-          "ch-1:role-1": { ...makeOverwrite("ch-1", "role-1"), allow: ["VIEW_CHANNEL", "SEND_MESSAGES"] },
+          "ch-1:role-1": {
+            ...makeOverwrite("ch-1", "role-1"),
+            allow: ["VIEW_CHANNEL", "SEND_MESSAGES"],
+          },
         },
         memberRoles: {},
       },

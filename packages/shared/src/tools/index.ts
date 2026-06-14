@@ -72,7 +72,11 @@ export {
   getOverwriteRemoveAssumptions,
   getOverwriteBatchAssumptions,
 } from "./permissions";
-export type { SetOverwriteParams, RemoveOverwriteParams, BatchSetOverwriteParams } from "./permissions";
+export type {
+  SetOverwriteParams,
+  RemoveOverwriteParams,
+  BatchSetOverwriteParams,
+} from "./permissions";
 
 export {
   createMemberRoleSchema,

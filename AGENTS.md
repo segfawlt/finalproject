@@ -387,4 +387,3 @@ latency and loses error detail that the main agent needs to diagnose failures.
 - [docs/design/](./docs/design/) — System design documents
 - Superpowers skills — Development workflows (brainstorming, TDD, debugging, etc.)
 - [docs/issues/open-design-issues.md](./docs/issues/open-design-issues.md) — Resolved decisions and open questions
-

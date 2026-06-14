@@ -85,12 +85,14 @@ stateApp.get("/drift/stream", async (c) => {
 
   return streamSSE(c, async (stream) => {
     const unsubscribe = subscribeToGuildDrift(guildId, (event: DriftEvent) => {
-      stream.writeSSE({
-        event: "drift",
-        data: JSON.stringify(event),
-      }).catch(() => {
-        unsubscribe();
-      });
+      stream
+        .writeSSE({
+          event: "drift",
+          data: JSON.stringify(event),
+        })
+        .catch(() => {
+          unsubscribe();
+        });
     });
 
     stream.onAbort(() => {

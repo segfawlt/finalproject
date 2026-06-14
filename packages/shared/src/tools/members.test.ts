@@ -47,10 +47,7 @@ describe("planMemberRoleAdd", () => {
     const store = new DesiredStateStore();
     const roleSym = store.addRole({ name: "Admin" });
 
-    const result = planMemberRoleAdd(
-      { member_id: "user-1", role_id: roleSym },
-      store
-    );
+    const result = planMemberRoleAdd({ member_id: "user-1", role_id: roleSym }, store);
 
     expect(result.planned).toBe(true);
     const state = store.getState();
@@ -75,10 +72,7 @@ describe("planMemberRoleRemove", () => {
     const roleSym = store.addRole({ name: "Admin" });
     store.addMemberRole("user-1", roleSym);
 
-    const result = planMemberRoleRemove(
-      { member_id: "user-1", role_id: roleSym },
-      store
-    );
+    const result = planMemberRoleRemove({ member_id: "user-1", role_id: roleSym }, store);
 
     expect(result.planned).toBe(true);
     const state = store.getState();
@@ -96,10 +90,7 @@ describe("executeMemberRoleAdd", () => {
       },
     } as unknown as ExecuteContext;
 
-    await executeMemberRoleAdd(
-      { member_id: "user-1", role_id: "role-1" },
-      mockCtx
-    );
+    await executeMemberRoleAdd({ member_id: "user-1", role_id: "role-1" }, mockCtx);
 
     expect(calls).toEqual([{ memberId: "user-1", roleId: "role-1" }]);
   });
@@ -115,10 +106,7 @@ describe("executeMemberRoleRemove", () => {
       },
     } as unknown as ExecuteContext;
 
-    await executeMemberRoleRemove(
-      { member_id: "user-1", role_id: "role-1" },
-      mockCtx
-    );
+    await executeMemberRoleRemove({ member_id: "user-1", role_id: "role-1" }, mockCtx);
 
     expect(calls).toEqual([{ memberId: "user-1", roleId: "role-1" }]);
   });

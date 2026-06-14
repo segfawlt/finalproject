@@ -163,10 +163,7 @@ async function dispatchStep(step: PlanStep, ctx: ExecuteContext): Promise<Record
       );
       return {};
     case "add_role_to_member":
-      await executeMemberRoleAdd(
-        resolvedParams as Parameters<typeof executeMemberRoleAdd>[0],
-        ctx
-      );
+      await executeMemberRoleAdd(resolvedParams as Parameters<typeof executeMemberRoleAdd>[0], ctx);
       return {};
     case "remove_role_from_member":
       await executeMemberRoleRemove(

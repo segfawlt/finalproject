@@ -28,9 +28,7 @@ function buildRoleCacheEntry(
   },
   guild: { members: { cache: Map<string, { user?: { username: string } }> } }
 ) {
-  const botUser = role.tags?.botId
-    ? guild.members.cache.get(role.tags.botId)?.user
-    : undefined;
+  const botUser = role.tags?.botId ? guild.members.cache.get(role.tags.botId)?.user : undefined;
 
   return {
     id: role.id,
@@ -103,7 +101,9 @@ export function setupBotEvents() {
           parentId: channel.parentId,
           position: (channel as { position?: number }).position ?? 0,
           messageCount: 0,
-          lockPermissions: (channel as unknown as { permissionsLocked?: boolean | null }).permissionsLocked ?? undefined,
+          lockPermissions:
+            (channel as unknown as { permissionsLocked?: boolean | null }).permissionsLocked ??
+            undefined,
         });
 
         syncChannelPermissions(guild.id, channel);
@@ -334,7 +334,9 @@ export function setupBotEvents() {
           parentId: channel.parentId,
           position: (channel as { position?: number }).position ?? 0,
           messageCount: 0,
-          lockPermissions: (channel as unknown as { permissionsLocked?: boolean | null }).permissionsLocked ?? undefined,
+          lockPermissions:
+            (channel as unknown as { permissionsLocked?: boolean | null }).permissionsLocked ??
+            undefined,
         });
         syncChannelPermissions(guild.id, channel);
       }

@@ -58,9 +58,7 @@ function evaluateOne(assumption: Assumption, state: ServerState): AssumptionResu
           : { passed: true, message: `Role name "${value}" is unique` };
       }
       if (resourceType === "category") {
-        const dup = state.channels.find(
-          (ch) => ch.name === value && ch.id !== excludeId,
-        );
+        const dup = state.channels.find((ch) => ch.name === value && ch.id !== excludeId);
         return dup
           ? { passed: false, message: `Category name "${value}" already in use` }
           : { passed: true, message: `Category name "${value}" is unique` };

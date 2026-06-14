@@ -26,6 +26,7 @@ which it currently has no way to reference.
 **Status:** IMPLEMENTED — all 6 properties added
 
 All forum/media properties are fully implemented:
+
 - `available_tags`, `default_reaction_emoji`, `default_sort_order`, `default_forum_layout`,
   `default_thread_rate_limit_per_user`, `flags` — all in Zod schemas, `ChannelBase` type,
   store, ExecuteContext interface + Discord.js implementation, and registry descriptions.

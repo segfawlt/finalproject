@@ -35,30 +35,31 @@ serve(
 startSnapshotCleanupJob();
 startPeriodicLockCleanup();
 
-const stopDriftDetector = startDriftDetector(botClient, (guildId) => {
-  const cache = guildCache.get(guildId);
-  if (!cache) return null;
-  return {
-    channels: Array.from(cache.channels.values()).map((c) => ({
-      id: c.id,
-      name: c.name,
-      type: c.type,
-      parentId: c.parentId,
-      position: c.position,
-    })),
-    roles: Array.from(cache.roles.values()).map((r) => ({
-      id: r.id,
-      name: r.name,
-      position: r.position,
-    })),
-  };
-}, {
-  intervalMs: 60_000,
-  onEvents: async (events) => {
-    try {
-      await db
-        .insert(driftEvents)
-        .values(
+const stopDriftDetector = startDriftDetector(
+  botClient,
+  (guildId) => {
+    const cache = guildCache.get(guildId);
+    if (!cache) return null;
+    return {
+      channels: Array.from(cache.channels.values()).map((c) => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        parentId: c.parentId,
+        position: c.position,
+      })),
+      roles: Array.from(cache.roles.values()).map((r) => ({
+        id: r.id,
+        name: r.name,
+        position: r.position,
+      })),
+    };
+  },
+  {
+    intervalMs: 60_000,
+    onEvents: async (events) => {
+      try {
+        await db.insert(driftEvents).values(
           events.map((e) => ({
             guildId: e.guildId,
             severity: e.severity,
@@ -67,11 +68,12 @@ const stopDriftDetector = startDriftDetector(botClient, (guildId) => {
             details: e.details,
           }))
         );
-    } catch (err) {
-      logger.error(err, "Failed to persist drift events");
-    }
-  },
-});
+      } catch (err) {
+        logger.error(err, "Failed to persist drift events");
+      }
+    },
+  }
+);
 
 process.on("SIGTERM", () => {
   stopDriftDetector();

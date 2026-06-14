@@ -100,7 +100,9 @@ function formatChannels(guildId: string): string {
       const lockLabel = sub.lockPermissions === false ? " [unsynced]" : "";
       // messageCount is approximate — see bot/index.ts for limitation notes
       const msgInfo = sub.messageCount != null ? `, ${sub.messageCount} msgs` : "";
-      lines.push(`    ${prefix}${sub.name} — ${channelTypeLabel(sub.type)}${lockLabel}${msgInfo}${overwrites}`);
+      lines.push(
+        `    ${prefix}${sub.name} — ${channelTypeLabel(sub.type)}${lockLabel}${msgInfo}${overwrites}`
+      );
     }
   }
 

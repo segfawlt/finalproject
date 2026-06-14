@@ -9,7 +9,7 @@ const SYMBOL_PREFIXES = {
 export class CategoryHasChildrenError extends Error {
   constructor(
     public readonly categoryId: string,
-    public readonly children: Array<{ id: string; name: string }>,
+    public readonly children: Array<{ id: string; name: string }>
   ) {
     super(`Category ${categoryId} has ${children.length} children`);
     this.name = "CategoryHasChildrenError";
@@ -108,7 +108,12 @@ export class DesiredStateStore {
     nsfw?: boolean;
     rateLimitPerUser?: number;
     messageCount?: number;
-    availableTags?: Array<{ name: string; moderated?: boolean; emojiId?: string | null; emojiName?: string | null }>;
+    availableTags?: Array<{
+      name: string;
+      moderated?: boolean;
+      emojiId?: string | null;
+      emojiName?: string | null;
+    }>;
     defaultReactionEmoji?: { emojiId?: string | null; emojiName?: string | null } | null;
     defaultSortOrder?: number | null;
     defaultForumLayout?: number;
@@ -135,10 +140,13 @@ export class DesiredStateStore {
     if (params.nsfw !== undefined) channel.nsfw = params.nsfw;
     if (params.rateLimitPerUser !== undefined) channel.rateLimitPerUser = params.rateLimitPerUser;
     if (params.availableTags !== undefined) channel.availableTags = params.availableTags;
-    if (params.defaultReactionEmoji !== undefined) channel.defaultReactionEmoji = params.defaultReactionEmoji;
+    if (params.defaultReactionEmoji !== undefined)
+      channel.defaultReactionEmoji = params.defaultReactionEmoji;
     if (params.defaultSortOrder !== undefined) channel.defaultSortOrder = params.defaultSortOrder;
-    if (params.defaultForumLayout !== undefined) channel.defaultForumLayout = params.defaultForumLayout;
-    if (params.defaultThreadRateLimitPerUser !== undefined) channel.defaultThreadRateLimitPerUser = params.defaultThreadRateLimitPerUser;
+    if (params.defaultForumLayout !== undefined)
+      channel.defaultForumLayout = params.defaultForumLayout;
+    if (params.defaultThreadRateLimitPerUser !== undefined)
+      channel.defaultThreadRateLimitPerUser = params.defaultThreadRateLimitPerUser;
     if (params.flags !== undefined) channel.flags = params.flags;
     if (params.lockPermissions !== undefined) channel.lockPermissions = params.lockPermissions;
 
@@ -155,7 +163,12 @@ export class DesiredStateStore {
         userLimit?: number;
         nsfw?: boolean;
         rateLimitPerUser?: number;
-        availableTags?: Array<{ name: string; moderated?: boolean; emojiId?: string | null; emojiName?: string | null }>;
+        availableTags?: Array<{
+          name: string;
+          moderated?: boolean;
+          emojiId?: string | null;
+          emojiName?: string | null;
+        }>;
         defaultReactionEmoji?: { emojiId?: string | null; emojiName?: string | null } | null;
         defaultSortOrder?: number | null;
         defaultForumLayout?: number;
@@ -381,9 +394,7 @@ export class DesiredStateStore {
     }
   }
 
-  validateReferences(
-    refs: Array<{ id: string; type: "channel" | "role" }>
-  ): void {
+  validateReferences(refs: Array<{ id: string; type: "channel" | "role" }>): void {
     for (const { id, type } of refs) {
       this.validateReference(id, type);
     }

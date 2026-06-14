@@ -342,9 +342,7 @@ describe("validateOverwriteConsolidation", () => {
     });
 
     const warning = result.issues.find(
-      (i) =>
-        i.group === "D. Safety" &&
-        i.message.includes("identical permissions")
+      (i) => i.group === "D. Safety" && i.message.includes("identical permissions")
     );
     expect(warning).toBeUndefined();
   });

@@ -156,7 +156,10 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
             type: "object",
             properties: {
               name: { type: "string", description: "Tag name (max 20 characters)" },
-              moderated: { type: "boolean", description: "Whether the tag requires moderation (optional)" },
+              moderated: {
+                type: "boolean",
+                description: "Whether the tag requires moderation (optional)",
+              },
               emoji_id: { type: "string", description: "Emoji ID (optional)" },
               emoji_name: { type: "string", description: "Emoji name (optional)" },
             },
@@ -229,7 +232,10 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
             type: "object",
             properties: {
               name: { type: "string", description: "Tag name (max 20 characters)" },
-              moderated: { type: "boolean", description: "Whether the tag requires moderation (optional)" },
+              moderated: {
+                type: "boolean",
+                description: "Whether the tag requires moderation (optional)",
+              },
               emoji_id: { type: "string", description: "Emoji ID (optional)" },
               emoji_name: { type: "string", description: "Emoji name (optional)" },
             },
@@ -264,7 +270,6 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
           type: "boolean",
           description:
             "Sync permissions with parent category. true = inherit category overwrites. false = independent.",
-
         },
       },
       required: ["id"],
@@ -418,7 +423,8 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     },
     executionMode: "planning_and_execution",
     plan: (params, store) => planMemberRoleRemove(removeMemberRoleSchema.parse(params), store),
-    getAssumptions: (params) => getMemberRoleRemoveAssumptions(removeMemberRoleSchema.parse(params)),
+    getAssumptions: (params) =>
+      getMemberRoleRemoveAssumptions(removeMemberRoleSchema.parse(params)),
   },
   {
     name: "set_overwrite",

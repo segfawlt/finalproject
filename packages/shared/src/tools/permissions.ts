@@ -17,14 +17,16 @@ export const removeOverwriteSchema = z.object({
 });
 
 export const batchSetOverwriteSchema = z.object({
-  overwrites: z.array(
-    z.object({
-      channel_id: z.string().min(1),
-      role_id: z.string().min(1),
-      allow: z.array(permissionNameSchema).optional(),
-      deny: z.array(permissionNameSchema).optional(),
-    })
-  ).min(1),
+  overwrites: z
+    .array(
+      z.object({
+        channel_id: z.string().min(1),
+        role_id: z.string().min(1),
+        allow: z.array(permissionNameSchema).optional(),
+        deny: z.array(permissionNameSchema).optional(),
+      })
+    )
+    .min(1),
 });
 
 export type SetOverwriteParams = z.infer<typeof setOverwriteSchema>;
