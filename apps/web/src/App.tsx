@@ -38,7 +38,9 @@ function App() {
       />
       <Route
         path="/studio"
-        element={isAuthenticated ? <Studio /> : <Navigate to="/login" replace />}
+        element={
+          isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />
+        }
       />
       <Route
         path="/studio/:guildId"

@@ -24,10 +24,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
   setUser: (user) => set({ user, isAuthenticated: !!user }),
   login: () => {
-    window.location.href = "/api/auth/signin/discord";
+    window.location.href = "/api/auth/sign-in/social?provider=discord";
   },
   logout: async () => {
-    await fetch("/api/auth/signout", { method: "POST", credentials: "include" });
+    await fetch("/api/auth/sign-out", { method: "POST", credentials: "include" });
     set({ user: null, isAuthenticated: false });
   },
   checkSession: async () => {

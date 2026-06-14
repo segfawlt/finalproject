@@ -7,9 +7,7 @@ export default function Dashboard() {
   const setSelectedGuild = useDashboardStore((state) => state.setSelectedGuild);
 
   useEffect(() => {
-    if (guildId) {
-      setSelectedGuild(guildId);
-    }
+    setSelectedGuild(guildId ?? null);
   }, [guildId, setSelectedGuild]);
 
   return (

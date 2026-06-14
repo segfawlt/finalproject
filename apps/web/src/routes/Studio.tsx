@@ -43,7 +43,8 @@ export default function Studio() {
     multiSelect?: boolean;
     allowCustom?: boolean;
   } | null>(null);
-  const [askUserAnswer, setAskUserAnswer] = useState("");
+  const [askUserSelected, setAskUserSelected] = useState<string[]>([]);
+  const [askUserCustom, setAskUserCustom] = useState("");
 
   // ── Completed ────────────────────────────────────────────────────────────
   const [summary, setSummary] = useState("");
@@ -122,7 +123,8 @@ export default function Studio() {
     clearError();
     setPlanningEvents([]);
     setAskUserData(null);
-    setAskUserAnswer("");
+    setAskUserSelected([]);
+    setAskUserCustom("");
     setSummary("");
     setDesiredState(null);
     pendingPhaseRef.current = phase;
@@ -165,7 +167,8 @@ export default function Studio() {
     clearError();
     setPlanningEvents([]);
     setAskUserData(null);
-    setAskUserAnswer("");
+    setAskUserSelected([]);
+    setAskUserCustom("");
     setSummary("");
     setDesiredState(null);
 
@@ -236,6 +239,8 @@ export default function Studio() {
         multiSelect: data.multiSelect,
         allowCustom: data.allowCustom,
       });
+      setAskUserSelected([]);
+      setAskUserCustom("");
       setPhase("ask_user");
     });
 
@@ -300,7 +305,18 @@ export default function Studio() {
 
   // ── Phase 3: Submit ask_user answer ──────────────────────────────────────
   async function submitAskUser() {
-    if (!conversationId || !askUserAnswer.trim()) return;
+    if (!conversationId) return;
+    const parts: string[] = [];
+    if (askUserData?.multiSelect) {
+      parts.push(...askUserSelected);
+    } else if (askUserSelected.length > 0) {
+      parts.push(askUserSelected[0]);
+    }
+    if (askUserData?.allowCustom && askUserCustom.trim()) {
+      parts.push(askUserCustom.trim());
+    }
+    const answer = parts.join(", ");
+    if (!answer) return;
     clearError();
 
     try {
@@ -308,7 +324,7 @@ export default function Studio() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ answer: askUserAnswer }),
+        body: JSON.stringify({ answer }),
       });
 
       if (!res.ok) {
@@ -318,11 +334,34 @@ export default function Studio() {
       }
 
       setAskUserData(null);
-      setAskUserAnswer("");
+      setAskUserSelected([]);
+      setAskUserCustom("");
       setPhase("planning");
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  // ── Reset everything for a fresh plan/prompt ────────────────────────────
+  function resetPlanningState() {
+    planningEsRef.current?.close();
+    planningEsRef.current = null;
+    execEsRef.current?.close();
+    execEsRef.current = null;
+    setConversationId(null);
+    setPlanId(null);
+    setPlanningEvents([]);
+    setExecEvents([]);
+    setAskUserData(null);
+    setAskUserSelected([]);
+    setAskUserCustom("");
+    setSummary("");
+    setDesiredState(null);
+    setError("");
+    setShowTemplatePanel(false);
+    setActiveTemplates([]);
+    pendingPhaseRef.current = null;
+    setPhase("input");
   }
 
   // ── Cancel planning ────────────────────────────────────────────────────────
@@ -339,9 +378,7 @@ export default function Studio() {
       // ignore
     }
 
-    planningEsRef.current?.close();
-    planningEsRef.current = null;
-    setPhase("input");
+    resetPlanningState();
   }
 
   // ── Phase 4: Approve → create plan ───────────────────────────────────────
@@ -650,32 +687,54 @@ export default function Studio() {
             <div className="text-lg text-white font-medium">{askUserData.question}</div>
             {askUserData.options && askUserData.options.length > 0 && (
               <div className="flex gap-2 flex-wrap">
-                {askUserData.options.map((opt) => (
-                  <button
-                    key={opt.label}
-                    onClick={() => setAskUserAnswer(opt.label)}
-                    className={`px-4 py-2 rounded transition ${
-                      askUserAnswer === opt.label
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-700 text-gray-200 hover:bg-gray-600"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+                {askUserData.options.map((opt) => {
+                  const selected = askUserData.multiSelect
+                    ? askUserSelected.includes(opt.label)
+                    : askUserSelected[0] === opt.label;
+                  return (
+                    <button
+                      key={opt.label}
+                      onClick={() => {
+                        if (askUserData.multiSelect) {
+                          setAskUserSelected((prev) =>
+                            prev.includes(opt.label)
+                              ? prev.filter((l) => l !== opt.label)
+                              : [...prev, opt.label]
+                          );
+                        } else {
+                          setAskUserSelected([opt.label]);
+                        }
+                      }}
+                      className={`px-4 py-2 rounded transition ${
+                        selected
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-700 text-gray-200 hover:bg-gray-600"
+                      }`}
+                    >
+                      {selected && askUserData.multiSelect ? "✓ " : ""}
+                      {opt.label}
+                    </button>
+                  );
+                })}
               </div>
             )}
-            {(!askUserData.options || askUserData.options.length === 0) && (
+            {(!askUserData.options || askUserData.options.length === 0 || askUserData.allowCustom) && (
               <input
-                value={askUserAnswer}
-                onChange={(e) => setAskUserAnswer(e.target.value)}
+                value={askUserCustom}
+                onChange={(e) => setAskUserCustom(e.target.value)}
                 className="w-full p-3 rounded bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
-                placeholder="Your answer..."
+                placeholder={
+                  askUserData.options && askUserData.options.length > 0
+                    ? "Or type a custom answer..."
+                    : "Your answer..."
+                }
               />
             )}
             <button
               onClick={submitAskUser}
-              disabled={!askUserAnswer.trim()}
+              disabled={
+                askUserSelected.length === 0 && !askUserCustom.trim()
+              }
               className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 text-white rounded transition"
             >
               Submit Answer
@@ -707,7 +766,7 @@ export default function Studio() {
                 Revise
               </button>
               <button
-                onClick={() => setPhase("input")}
+                onClick={resetPlanningState}
                 className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
               >
                 New Prompt
@@ -777,7 +836,7 @@ export default function Studio() {
                 Rollback
               </button>
               <button
-                onClick={() => setPhase("input")}
+                onClick={resetPlanningState}
                 className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
               >
                 New Plan
