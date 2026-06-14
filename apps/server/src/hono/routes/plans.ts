@@ -5,7 +5,7 @@ import { db, plans, snapshots, conversations, planIterations } from "@repo/db";
 import { eq, desc, ne, and } from "drizzle-orm";
 import { userHasManageGuild } from "../../auth/helpers";
 import { checkGuildOperable } from "../../planning/guild-check";
-import { acquireGuildLock, releaseGuildLock } from "../../planning/locking";
+import { acquireGuildLock, releaseGuildLock, heartbeatGuildLock } from "../../planning/locking";
 import { diffEngine } from "../../planning/diff-engine";
 import { executePlan } from "../../planning/execution-engine";
 import { validatePlan } from "../../planning/validation";
@@ -124,6 +124,7 @@ plansApp.post("/", zValidator("json", createPlanSchema), async (c) => {
 
   const planData: PlanData = {
     llmResponse: { summary: "", reasoning: "" },
+    desiredState: body.desiredState as unknown as DesiredState,
   };
 
   const [plan] = await db
@@ -204,11 +205,16 @@ plansApp.post("/:planId/execute", async (c) => {
   // 3. Build ServerState from cache
   const serverState = buildServerState(guildId);
   const guild = botClient.guilds.cache.get(guildId);
+  if (!guild) {
+    return c.json({ error: "Guild not found in bot cache" }, 503);
+  }
 
-  // 4. Load desiredState from plan_iterations (preferred) or planData (fallback)
+  // 4. Load desiredState — prefer snapshot in planData (approved contract), fallback to latest iteration
   const planData = plan.planData as unknown as PlanData;
   let desiredState: DesiredState;
-  if (plan.conversationId) {
+  if (planData.desiredState) {
+    desiredState = planData.desiredState;
+  } else if (plan.conversationId) {
     const [latestIteration] = await db
       .select()
       .from(planIterations)
@@ -220,7 +226,7 @@ plansApp.post("/:planId/execute", async (c) => {
     }
     desiredState = latestIteration.desiredState as unknown as DesiredState;
   } else {
-    desiredState = planData.desiredState as DesiredState;
+    return c.json({ error: "Plan has no desiredState and no conversation to resolve from" }, 400);
   }
   const diffResult = diffEngine(serverState, desiredState);
 
@@ -296,7 +302,7 @@ plansApp.post("/:planId/execute", async (c) => {
     });
 
     // 6. Execute
-    const ctx = new DiscordExecuteContext(guild!);
+    const ctx = new DiscordExecuteContext(guild);
     const executionResult = await executePlan({
       planId,
       steps: diffResult.steps,
@@ -384,7 +390,7 @@ plansApp.post("/:planId/execute", async (c) => {
     return c.json({ error }, 500);
   } finally {
     executionAbortControllers.delete(planId);
-    await releaseGuildLock(guildId);
+    await releaseGuildLock(guildId, process.pid.toString());
   }
 });
 
@@ -444,10 +450,11 @@ plansApp.post("/:planId/rollback", async (c) => {
   const [beforeSnapshot] = await db
     .select()
     .from(snapshots)
-    .where(eq(snapshots.planId, planId))
-    .orderBy(desc(snapshots.createdAt));
+    .where(and(eq(snapshots.planId, planId), eq(snapshots.type, "execution_before")))
+    .orderBy(desc(snapshots.createdAt))
+    .limit(1);
 
-  if (!beforeSnapshot || beforeSnapshot.type !== "execution_before") {
+  if (!beforeSnapshot) {
     return c.json({ error: "Before-snapshot not found for rollback" }, 400);
   }
 
@@ -499,7 +506,7 @@ plansApp.post("/:planId/rollback", async (c) => {
     await db.update(plans).set({ status: "failed" }).where(eq(plans.id, planId));
     return c.json({ error }, 500);
   } finally {
-    await releaseGuildLock(guildId);
+    await releaseGuildLock(guildId, process.pid.toString());
   }
 });
 

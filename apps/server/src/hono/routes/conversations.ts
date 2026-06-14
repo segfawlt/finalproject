@@ -392,11 +392,20 @@ conversationsApp.post("/:convId/approve", async (c) => {
     return c.json({ error: "Planning session not completed" }, 400);
   }
 
+  // Snapshot the latest iteration's desiredState so execution uses the approved contract
+  const [latestIteration] = await db
+    .select()
+    .from(planIterations)
+    .where(eq(planIterations.conversationId, convId))
+    .orderBy(desc(planIterations.version))
+    .limit(1);
+
   const planData = {
     llmResponse: {
       summary: session.lastSummary,
       reasoning: session.lastReasoning,
     },
+    desiredState: latestIteration?.desiredState ?? undefined,
   };
 
   const [plan] = await db
