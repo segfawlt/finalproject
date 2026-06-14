@@ -1,4 +1,5 @@
 import type { Client, Guild } from "discord.js";
+import { logger } from "../utils/logger";
 
 interface DriftSubscriber {
   (event: DriftEvent): void;
@@ -223,8 +224,8 @@ export function startDriftDetector(
           await options.onEvents(events);
         }
       }
-    } catch {
-      // detector errors must not crash the server
+    } catch (err) {
+      logger.error(err, "[drift-detector] tick failed");
     } finally {
       running = false;
     }

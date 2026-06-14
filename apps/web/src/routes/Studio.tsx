@@ -24,6 +24,16 @@ interface ExecEvent {
   result?: Record<string, unknown>;
 }
 
+function parseSseData<T>(e: Event): T | null {
+  const me = e as MessageEvent;
+  if (!me.data) return null;
+  try {
+    return JSON.parse(me.data) as T;
+  } catch {
+    return null;
+  }
+}
+
 export default function Studio() {
   const { guildId } = useParams<{ guildId: string }>();
 
@@ -68,6 +78,7 @@ export default function Studio() {
   // ── SSE refs ─────────────────────────────────────────────────────────────
   const planningEsRef = useRef<EventSource | null>(null);
   const execEsRef = useRef<EventSource | null>(null);
+  const esRefFailures = useRef(0);
 
   // ── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
@@ -216,7 +227,8 @@ export default function Studio() {
     });
 
     es.addEventListener("tool_called", (e) => {
-      const data = JSON.parse((e as MessageEvent).data) as PlanningEvent;
+      const data = parseSseData<PlanningEvent>(e);
+      if (!data) return;
       setPlanningEvents((prev) => [
         ...prev,
         { type: "tool_called", toolName: data.toolName, params: data.params },
@@ -224,7 +236,8 @@ export default function Studio() {
     });
 
     es.addEventListener("tool_result", (e) => {
-      const data = JSON.parse((e as MessageEvent).data) as PlanningEvent;
+      const data = parseSseData<PlanningEvent>(e);
+      if (!data) return;
       setPlanningEvents((prev) => [
         ...prev,
         { type: "tool_result", toolName: data.toolName, result: data.result },
@@ -232,7 +245,8 @@ export default function Studio() {
     });
 
     es.addEventListener("ask_user", (e) => {
-      const data = JSON.parse((e as MessageEvent).data) as PlanningEvent;
+      const data = parseSseData<PlanningEvent>(e);
+      if (!data) return;
       setAskUserData({
         question: data.question ?? "",
         options: data.options,
@@ -245,7 +259,8 @@ export default function Studio() {
     });
 
     es.addEventListener("completed", async (e) => {
-      const data = JSON.parse((e as MessageEvent).data) as PlanningEvent;
+      const data = parseSseData<PlanningEvent>(e);
+      if (!data) return;
       setSummary(data.summary ?? "");
       planningEsRef.current?.close();
       planningEsRef.current = null;
@@ -282,16 +297,16 @@ export default function Studio() {
     });
 
     es.addEventListener("error", (e) => {
-      const data = JSON.parse((e as MessageEvent).data) as PlanningEvent;
-      showError(data.error ?? "Planning error");
+      const data = parseSseData<PlanningEvent>(e);
+      showError(data?.error ?? "Planning error");
       planningEsRef.current?.close();
       planningEsRef.current = null;
       setPhase("input");
     });
 
     es.addEventListener("expired", (e) => {
-      const data = JSON.parse((e as MessageEvent).data) as PlanningEvent;
-      showError(data.error ?? "Ask user response timed out");
+      const data = parseSseData<PlanningEvent>(e);
+      showError(data?.error ?? "Ask user response timed out");
       planningEsRef.current?.close();
       planningEsRef.current = null;
       setPhase("input");
@@ -410,7 +425,6 @@ export default function Studio() {
   // ── Phase 5: Execute plan ────────────────────────────────────────────────
   async function executePlan(pid: string) {
     setExecEvents([]);
-    connectExecSSE(pid);
 
     try {
       const res = await fetch(`/api/guilds/${guildId}/plans/${pid}/execute`, {
@@ -421,8 +435,6 @@ export default function Studio() {
       if (!res.ok) {
         const data = (await res.json()) as { error: string };
         showError(data.error || `Execution failed (${res.status})`);
-        execEsRef.current?.close();
-        execEsRef.current = null;
         setPhase("completed");
         return;
       }
@@ -430,14 +442,15 @@ export default function Studio() {
       const data = (await res.json()) as { success: boolean; error?: string };
       if (!data.success) {
         showError(data.error || "Execution failed");
+        setPhase("completed");
+        return;
       }
 
-      // SSE will update the UI in real-time; when done we show final state
-      setPhase("executed");
+      // Only open SSE after the plan has been accepted for execution
+      connectExecSSE(pid);
+      setPhase("executing");
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
-      execEsRef.current?.close();
-      execEsRef.current = null;
       setPhase("completed");
     }
   }
@@ -445,17 +458,20 @@ export default function Studio() {
   // ── Execution SSE ──────────────────────────────────────────────────────────
   function connectExecSSE(pid: string) {
     execEsRef.current?.close();
+    esRefFailures.current = 0;
 
     const es = new EventSource(`/api/plan/${pid}/stream`);
     execEsRef.current = es;
 
     es.addEventListener("step_started", (e) => {
-      const data = JSON.parse((e as MessageEvent).data) as ExecEvent;
+      const data = parseSseData<ExecEvent>(e);
+      if (!data) return;
       setExecEvents((prev) => [...prev, { type: "step_started", stepIndex: data.stepIndex }]);
     });
 
     es.addEventListener("step_completed", (e) => {
-      const data = JSON.parse((e as MessageEvent).data) as ExecEvent;
+      const data = parseSseData<ExecEvent>(e);
+      if (!data) return;
       setExecEvents((prev) => [
         ...prev,
         { type: "step_completed", stepIndex: data.stepIndex, result: data.result },
@@ -463,7 +479,8 @@ export default function Studio() {
     });
 
     es.addEventListener("step_failed", (e) => {
-      const data = JSON.parse((e as MessageEvent).data) as ExecEvent;
+      const data = parseSseData<ExecEvent>(e);
+      if (!data) return;
       setExecEvents((prev) => [
         ...prev,
         { type: "step_failed", stepIndex: data.stepIndex, error: data.error },
@@ -477,7 +494,8 @@ export default function Studio() {
     });
 
     es.addEventListener("step_retry", (e) => {
-      const data = JSON.parse((e as MessageEvent).data) as ExecEvent;
+      const data = parseSseData<ExecEvent>(e);
+      if (!data) return;
       setExecEvents((prev) => [
         ...prev,
         { type: "step_retry", stepIndex: data.stepIndex, error: data.error },
@@ -493,12 +511,23 @@ export default function Studio() {
     });
 
     es.addEventListener("plan_failed", (e) => {
-      const data = JSON.parse((e as MessageEvent).data) as ExecEvent;
-      showError(data.error || "Execution failed");
+      const data = parseSseData<ExecEvent>(e);
+      showError(data?.error || "Execution failed");
       execEsRef.current?.close();
       execEsRef.current = null;
       setPhase("completed");
     });
+
+    es.onerror = () => {
+      // Surface the connection error and stop reconnect attempts after a few failures
+      esRefFailures.current += 1;
+      if (esRefFailures.current >= 3) {
+        execEsRef.current?.close();
+        execEsRef.current = null;
+        setPhase("completed");
+        showError("Lost connection to execution stream");
+      }
+    };
   }
 
   // ── Phase 6: Rollback ──────────────────────────────────────────────────────
