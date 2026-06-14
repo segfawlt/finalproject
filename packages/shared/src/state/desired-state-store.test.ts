@@ -31,7 +31,37 @@ describe("DesiredStateStore.addChannel", () => {
     expect(channel.defaultThreadRateLimitPerUser).toBe(120);
     expect(channel.flags).toBe(16);
   });
+});
 
+describe("DesiredStateStore.validateReferences", () => {
+  it("passes when all references exist", () => {
+    const store = new DesiredStateStore();
+    const ch = store.addChannel({ name: "general", type: 0 });
+    const role = store.addRole({ name: "Admin" });
+    expect(() =>
+      store.validateReferences([
+        { id: ch, type: "channel" },
+        { id: role, type: "role" },
+      ])
+    ).not.toThrow();
+  });
+
+  it("throws when a channel reference is missing", () => {
+    const store = new DesiredStateStore();
+    expect(() =>
+      store.validateReferences([{ id: "missing", type: "channel" }])
+    ).toThrow(/Channel or category missing not found/);
+  });
+
+  it("throws when a role reference is missing", () => {
+    const store = new DesiredStateStore();
+    expect(() =>
+      store.validateReferences([{ id: "missing", type: "role" }])
+    ).toThrow(/Role missing not found/);
+  });
+});
+
+describe("DesiredStateStore.addChannel — media type", () => {
   it("stores media channel without forum fields", () => {
     const store = new DesiredStateStore();
     const symbol = store.addChannel({

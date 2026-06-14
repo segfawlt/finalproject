@@ -59,7 +59,7 @@ function evaluateOne(assumption: Assumption, state: ServerState): AssumptionResu
       }
       if (resourceType === "category") {
         const dup = state.channels.find(
-          (ch) => ch.type === 4 && ch.name === value && ch.id !== excludeId,
+          (ch) => ch.name === value && ch.id !== excludeId,
         );
         return dup
           ? { passed: false, message: `Category name "${value}" already in use` }

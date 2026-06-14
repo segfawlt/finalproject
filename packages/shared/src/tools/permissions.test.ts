@@ -81,3 +81,23 @@ describe("getOverwriteBatchAssumptions", () => {
     expect(warns[0].value).toBe("@everyone");
   });
 });
+
+describe("planOverwriteBatch — atomicity", () => {
+  it("rolls back no earlier mutations when a later reference is invalid", () => {
+    const store = new DesiredStateStore();
+    const chSym = store.addChannel({ name: "general", type: 0 });
+    const roleSym = store.addRole({ name: "Admin" });
+
+    const params = {
+      overwrites: [
+        { channel_id: chSym, role_id: roleSym, deny: ["SEND_MESSAGES"] },
+        { channel_id: "missing-channel", role_id: roleSym, deny: ["VIEW_CHANNEL"] },
+      ],
+    };
+
+    expect(() => planOverwriteBatch(params, store)).toThrow();
+
+    const state = store.getState();
+    expect(Object.keys(state.active.overwrites)).toHaveLength(0);
+  });
+});
