@@ -5,6 +5,10 @@ import { setupBotEvents } from "./bot";
 import { clearStaleLocks } from "./planning/locking";
 import { startSnapshotCleanupJob } from "./planning/snapshot-cleanup";
 import { startPeriodicLockCleanup } from "./planning/locking";
+import { startDriftDetector } from "./planning/drift-detector";
+import { driftEvents } from "@repo/db";
+import { db } from "@repo/db";
+import { guildCache } from "./bot/cache";
 import { logger } from "./utils/logger";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -30,6 +34,51 @@ serve(
 // Start background jobs
 startSnapshotCleanupJob();
 startPeriodicLockCleanup();
+
+const stopDriftDetector = startDriftDetector(botClient, (guildId) => {
+  const cache = guildCache.get(guildId);
+  if (!cache) return null;
+  return {
+    channels: Array.from(cache.channels.values()).map((c) => ({
+      id: c.id,
+      name: c.name,
+      type: c.type,
+      parentId: c.parentId,
+      position: c.position,
+    })),
+    roles: Array.from(cache.roles.values()).map((r) => ({
+      id: r.id,
+      name: r.name,
+      position: r.position,
+    })),
+  };
+}, {
+  intervalMs: 60_000,
+  onEvents: async (events) => {
+    try {
+      await db
+        .insert(driftEvents)
+        .values(
+          events.map((e) => ({
+            guildId: e.guildId,
+            severity: e.severity,
+            kind: e.kind,
+            summary: e.summary,
+            details: e.details,
+          }))
+        );
+    } catch (err) {
+      logger.error(err, "Failed to persist drift events");
+    }
+  },
+});
+
+process.on("SIGTERM", () => {
+  stopDriftDetector();
+});
+process.on("SIGINT", () => {
+  stopDriftDetector();
+});
 
 // Start Discord bot
 async function startBot() {

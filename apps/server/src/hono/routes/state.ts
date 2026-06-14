@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import { guildCache } from "../../bot/cache";
 import { botClient } from "../../bot/client";
 import { userHasManageGuild } from "../../auth/helpers";
 import { checkGuildOperable } from "../../planning/guild-check";
+import { subscribeToGuildDrift, type DriftEvent } from "../../planning/drift-detector";
 import type { AppVariables } from "../../types";
 import type { ServerState } from "@repo/shared";
 
@@ -72,6 +74,44 @@ stateApp.get("/roles", async (c) => {
   const roles = cache ? Array.from(cache.roles.values()) : [];
 
   return c.json(roles);
+});
+
+stateApp.get("/drift/stream", async (c) => {
+  const guildId = c.req.param("guildId")!;
+  const access = await checkGuildAccess(c, guildId);
+  if (!access.allowed) {
+    return c.json({ error: access.error }, access.status as 404 | 403);
+  }
+
+  return streamSSE(c, async (stream) => {
+    const unsubscribe = subscribeToGuildDrift(guildId, (event: DriftEvent) => {
+      stream.writeSSE({
+        event: "drift",
+        data: JSON.stringify(event),
+      }).catch(() => {
+        unsubscribe();
+      });
+    });
+
+    stream.onAbort(() => {
+      unsubscribe();
+    });
+
+    await stream.writeSSE({
+      event: "ready",
+      data: JSON.stringify({ guildId }),
+    });
+
+    while (!stream.aborted) {
+      await stream.sleep(15_000);
+      await stream.writeSSE({
+        event: "heartbeat",
+        data: JSON.stringify({ ts: Date.now() }),
+      });
+    }
+
+    unsubscribe();
+  });
 });
 
 export default stateApp;
