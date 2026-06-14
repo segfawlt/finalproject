@@ -6,6 +6,16 @@ const SYMBOL_PREFIXES = {
   role: "$role_",
 } as const;
 
+export class CategoryHasChildrenError extends Error {
+  constructor(
+    public readonly categoryId: string,
+    public readonly children: Array<{ id: string; name: string }>,
+  ) {
+    super(`Category ${categoryId} has ${children.length} children`);
+    this.name = "CategoryHasChildrenError";
+  }
+}
+
 /**
  * DesiredStateStore — the middleware layer between tool plan() functions
  * and the DesiredState structure. Owns all mutation, validation,
@@ -65,6 +75,11 @@ export class DesiredStateStore {
     for (const ow of serverState.overwrites) {
       const key = `${ow.channelId}:${ow.roleId}`;
       store.state.active.overwrites[key] = { ...ow };
+    }
+
+    for (const mr of serverState.memberRoles ?? []) {
+      store.state.active.memberRoles ??= {};
+      store.state.active.memberRoles[mr.memberId] = { ...mr };
     }
 
     return store;
@@ -169,6 +184,16 @@ export class DesiredStateStore {
     const existing = this.state.active.channels[id];
     if (!existing) {
       throw new Error(`Channel or category ${id} not found in desired state`);
+    }
+
+    // Category deletion: check for children
+    if (existing.type === 4) {
+      const children = Object.entries(this.state.active.channels)
+        .filter(([, ch]) => ch.parentId === id)
+        .map(([childId, ch]) => ({ id: childId, name: ch.name }));
+      if (children.length > 0) {
+        throw new CategoryHasChildrenError(id, children);
+      }
     }
 
     delete this.state.active.channels[id];

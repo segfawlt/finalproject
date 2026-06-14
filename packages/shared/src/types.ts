@@ -114,6 +114,9 @@ export interface PlanLlmResponse {
 export interface PlanResult {
   planned: boolean;
   symbol?: string;
+  blocked?: boolean;
+  reason?: string;
+  children?: Array<{ id: string; name: string }>;
 }
 
 export interface PlanResults {

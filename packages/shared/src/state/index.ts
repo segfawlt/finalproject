@@ -1,2 +1,2 @@
-export { DesiredStateStore } from "./desired-state-store";
+export { DesiredStateStore, CategoryHasChildrenError } from "./desired-state-store";
 export { fork } from "./fork";

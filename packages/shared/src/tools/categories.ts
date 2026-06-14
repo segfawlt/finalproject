@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ExecuteContext, CreateChannelResult } from "../execute-context";
 import type { Assumption, PlanResult } from "../types";
-import { DesiredStateStore } from "../state";
+import { DesiredStateStore, CategoryHasChildrenError } from "../state";
 
 export const createCategorySchema = z.object({
   name: z.string().min(1).max(100),
@@ -62,10 +62,22 @@ export async function executeCategoryEdit(
 
 export function planCategoryDelete(
   params: DeleteCategoryParams,
-  store: DesiredStateStore
+  store: DesiredStateStore,
 ): PlanResult {
-  store.removeCategory(params.id);
-  return { planned: true };
+  try {
+    store.removeCategory(params.id);
+    return { planned: true };
+  } catch (err) {
+    if (err instanceof CategoryHasChildrenError) {
+      return {
+        planned: false,
+        blocked: true,
+        reason: "category_has_children",
+        children: err.children,
+      };
+    }
+    throw err;
+  }
 }
 
 export async function executeCategoryDelete(
