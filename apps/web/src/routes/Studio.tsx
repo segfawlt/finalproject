@@ -301,7 +301,13 @@ export default function Studio() {
       showError(data?.error ?? "Planning error");
       planningEsRef.current?.close();
       planningEsRef.current = null;
-      setPhase("input");
+      // If the user was mid-answer to an ask_user, keep that state so they
+      // can retry instead of silently losing the question and selection.
+      if (!askUserData) {
+        setPhase("input");
+      } else {
+        setPhase("ask_user");
+      }
     });
 
     es.addEventListener("expired", (e) => {
@@ -309,6 +315,9 @@ export default function Studio() {
       showError(data?.error ?? "Ask user response timed out");
       planningEsRef.current?.close();
       planningEsRef.current = null;
+      setAskUserData(null);
+      setAskUserSelected([]);
+      setAskUserCustom("");
       setPhase("input");
     });
 

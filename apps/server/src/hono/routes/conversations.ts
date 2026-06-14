@@ -90,6 +90,12 @@ function buildServerState(guildId: string): ServerState {
     channels: cache ? Array.from(cache.channels.values()) : [],
     roles: cache ? Array.from(cache.roles.values()) : [],
     overwrites: cache ? Array.from(cache.permissions.values()) : [],
+    memberRoles: cache
+      ? Array.from(cache.members.values()).map((m) => ({
+          memberId: m.id,
+          roleIds: m.roleIds,
+        }))
+      : [],
   };
 }
 

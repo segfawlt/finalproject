@@ -85,9 +85,7 @@ function syncChannelPermissions(
 }
 
 export function setupBotEvents() {
-  botClient.once(Events.ClientReady, async (client) => {
-    logger.info(`Bot logged in as ${client.user?.tag}`);
-
+  const rebuildCache = async (client: typeof botClient) => {
     const adminMissing: string[] = [];
 
     for (const [, guild] of client.guilds.cache) {
@@ -126,7 +124,19 @@ export function setupBotEvents() {
           "All planning and execution operations are blocked for these guilds."
       );
     }
-  });
+  };
+
+  const onReady = (client: typeof botClient) => {
+    logger.info(`Bot logged in as ${client.user?.tag}`);
+    rebuildCache(client).catch((err) => {
+      logger.error(err, "[bot] cache rebuild failed");
+    });
+  };
+
+  // .once for the initial connection, .on for reconnects so a full session
+  // resume after disconnect doesn't leave the cache empty.
+  botClient.once(Events.ClientReady, onReady);
+  botClient.on(Events.ClientReady, onReady);
 
   botClient.on(Events.ChannelCreate, (channel) => {
     const cache = guildCache.get(channel.guildId);
