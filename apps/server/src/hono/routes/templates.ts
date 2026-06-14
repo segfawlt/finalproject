@@ -4,6 +4,7 @@ import { zValidator } from "@hono/zod-validator";
 import { db, templates, conversations, planIterations } from "@repo/db";
 import { eq, or } from "drizzle-orm";
 import { userHasManageGuild } from "../../auth/helpers";
+import { requireUser } from "../../auth/middleware";
 import type { AppVariables } from "../../types";
 import { hashServerState } from "@repo/shared";
 import { PlanningSession } from "../../planning/planning-session";
@@ -80,13 +81,9 @@ templatesApp.get("/:templateId", async (c) => {
 });
 
 templatesApp.post("/", zValidator("json", createSchema), async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const body = c.req.valid("json");
-
-  if (!user) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
 
   const hasAccess = await userHasManageGuild(user.id, guildId);
   if (!hasAccess) {
@@ -105,17 +102,18 @@ templatesApp.post("/", zValidator("json", createSchema), async (c) => {
 });
 
 templatesApp.put("/:templateId", zValidator("json", createSchema.partial()), async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
+  const guildId = c.req.param("guildId")!;
   const templateId = c.req.param("templateId")!;
   const body = c.req.valid("json");
-
-  if (!user) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
 
   const [existing] = await db.select().from(templates).where(eq(templates.id, templateId));
 
   if (!existing) {
+    return c.json({ error: "Template not found" }, 404);
+  }
+
+  if (existing.guildId !== guildId) {
     return c.json({ error: "Template not found" }, 404);
   }
 
@@ -139,16 +137,17 @@ templatesApp.put("/:templateId", zValidator("json", createSchema.partial()), asy
 });
 
 templatesApp.delete("/:templateId", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
+  const guildId = c.req.param("guildId")!;
   const templateId = c.req.param("templateId")!;
-
-  if (!user) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
 
   const [existing] = await db.select().from(templates).where(eq(templates.id, templateId));
 
   if (!existing) {
+    return c.json({ error: "Template not found" }, 404);
+  }
+
+  if (existing.guildId !== guildId) {
     return c.json({ error: "Template not found" }, 404);
   }
 
@@ -175,13 +174,9 @@ function buildServerState(guildId: string): ServerState {
 }
 
 templatesApp.post("/:templateId/merge", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const templateId = c.req.param("templateId")!;
-
-  if (!user) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
 
   const hasAccess = await userHasManageGuild(user.id, guildId);
   if (!hasAccess) {

@@ -4,6 +4,7 @@ import { zValidator } from "@hono/zod-validator";
 import { db, plans, snapshots, conversations, planIterations } from "@repo/db";
 import { eq, desc, ne, and } from "drizzle-orm";
 import { userHasManageGuild } from "../../auth/helpers";
+import { requireUser } from "../../auth/middleware";
 import { checkGuildOperable } from "../../planning/guild-check";
 import { acquireGuildLock, releaseGuildLock, heartbeatGuildLock } from "../../planning/locking";
 import { diffEngine } from "../../planning/diff-engine";
@@ -41,7 +42,7 @@ const listQuerySchema = z.object({
 });
 
 plansApp.get("/", zValidator("query", listQuerySchema), async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const query = c.req.valid("query");
 
@@ -50,11 +51,9 @@ plansApp.get("/", zValidator("query", listQuerySchema), async (c) => {
     return c.json({ error: operable.error }, operable.status);
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+  if (!hasAccess) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   const conditions = eq(plans.guildId, guildId);
@@ -71,7 +70,7 @@ plansApp.get("/", zValidator("query", listQuerySchema), async (c) => {
 });
 
 plansApp.get("/:planId", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const planId = c.req.param("planId")!;
 
@@ -80,11 +79,9 @@ plansApp.get("/:planId", async (c) => {
     return c.json({ error: operable.error }, operable.status);
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+  if (!hasAccess) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   const [plan] = await db.select().from(plans).where(eq(plans.id, planId));
@@ -106,7 +103,7 @@ const createPlanSchema = z.object({
 });
 
 plansApp.post("/", zValidator("json", createPlanSchema), async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const body = c.req.valid("json");
 
@@ -115,11 +112,9 @@ plansApp.post("/", zValidator("json", createPlanSchema), async (c) => {
     return c.json({ error: operable.error }, operable.status);
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+  if (!hasAccess) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   const planData: PlanData = {
@@ -131,7 +126,7 @@ plansApp.post("/", zValidator("json", createPlanSchema), async (c) => {
     .insert(plans)
     .values({
       guildId,
-      userId: user?.id ?? "system",
+      userId: user.id,
       conversationId: body.conversationId ?? null,
       status: "draft",
       userPrompt: body.userPrompt,
@@ -156,7 +151,7 @@ plansApp.post("/", zValidator("json", createPlanSchema), async (c) => {
 // ── Execute Plan ───────────────────────────────────────────────────────────
 
 plansApp.post("/:planId/execute", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const planId = c.req.param("planId")!;
 
@@ -165,11 +160,9 @@ plansApp.post("/:planId/execute", async (c) => {
     return c.json({ error: operable.error }, operable.status);
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+  if (!hasAccess) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   // 1. Load plan
@@ -397,15 +390,13 @@ plansApp.post("/:planId/execute", async (c) => {
 // ── Abort execution ─────────────────────────────────────────────────────────
 
 plansApp.post("/:planId/abort", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const planId = c.req.param("planId")!;
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+  if (!hasAccess) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   const ac = executionAbortControllers.get(planId);
@@ -420,7 +411,7 @@ plansApp.post("/:planId/abort", async (c) => {
 // ── Rollback ─────────────────────────────────────────────────────────────────
 
 plansApp.post("/:planId/rollback", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const planId = c.req.param("planId")!;
 
@@ -429,11 +420,9 @@ plansApp.post("/:planId/rollback", async (c) => {
     return c.json({ error: operable.error }, operable.status);
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+  if (!hasAccess) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   // 1. Load plan

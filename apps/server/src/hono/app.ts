@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
+import { HTTPException } from "hono/http-exception";
 import { eq } from "drizzle-orm";
-import { authMiddleware } from "../auth/middleware";
+import { authMiddleware, requireUser } from "../auth/middleware";
 import { auth } from "../auth/config";
 import { userHasManageGuild } from "../auth/helpers";
 import { db, plans, conversations } from "@repo/db";
@@ -17,6 +18,13 @@ import botApp from "./routes/bot";
 import { rateLimit } from "./middleware/rate-limit";
 
 const app = new Hono();
+
+app.onError((err, c) => {
+  if (err instanceof HTTPException) {
+    return c.json({ error: err.message }, err.status);
+  }
+  return c.json({ error: "Internal server error" }, 500);
+});
 
 app.use(
   "/api/*",
@@ -50,13 +58,21 @@ const api = new Hono<{ Variables: AppVariables }>();
 api.use("*", authMiddleware);
 
 api.get("/me", (c) => {
-  const user = c.get("user");
-  const session = c.get("session");
-  return c.json({ user, session });
+  const user = requireUser(c);
+  return c.json({
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      image: user.image,
+      role: user.role,
+      subscriptionTier: user.subscriptionTier,
+    },
+  });
 });
 
 api.get("/plan/:id/stream", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const planId = c.req.param("id");
 
   const [plan] = await db
@@ -69,11 +85,9 @@ api.get("/plan/:id/stream", async (c) => {
     return c.json({ error: "Plan not found" }, 404);
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, plan.guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+  const hasAccess = await userHasManageGuild(user.id, plan.guildId);
+  if (!hasAccess) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   return streamSSE(c, async (stream) => {
@@ -111,7 +125,7 @@ api.get("/plan/:id/stream", async (c) => {
 });
 
 api.get("/conversations/:id/stream", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const conversationId = c.req.param("id");
 
   const [conv] = await db
@@ -124,11 +138,9 @@ api.get("/conversations/:id/stream", async (c) => {
     return c.json({ error: "Conversation not found" }, 404);
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, conv.guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+  const hasAccess = await userHasManageGuild(user.id, conv.guildId);
+  if (!hasAccess) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   return streamSSE(c, async (stream) => {

@@ -17,6 +17,20 @@ function cleanupExpiredEntries() {
 }
 
 /**
+ * Resolve the request's source IP. Falls back to x-forwarded-for only when
+ * TRUST_PROXY is set, since that header is trivially spoofed by clients.
+ */
+function getClientIp(c: Context): string {
+  if (process.env.TRUST_PROXY === "1") {
+    const xff = c.req.header("x-forwarded-for");
+    if (xff) return xff.split(",")[0]?.trim() || "unknown";
+  }
+  return (
+    (c.env as { remoteAddr?: { hostname?: string } } | undefined)?.remoteAddr?.hostname ?? "unknown"
+  );
+}
+
+/**
  * Create a rate limiter middleware.
  * @param options.maxRequests - maximum requests allowed in the window
  * @param options.windowMs - time window in milliseconds
@@ -25,7 +39,7 @@ export function rateLimit(options: { maxRequests: number; windowMs: number }) {
   const { maxRequests, windowMs } = options;
 
   return async (c: Context, next: () => Promise<void>) => {
-    const ip = c.req.header("x-forwarded-for") ?? "unknown";
+    const ip = getClientIp(c);
     const now = Date.now();
 
     const entry = requestCounts.get(ip);

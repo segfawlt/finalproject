@@ -3,6 +3,7 @@ import { streamSSE } from "hono/streaming";
 import { guildCache } from "../../bot/cache";
 import { botClient } from "../../bot/client";
 import { userHasManageGuild } from "../../auth/helpers";
+import { requireUser } from "../../auth/middleware";
 import { checkGuildOperable } from "../../planning/guild-check";
 import { subscribeToGuildDrift, type DriftEvent } from "../../planning/drift-detector";
 import type { AppVariables } from "../../types";
@@ -12,27 +13,29 @@ const stateApp = new Hono<{ Variables: AppVariables }>();
 
 async function checkGuildAccess(c: { get: (key: string) => unknown }, guildId: string) {
   const user = c.get("user") as { id: string } | undefined;
+  if (!user) {
+    return { allowed: false, status: 401, error: "Unauthorized" };
+  }
 
   const operable = checkGuildOperable(guildId);
   if (!operable.ok) {
     return { allowed: false, status: operable.status, error: operable.error };
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return { allowed: false, status: 403, error: "Forbidden" };
-    }
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+  if (!hasAccess) {
+    return { allowed: false, status: 403, error: "Forbidden" };
   }
 
   return { allowed: true };
 }
 
 stateApp.get("/state", async (c) => {
+  requireUser(c);
   const guildId = c.req.param("guildId")!;
   const access = await checkGuildAccess(c, guildId);
   if (!access.allowed) {
-    return c.json({ error: access.error }, access.status as 404 | 403);
+    return c.json({ error: access.error }, access.status as 401 | 404 | 403);
   }
 
   const cache = guildCache.get(guildId);
@@ -51,10 +54,11 @@ stateApp.get("/state", async (c) => {
 });
 
 stateApp.get("/channels", async (c) => {
+  requireUser(c);
   const guildId = c.req.param("guildId")!;
   const access = await checkGuildAccess(c, guildId);
   if (!access.allowed) {
-    return c.json({ error: access.error }, access.status as 404 | 403);
+    return c.json({ error: access.error }, access.status as 401 | 404 | 403);
   }
 
   const cache = guildCache.get(guildId);
@@ -64,10 +68,11 @@ stateApp.get("/channels", async (c) => {
 });
 
 stateApp.get("/roles", async (c) => {
+  requireUser(c);
   const guildId = c.req.param("guildId")!;
   const access = await checkGuildAccess(c, guildId);
   if (!access.allowed) {
-    return c.json({ error: access.error }, access.status as 404 | 403);
+    return c.json({ error: access.error }, access.status as 401 | 404 | 403);
   }
 
   const cache = guildCache.get(guildId);
@@ -77,10 +82,11 @@ stateApp.get("/roles", async (c) => {
 });
 
 stateApp.get("/drift/stream", async (c) => {
+  requireUser(c);
   const guildId = c.req.param("guildId")!;
   const access = await checkGuildAccess(c, guildId);
   if (!access.allowed) {
-    return c.json({ error: access.error }, access.status as 404 | 403);
+    return c.json({ error: access.error }, access.status as 401 | 404 | 403);
   }
 
   return streamSSE(c, async (stream) => {

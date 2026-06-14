@@ -335,10 +335,15 @@ export class PlanningSession {
 
     const model = process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini";
     const apiKey = process.env.OPENROUTER_API_KEY;
+    const isDevEnv = process.env.NODE_ENV !== "production";
 
     if (!apiKey) {
-      // No API key configured — return mock for development
-      return this.mockLLMResponse();
+      if (isDevEnv) {
+        return this.mockLLMResponse();
+      }
+      throw new Error(
+        "OPENROUTER_API_KEY is not configured. Planning requires an LLM provider in production."
+      );
     }
 
     const fetchResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {

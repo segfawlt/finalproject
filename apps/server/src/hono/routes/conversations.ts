@@ -5,6 +5,7 @@ import { db, conversations, planIterations, plans } from "@repo/db";
 import { eq, desc, and } from "drizzle-orm";
 import { hashServerState } from "@repo/shared";
 import { userHasManageGuild } from "../../auth/helpers";
+import { requireUser } from "../../auth/middleware";
 import { checkGuildOperable } from "../../planning/guild-check";
 import { isGuildLocked } from "../../planning/locking";
 import { PlanningSession } from "../../planning/planning-session";
@@ -33,17 +34,18 @@ async function checkGuildAccess(
   guildId: string
 ): Promise<{ allowed: true } | { allowed: false; status: number; error: string }> {
   const user = c.get("user") as { id: string } | undefined;
+  if (!user) {
+    return { allowed: false, status: 401, error: "Unauthorized" };
+  }
 
   const operable = checkGuildOperable(guildId);
   if (!operable.ok) {
     return { allowed: false, status: operable.status, error: operable.error };
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return { allowed: false, status: 403, error: "Forbidden" };
-    }
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+  if (!hasAccess) {
+    return { allowed: false, status: 403, error: "Forbidden" };
   }
 
   return { allowed: true };
@@ -94,7 +96,7 @@ function buildServerState(guildId: string): ServerState {
 // ── List + Fetch (existing) ─────────────────────────────────────────────────
 
 conversationsApp.get("/", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
 
   const operable = checkGuildOperable(guildId);
@@ -102,11 +104,9 @@ conversationsApp.get("/", async (c) => {
     return c.json({ error: operable.error }, operable.status);
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+  if (!hasAccess) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   const result = await db
@@ -128,7 +128,7 @@ conversationsApp.get("/", async (c) => {
 });
 
 conversationsApp.get("/:convId", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const convId = c.req.param("convId")!;
 
@@ -137,11 +137,9 @@ conversationsApp.get("/:convId", async (c) => {
     return c.json({ error: operable.error }, operable.status);
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+  if (!hasAccess) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   const [conv] = await db.select().from(conversations).where(eq(conversations.id, convId));
@@ -166,13 +164,13 @@ const createConversationSchema = z.object({
 });
 
 conversationsApp.post("/", zValidator("json", createConversationSchema), async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const body = c.req.valid("json");
 
   const access = await checkGuildAccess(c, guildId);
   if (!access.allowed) {
-    return c.json({ error: access.error }, access.status as 404 | 403);
+    return c.json({ error: access.error }, access.status as 401 | 404 | 403);
   }
 
   // Build server state and compute fork hash
@@ -184,7 +182,7 @@ conversationsApp.post("/", zValidator("json", createConversationSchema), async (
     .insert(conversations)
     .values({
       guildId,
-      userId: user?.id ?? "system",
+      userId: user.id,
       status: "planning",
       userPrompt: body.userPrompt,
       messages: [],
@@ -358,13 +356,13 @@ conversationsApp.post("/:convId/cancel", async (c) => {
 // ── Approve — create plan from final desired state ──────────────────────────
 
 conversationsApp.post("/:convId/approve", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const convId = c.req.param("convId")!;
 
   const access = await checkGuildAccess(c, guildId);
   if (!access.allowed) {
-    return c.json({ error: access.error }, access.status as 404 | 403);
+    return c.json({ error: access.error }, access.status as 401 | 404 | 403);
   }
 
   const staleCheck = await checkConversationNotStale(convId);

@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { guildCache } from "../../bot/cache";
 import { botClient } from "../../bot/client";
 import { userHasManageGuild } from "../../auth/helpers";
+import { requireUser } from "../../auth/middleware";
 import { checkGuildOperable } from "../../planning/guild-check";
 import type { AppVariables } from "../../types";
 
@@ -25,7 +26,7 @@ const updateGuildSchema = z.object({
 });
 
 guildsApp.get("/", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const result: Array<{
     id: string;
     name: string;
@@ -33,7 +34,7 @@ guildsApp.get("/", async (c) => {
     memberCount: number;
   }> = [];
 
-  if (!user || !botClient.isReady()) {
+  if (!botClient.isReady()) {
     return c.json(result);
   }
 
@@ -57,7 +58,7 @@ guildsApp.get("/", async (c) => {
 });
 
 guildsApp.get("/:guildId", async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
 
   const operable = checkGuildOperable(guildId);
@@ -65,11 +66,9 @@ guildsApp.get("/:guildId", async (c) => {
     return c.json({ error: operable.error }, operable.status);
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+  if (!hasAccess) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   const [row] = await db.select().from(guilds).where(eq(guilds.id, guildId));
@@ -92,7 +91,7 @@ guildsApp.get("/:guildId", async (c) => {
 });
 
 guildsApp.patch("/:guildId", zValidator("json", updateGuildSchema), async (c) => {
-  const user = c.get("user") as { id: string } | undefined;
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const body = c.req.valid("json");
 
@@ -101,11 +100,9 @@ guildsApp.patch("/:guildId", zValidator("json", updateGuildSchema), async (c) =>
     return c.json({ error: operable.error }, operable.status);
   }
 
-  if (user) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+  if (!hasAccess) {
+    return c.json({ error: "Forbidden" }, 403);
   }
 
   const guild = botClient.guilds.cache.get(guildId);
