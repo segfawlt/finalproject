@@ -23,6 +23,10 @@ export function setSession(conversationId: string, session: PlanningSession): vo
 }
 
 export function removeSession(conversationId: string): void {
+  const entry = sessions.get(conversationId);
+  if (entry?.timeout) {
+    clearTimeout(entry.timeout);
+  }
   sessions.delete(conversationId);
 }
 

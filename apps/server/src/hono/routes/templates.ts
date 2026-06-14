@@ -255,6 +255,10 @@ templatesApp.post("/:templateId/merge", async (c) => {
           }
         }, ASK_USER_TIMEOUT_MS);
         setSessionTimeout(conversation.id, timeout);
+        await db
+          .update(conversations)
+          .set({ status: "waiting_for_user", updatedAt: new Date() })
+          .where(eq(conversations.id, conversation.id));
       }
 
       if (event.type === "completed") {
