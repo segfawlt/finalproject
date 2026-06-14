@@ -145,6 +145,11 @@ export default function Studio() {
       const conv = (await res.json()) as { id: string };
       setConversationId(conv.id);
       setPhase("planning");
+      // Open SSE immediately. The planning session starts on the server as
+      // soon as the conversation is created, so events emitted before this
+      // EventSource is attached are lost. LLM turns take seconds, so the
+      // race window is narrow. A future improvement could add a
+      // /conversations/:id/state endpoint to replay current status on connect.
       connectPlanningSSE(conv.id);
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
@@ -181,6 +186,11 @@ export default function Studio() {
       const conv = (await res.json()) as { id: string };
       setConversationId(conv.id);
       setPhase("planning");
+      // Open SSE immediately. The planning session starts on the server as
+      // soon as the conversation is created, so events emitted before this
+      // EventSource is attached are lost. LLM turns take seconds, so the
+      // race window is narrow. A future improvement could add a
+      // /conversations/:id/state endpoint to replay current status on connect.
       connectPlanningSSE(conv.id);
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));

@@ -1,9 +1,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
+import { eq } from "drizzle-orm";
 import { authMiddleware } from "../auth/middleware";
 import { auth } from "../auth/config";
-import { db } from "@repo/db";
+import { userHasManageGuild } from "../auth/helpers";
+import { db, plans, conversations } from "@repo/db";
 import type { AppVariables } from "../types";
 import guildsApp from "./routes/guilds";
 import rulesApp from "./routes/rules";
@@ -54,7 +56,25 @@ api.get("/me", (c) => {
 });
 
 api.get("/plan/:id/stream", async (c) => {
+  const user = c.get("user") as { id: string } | undefined;
   const planId = c.req.param("id");
+
+  const [plan] = await db
+    .select({ guildId: plans.guildId })
+    .from(plans)
+    .where(eq(plans.id, planId))
+    .limit(1);
+
+  if (!plan) {
+    return c.json({ error: "Plan not found" }, 404);
+  }
+
+  if (user) {
+    const hasAccess = await userHasManageGuild(user.id, plan.guildId);
+    if (!hasAccess) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+  }
 
   return streamSSE(c, async (stream) => {
     const { subscribeToPlan } = await import("../planning/event-bus");
@@ -91,7 +111,25 @@ api.get("/plan/:id/stream", async (c) => {
 });
 
 api.get("/conversations/:id/stream", async (c) => {
+  const user = c.get("user") as { id: string } | undefined;
   const conversationId = c.req.param("id");
+
+  const [conv] = await db
+    .select({ guildId: conversations.guildId })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1);
+
+  if (!conv) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+
+  if (user) {
+    const hasAccess = await userHasManageGuild(user.id, conv.guildId);
+    if (!hasAccess) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+  }
 
   return streamSSE(c, async (stream) => {
     const { subscribeToConversation } = await import("../planning/planning-event-bus");
