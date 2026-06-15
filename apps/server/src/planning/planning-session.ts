@@ -130,6 +130,11 @@ export class PlanningSession {
       throw new Error("Cannot resume: not paused on ask_user");
     }
 
+    // Fresh AbortController: the previous one was aborted when cancel()
+    // was called, so reusing it would make the next fetch fail with
+    // AbortError before it can reach the LLM.
+    this.abortController = new AbortController();
+
     // Add the user's answer as a tool result
     this.messages.push({
       role: "tool",
@@ -330,8 +335,20 @@ export class PlanningSession {
 
   // ── LLM Integration ────────────────────────────────────────────────────────
 
+  /**
+   * Trim the conversation history to keep request size bounded. Keeps the
+   * system prompt (index 0) plus the most recent MESSAGES_WINDOW messages.
+   */
+  private trimMessages(): void {
+    const MESSAGES_WINDOW = 50;
+    if (this.messages.length <= MESSAGES_WINDOW) return;
+    const dropped = this.messages.length - MESSAGES_WINDOW;
+    this.messages = [this.messages[0]!, ...this.messages.slice(1 + dropped)];
+  }
+
   private async callLLM(): Promise<LLMMessage> {
     const functions = getOpenAIFunctionDefinitions();
+    this.trimMessages();
 
     const model = process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini";
     const apiKey = process.env.OPENROUTER_API_KEY;
