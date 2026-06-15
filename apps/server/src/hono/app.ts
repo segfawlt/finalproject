@@ -129,6 +129,7 @@ api.get("/plan/:id/stream", async (c) => {
         }),
       });
     });
+    stream.onAbort(() => unsubscribe());
 
     // Keep alive with heartbeat every 30s
     while (!stream.aborted) {
@@ -188,6 +189,7 @@ api.get("/conversations/:id/stream", async (c) => {
         }),
       });
     });
+    stream.onAbort(() => unsubscribe());
 
     while (!stream.aborted) {
       await stream.sleep(30000);

@@ -406,14 +406,25 @@ plansApp.post("/:planId/execute", async (c) => {
     // Roll back if we got far enough to capture a before-snapshot but failed
     // somewhere after execution started (or in the post-execute bookkeeping).
     if (beforeSnapshot) {
-      try {
-        const ctx = new DiscordExecuteContext(guild);
-        await emitPlanEvent(planId, { type: "rollback_started", planId });
-        await rollbackFull(beforeSnapshot, planId, ctx, async (event) => {
-          emitPlanEvent(planId, event);
-        });
-      } catch (rollbackErr) {
-        logger.error(rollbackErr, "[plans] rollback after failure also failed");
+      // If the bot disconnected mid-execution, the cache won't have the
+      // guild; rollback would throw on buildCurrentStateFromDiscord. Skip
+      // it and report 503 so the user knows the Discord state may be
+      // partially mutated and needs manual review.
+      if (!botClient.guilds.cache.get(guildId)) {
+        logger.error(
+          { planId, guildId },
+          "[plans] bot disconnected during execution; skipping rollback"
+        );
+      } else {
+        try {
+          const ctx = new DiscordExecuteContext(guild);
+          await emitPlanEvent(planId, { type: "rollback_started", planId });
+          await rollbackFull(beforeSnapshot, planId, ctx, async (event) => {
+            emitPlanEvent(planId, event);
+          });
+        } catch (rollbackErr) {
+          logger.error(rollbackErr, "[plans] rollback after failure also failed");
+        }
       }
     }
 

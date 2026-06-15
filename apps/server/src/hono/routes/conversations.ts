@@ -181,7 +181,16 @@ conversationsApp.post("/", zValidator("json", createConversationSchema), async (
 
   // Build server state and compute fork hash
   const serverState = buildServerState(guildId);
-  const forkStateHash = hashServerState(serverState as unknown as Record<string, unknown>);
+  let forkStateHash: string;
+  try {
+    forkStateHash = hashServerState(serverState as unknown as Record<string, unknown>);
+  } catch (err) {
+    logger.error(err, "[conversations] hashServerState failed; cache likely empty");
+    return c.json(
+      { error: "Bot is still building its cache. Please retry in a few seconds." },
+      503
+    );
+  }
 
   // Insert conversation row
   const [conversation] = await db
@@ -510,6 +519,18 @@ conversationsApp.post("/:convId/revert/:version", async (c) => {
   const session = getSession(convId);
   if (!session) {
     return c.json({ error: "Conversation is not active. Start a new planning session." }, 409);
+  }
+
+  // Reject if the session is mid-turn — the LLM dispatch is mutating the
+  // same store concurrently and a revert would clobber its in-progress work.
+  if (session.status !== "completed" && session.status !== "waiting_for_user") {
+    return c.json(
+      {
+        error:
+          "Cannot revert while a planning turn is in progress. Wait for the current turn to finish or cancel the session.",
+      },
+      409
+    );
   }
 
   // Revert store to the iteration's desiredState
