@@ -11,7 +11,7 @@ import { db } from "@repo/db";
 import { guildCache } from "./bot/cache";
 import { logger } from "./utils/logger";
 import { runMigrations } from "./migrate";
-import { validatedEnv, getValidatedEnv } from "./env-validated";
+import { getValidatedEnv } from "./env-validated";
 
 const env = getValidatedEnv();
 

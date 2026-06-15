@@ -7,6 +7,7 @@ import { authMiddleware, requireUser } from "../auth/middleware";
 import { auth } from "../auth/config";
 import { userHasManageGuild } from "../auth/helpers";
 import { botClient } from "../bot/client";
+import { botReady } from "../bot";
 import { db, plans, conversations } from "@repo/db";
 import type { AppVariables } from "../types";
 import guildsApp from "./routes/guilds";
@@ -57,6 +58,16 @@ app.get("/api/health", async (c) => {
 });
 
 const api = new Hono<{ Variables: AppVariables }>();
+
+// Block every API request until the bot has logged in and the guild
+// cache has been populated. Without this, the first request after every
+// restart can read an empty cache and silently corrupt the planning
+// contract (fork hash from [], beforeSnapshot empty, etc).
+api.use("*", async (_c, next) => {
+  await botReady;
+  await next();
+});
+
 api.use("*", authMiddleware);
 
 api.get("/me", (c) => {

@@ -7,6 +7,23 @@ import { db, guilds } from "@repo/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../utils/logger";
 
+/**
+ * Resolves after the first ClientReady event finishes rebuilding the
+ * guild cache. Awaited at boot so the Hono server never accepts a
+ * request that would read from a partially-built cache.
+ */
+let botReadyResolve: (() => void) | null = null;
+export const botReady = new Promise<void>((resolve) => {
+  botReadyResolve = resolve;
+});
+
+export function resolveBotReady() {
+  if (botReadyResolve) {
+    botReadyResolve();
+    botReadyResolve = null;
+  }
+}
+
 function buildRoleCacheEntry(
   role: {
     id: string;
@@ -128,15 +145,26 @@ export function setupBotEvents() {
 
   const onReady = (client: typeof botClient) => {
     logger.info(`Bot logged in as ${client.user?.tag}`);
-    rebuildCache(client).catch((err) => {
-      logger.error(err, "[bot] cache rebuild failed");
-    });
+    rebuildCache(client)
+      .then(() => {
+        resolveBotReady();
+      })
+      .catch((err) => {
+        logger.error(err, "[bot] cache rebuild failed");
+      });
   };
 
-  // .once for the initial connection, .on for reconnects so a full session
-  // resume after disconnect doesn't leave the cache empty.
-  botClient.once(Events.ClientReady, onReady);
+  // Register .on (not .once) so a full session resume after disconnect
+  // also repopulates the cache. The first event still fires once; no need
+  // for a separate .once handler.
   botClient.on(Events.ClientReady, onReady);
+
+  // Discord.js emits Events.Error for shard/network issues. Without a
+  // listener, an unhandled error event on the EventEmitter crashes the
+  // process. Route to the logger instead.
+  botClient.on(Events.Error, (err) => {
+    logger.error(err, "[bot] discord client error");
+  });
 
   botClient.on(Events.ChannelCreate, (channel) => {
     const cache = guildCache.get(channel.guildId);
