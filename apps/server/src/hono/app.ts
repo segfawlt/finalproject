@@ -5,7 +5,7 @@ import { HTTPException } from "hono/http-exception";
 import { eq } from "drizzle-orm";
 import { authMiddleware, requireUser } from "../auth/middleware";
 import { auth } from "../auth/config";
-import { userHasManageGuild } from "../auth/helpers";
+import { userHasManageGuild, DiscordApiError } from "../auth/helpers";
 import { botClient } from "../bot/client";
 import { botReady } from "../bot";
 import { db, plans, conversations } from "@repo/db";
@@ -24,6 +24,12 @@ const app = new Hono();
 app.onError((err, c) => {
   if (err instanceof HTTPException) {
     return c.json({ error: err.message }, err.status);
+  }
+  if (err instanceof DiscordApiError) {
+    return c.json(
+      { error: "Discord API is temporarily unavailable. Please retry." },
+      503
+    );
   }
   return c.json({ error: "Internal server error" }, 500);
 });
