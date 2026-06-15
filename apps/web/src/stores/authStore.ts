@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { apiFetch } from "../lib/api";
 
 interface User {
   id: string;
@@ -24,15 +25,23 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
   setUser: (user) => set({ user, isAuthenticated: !!user }),
   login: () => {
-    window.location.href = "/api/auth/sign-in/social?provider=discord";
+    const base = (import.meta.env.VITE_API_URL ?? "").trim().replace(/\/+$/, "");
+    window.location.href = `${base}/api/auth/sign-in/social?provider=discord`;
   },
   logout: async () => {
-    await fetch("/api/auth/sign-out", { method: "POST", credentials: "include" });
+    try {
+      await apiFetch("/api/auth/sign-out", { method: "POST", skipAuthRedirect: true });
+    } catch {
+      // ignore
+    }
     set({ user: null, isAuthenticated: false });
   },
   checkSession: async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
     try {
-      const res = await fetch("/api/me");
+      const res = await apiFetch("/api/me", { signal: controller.signal, skipAuthRedirect: true });
+      clearTimeout(timeout);
       if (res.ok) {
         const data = await res.json();
         if (data.user) {
@@ -41,7 +50,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         }
       }
     } catch {
-      // No session
+      clearTimeout(timeout);
+      // No session or timeout
     }
     set({ user: null, isAuthenticated: false, isLoading: false });
   },

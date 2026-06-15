@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useState, useEffect, useRef, useCallback } from "react";
 import ProcedureSidebar, { type PhaseProgress } from "../components/ProcedureSidebar";
+import { apiFetch } from "../lib/api";
 
 type Phase = "input" | "planning" | "ask_user" | "completed" | "executing" | "executed";
 
@@ -91,7 +92,7 @@ export default function Studio() {
   // ── Fetch guild phase progress ────────────────────────────────────────────
   useEffect(() => {
     if (!guildId) return;
-    fetch(`/api/guilds/${guildId}`, { credentials: "include" })
+    apiFetch(`/api/guilds/${guildId}`)
       .then((res) => res.json())
       .then((data: { phaseProgress?: PhaseProgress }) => {
         if (data.phaseProgress) {
@@ -105,11 +106,9 @@ export default function Studio() {
     async (progress: PhaseProgress) => {
       if (!guildId) return;
       try {
-        await fetch(`/api/guilds/${guildId}`, {
+        await apiFetch(`/api/guilds/${guildId}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ phaseProgress: progress }),
+          body: { phaseProgress: progress },
         });
       } catch {
         // silent
@@ -142,11 +141,9 @@ export default function Studio() {
     setPrompt(phasePrompt);
 
     try {
-      const res = await fetch(`/api/guilds/${guildId}/conversations`, {
+      const res = await apiFetch(`/api/guilds/${guildId}/conversations`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ userPrompt: phasePrompt }),
+        body: { userPrompt: phasePrompt },
       });
 
       if (!res.ok) {
@@ -184,11 +181,9 @@ export default function Studio() {
     setDesiredState(null);
 
     try {
-      const res = await fetch(`/api/guilds/${guildId}/conversations`, {
+      const res = await apiFetch(`/api/guilds/${guildId}/conversations`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ userPrompt: prompt }),
+        body: { userPrompt: prompt },
       });
 
       if (!res.ok) {
@@ -267,9 +262,7 @@ export default function Studio() {
 
       // Fetch latest iteration to get desiredState
       try {
-        const res = await fetch(`/api/guilds/${guildId}/conversations/${convId}`, {
-          credentials: "include",
-        });
+        const res = await apiFetch(`/api/guilds/${guildId}/conversations/${convId}`);
         if (res.ok) {
           const convData = (await res.json()) as {
             iterations: Array<{ desiredState: unknown }>;
@@ -344,12 +337,13 @@ export default function Studio() {
     clearError();
 
     try {
-      const res = await fetch(`/api/guilds/${guildId}/conversations/${conversationId}/ask-user`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ answer }),
-      });
+      const res = await apiFetch(
+        `/api/guilds/${guildId}/conversations/${conversationId}/ask-user`,
+        {
+          method: "POST",
+          body: { answer },
+        }
+      );
 
       if (!res.ok) {
         const data = (await res.json()) as { error: string };
@@ -394,9 +388,8 @@ export default function Studio() {
     clearError();
 
     try {
-      await fetch(`/api/guilds/${guildId}/conversations/${conversationId}/cancel`, {
+      await apiFetch(`/api/guilds/${guildId}/conversations/${conversationId}/cancel`, {
         method: "POST",
-        credentials: "include",
       });
     } catch {
       // ignore
@@ -411,10 +404,12 @@ export default function Studio() {
     clearError();
 
     try {
-      const res = await fetch(`/api/guilds/${guildId}/conversations/${conversationId}/approve`, {
-        method: "POST",
-        credentials: "include",
-      });
+      const res = await apiFetch(
+        `/api/guilds/${guildId}/conversations/${conversationId}/approve`,
+        {
+          method: "POST",
+        }
+      );
 
       if (!res.ok) {
         const data = (await res.json()) as { error: string };
@@ -436,9 +431,8 @@ export default function Studio() {
     setExecEvents([]);
 
     try {
-      const res = await fetch(`/api/guilds/${guildId}/plans/${pid}/execute`, {
+      const res = await apiFetch(`/api/guilds/${guildId}/plans/${pid}/execute`, {
         method: "POST",
-        credentials: "include",
       });
 
       if (!res.ok) {
@@ -545,9 +539,8 @@ export default function Studio() {
     clearError();
 
     try {
-      const res = await fetch(`/api/guilds/${guildId}/plans/${planId}/rollback`, {
+      const res = await apiFetch(`/api/guilds/${guildId}/plans/${planId}/rollback`, {
         method: "POST",
-        credentials: "include",
       });
 
       if (!res.ok) {
@@ -577,12 +570,13 @@ export default function Studio() {
     setDesiredState(null);
 
     try {
-      const res = await fetch(`/api/guilds/${guildId}/conversations/${conversationId}/revise`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ prompt: prompt.trim() }),
-      });
+      const res = await apiFetch(
+        `/api/guilds/${guildId}/conversations/${conversationId}/revise`,
+        {
+          method: "POST",
+          body: { prompt: prompt.trim() },
+        }
+      );
 
       if (!res.ok) {
         const data = (await res.json()) as { error: string };
@@ -610,7 +604,7 @@ export default function Studio() {
   useEffect(() => {
     if (guildId) return;
     setGuildsLoading(true);
-    fetch("/api/guilds", { credentials: "include" })
+    apiFetch("/api/guilds")
       .then((res) => (res.ok ? res.json() : []))
       .then((data: Array<{ id: string; name: string; icon: string | null; memberCount: number }>) => {
         setAvailableGuilds(data);
@@ -622,11 +616,10 @@ export default function Studio() {
   async function removeTemplateFromContext(templateId: string) {
     if (!conversationId) return;
     try {
-      await fetch(
+      await apiFetch(
         `/api/guilds/${guildId}/conversations/${conversationId}/templates/${templateId}`,
         {
           method: "DELETE",
-          credentials: "include",
         }
       );
       setActiveTemplates((prev) => prev.filter((t) => t.id !== templateId));
