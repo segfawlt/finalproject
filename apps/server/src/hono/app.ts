@@ -26,10 +26,7 @@ app.onError((err, c) => {
     return c.json({ error: err.message }, err.status);
   }
   if (err instanceof DiscordApiError) {
-    return c.json(
-      { error: "Discord API is temporarily unavailable. Please retry." },
-      503
-    );
+    return c.json({ error: "Discord API is temporarily unavailable. Please retry." }, 503);
   }
   return c.json({ error: "Internal server error" }, 500);
 });

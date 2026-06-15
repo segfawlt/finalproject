@@ -159,40 +159,40 @@ export default function Studio() {
   async function handleSidebarSendPrompt(phasePrompt: string, phase: string) {
     if (enterInFlight()) return;
     try {
-    clearError();
-    setPlanningEvents([]);
-    setAskUserData(null);
-    setAskUserSelected([]);
-    setAskUserCustom("");
-    setSummary("");
-    setDesiredState(null);
-    pendingPhaseRef.current = phase;
-    setPrompt(phasePrompt);
+      clearError();
+      setPlanningEvents([]);
+      setAskUserData(null);
+      setAskUserSelected([]);
+      setAskUserCustom("");
+      setSummary("");
+      setDesiredState(null);
+      pendingPhaseRef.current = phase;
+      setPrompt(phasePrompt);
 
-    try {
-      const res = await apiFetch(`/api/guilds/${guildId}/conversations`, {
-        method: "POST",
-        body: { userPrompt: phasePrompt },
-      });
+      try {
+        const res = await apiFetch(`/api/guilds/${guildId}/conversations`, {
+          method: "POST",
+          body: { userPrompt: phasePrompt },
+        });
 
-      if (!res.ok) {
-        const data = (await res.json()) as { error: string };
-        showError(data.error || `Failed to create conversation (${res.status})`);
-        return;
+        if (!res.ok) {
+          const data = (await res.json()) as { error: string };
+          showError(data.error || `Failed to create conversation (${res.status})`);
+          return;
+        }
+
+        const conv = (await res.json()) as { id: string };
+        setConversationId(conv.id);
+        setPhase("planning");
+        // Open SSE immediately. The planning session starts on the server as
+        // soon as the conversation is created, so events emitted before this
+        // EventSource is attached are lost. LLM turns take seconds, so the
+        // race window is narrow. A future improvement could add a
+        // /conversations/:id/state endpoint to replay current status on connect.
+        connectPlanningSSE(conv.id);
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
       }
-
-      const conv = (await res.json()) as { id: string };
-      setConversationId(conv.id);
-      setPhase("planning");
-      // Open SSE immediately. The planning session starts on the server as
-      // soon as the conversation is created, so events emitted before this
-      // EventSource is attached are lost. LLM turns take seconds, so the
-      // race window is narrow. A future improvement could add a
-      // /conversations/:id/state endpoint to replay current status on connect.
-      connectPlanningSSE(conv.id);
-    } catch (err) {
-      showError(err instanceof Error ? err.message : String(err));
-    }
     } finally {
       exitInFlight();
     }
@@ -206,38 +206,38 @@ export default function Studio() {
     }
     if (enterInFlight()) return;
     try {
-    clearError();
-    setPlanningEvents([]);
-    setAskUserData(null);
-    setAskUserSelected([]);
-    setAskUserCustom("");
-    setSummary("");
-    setDesiredState(null);
+      clearError();
+      setPlanningEvents([]);
+      setAskUserData(null);
+      setAskUserSelected([]);
+      setAskUserCustom("");
+      setSummary("");
+      setDesiredState(null);
 
-    try {
-      const res = await apiFetch(`/api/guilds/${guildId}/conversations`, {
-        method: "POST",
-        body: { userPrompt: prompt },
-      });
+      try {
+        const res = await apiFetch(`/api/guilds/${guildId}/conversations`, {
+          method: "POST",
+          body: { userPrompt: prompt },
+        });
 
-      if (!res.ok) {
-        const data = (await res.json()) as { error: string };
-        showError(data.error || `Failed to create conversation (${res.status})`);
-        return;
+        if (!res.ok) {
+          const data = (await res.json()) as { error: string };
+          showError(data.error || `Failed to create conversation (${res.status})`);
+          return;
+        }
+
+        const conv = (await res.json()) as { id: string };
+        setConversationId(conv.id);
+        setPhase("planning");
+        // Open SSE immediately. The planning session starts on the server as
+        // soon as the conversation is created, so events emitted before this
+        // EventSource is attached are lost. LLM turns take seconds, so the
+        // race window is narrow. A future improvement could add a
+        // /conversations/:id/state endpoint to replay current status on connect.
+        connectPlanningSSE(conv.id);
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
       }
-
-      const conv = (await res.json()) as { id: string };
-      setConversationId(conv.id);
-      setPhase("planning");
-      // Open SSE immediately. The planning session starts on the server as
-      // soon as the conversation is created, so events emitted before this
-      // EventSource is attached are lost. LLM turns take seconds, so the
-      // race window is narrow. A future improvement could add a
-      // /conversations/:id/state endpoint to replay current status on connect.
-      connectPlanningSSE(conv.id);
-    } catch (err) {
-      showError(err instanceof Error ? err.message : String(err));
-    }
     } finally {
       exitInFlight();
     }
@@ -362,41 +362,41 @@ export default function Studio() {
     if (!conversationId) return;
     if (enterInFlight()) return;
     try {
-    const parts: string[] = [];
-    if (askUserData?.multiSelect) {
-      parts.push(...askUserSelected);
-    } else if (askUserSelected.length > 0) {
-      parts.push(askUserSelected[0]);
-    }
-    if (askUserData?.allowCustom && askUserCustom.trim()) {
-      parts.push(askUserCustom.trim());
-    }
-    const answer = parts.join(", ");
-    if (!answer) return;
-    clearError();
-
-    try {
-      const res = await apiFetch(
-        `/api/guilds/${guildId}/conversations/${conversationId}/ask-user`,
-        {
-          method: "POST",
-          body: { answer },
-        }
-      );
-
-      if (!res.ok) {
-        const data = (await res.json()) as { error: string };
-        showError(data.error || "Failed to submit answer");
-        return;
+      const parts: string[] = [];
+      if (askUserData?.multiSelect) {
+        parts.push(...askUserSelected);
+      } else if (askUserSelected.length > 0) {
+        parts.push(askUserSelected[0]);
       }
+      if (askUserData?.allowCustom && askUserCustom.trim()) {
+        parts.push(askUserCustom.trim());
+      }
+      const answer = parts.join(", ");
+      if (!answer) return;
+      clearError();
 
-      setAskUserData(null);
-      setAskUserSelected([]);
-      setAskUserCustom("");
-      setPhase("planning");
-    } catch (err) {
-      showError(err instanceof Error ? err.message : String(err));
-    }
+      try {
+        const res = await apiFetch(
+          `/api/guilds/${guildId}/conversations/${conversationId}/ask-user`,
+          {
+            method: "POST",
+            body: { answer },
+          }
+        );
+
+        if (!res.ok) {
+          const data = (await res.json()) as { error: string };
+          showError(data.error || "Failed to submit answer");
+          return;
+        }
+
+        setAskUserData(null);
+        setAskUserSelected([]);
+        setAskUserCustom("");
+        setPhase("planning");
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       exitInFlight();
     }
@@ -445,29 +445,29 @@ export default function Studio() {
     if (!conversationId) return;
     if (enterInFlight()) return;
     try {
-    clearError();
+      clearError();
 
-    try {
-      const res = await apiFetch(
-        `/api/guilds/${guildId}/conversations/${conversationId}/approve`,
-        {
-          method: "POST",
+      try {
+        const res = await apiFetch(
+          `/api/guilds/${guildId}/conversations/${conversationId}/approve`,
+          {
+            method: "POST",
+          }
+        );
+
+        if (!res.ok) {
+          const data = (await res.json()) as { error: string };
+          showError(data.error || "Failed to approve plan");
+          return;
         }
-      );
 
-      if (!res.ok) {
-        const data = (await res.json()) as { error: string };
-        showError(data.error || "Failed to approve plan");
-        return;
+        const data = (await res.json()) as { planId: string };
+        setPlanId(data.planId);
+        setPhase("executing");
+        await executePlan(data.planId);
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
       }
-
-      const data = (await res.json()) as { planId: string };
-      setPlanId(data.planId);
-      setPhase("executing");
-      await executePlan(data.planId);
-    } catch (err) {
-      showError(err instanceof Error ? err.message : String(err));
-    }
     } finally {
       exitInFlight();
     }
@@ -477,34 +477,34 @@ export default function Studio() {
   async function executePlan(pid: string) {
     if (enterInFlight()) return;
     try {
-    setExecEvents([]);
+      setExecEvents([]);
 
-    try {
-      const res = await apiFetch(`/api/guilds/${guildId}/plans/${pid}/execute`, {
-        method: "POST",
-      });
+      try {
+        const res = await apiFetch(`/api/guilds/${guildId}/plans/${pid}/execute`, {
+          method: "POST",
+        });
 
-      if (!res.ok) {
-        const data = (await res.json()) as { error: string };
-        showError(data.error || `Execution failed (${res.status})`);
+        if (!res.ok) {
+          const data = (await res.json()) as { error: string };
+          showError(data.error || `Execution failed (${res.status})`);
+          setPhase("execute_failed");
+          return;
+        }
+
+        const data = (await res.json()) as { success: boolean; error?: string };
+        if (!data.success) {
+          showError(data.error || "Execution failed");
+          setPhase("execute_failed");
+          return;
+        }
+
+        // Only open SSE after the plan has been accepted for execution
+        connectExecSSE(pid);
+        setPhase("executing");
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
         setPhase("execute_failed");
-        return;
       }
-
-      const data = (await res.json()) as { success: boolean; error?: string };
-      if (!data.success) {
-        showError(data.error || "Execution failed");
-        setPhase("execute_failed");
-        return;
-      }
-
-      // Only open SSE after the plan has been accepted for execution
-      connectExecSSE(pid);
-      setPhase("executing");
-    } catch (err) {
-      showError(err instanceof Error ? err.message : String(err));
-      setPhase("execute_failed");
-    }
     } finally {
       exitInFlight();
     }
@@ -592,26 +592,26 @@ export default function Studio() {
     if (!planId) return;
     if (enterInFlight()) return;
     try {
-    clearError();
+      clearError();
 
-    try {
-      const res = await apiFetch(`/api/guilds/${guildId}/plans/${planId}/rollback`, {
-        method: "POST",
-      });
+      try {
+        const res = await apiFetch(`/api/guilds/${guildId}/plans/${planId}/rollback`, {
+          method: "POST",
+        });
 
-      if (!res.ok) {
-        const data = (await res.json()) as { error: string };
-        showError(data.error || "Rollback failed");
-        return;
+        if (!res.ok) {
+          const data = (await res.json()) as { error: string };
+          showError(data.error || "Rollback failed");
+          return;
+        }
+
+        const data = (await res.json()) as { rolledBack: boolean; steps: number };
+        if (data.rolledBack) {
+          showError(`Rolled back ${data.steps} steps successfully.`);
+        }
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
       }
-
-      const data = (await res.json()) as { rolledBack: boolean; steps: number };
-      if (data.rolledBack) {
-        showError(`Rolled back ${data.steps} steps successfully.`);
-      }
-    } catch (err) {
-      showError(err instanceof Error ? err.message : String(err));
-    }
     } finally {
       exitInFlight();
     }
@@ -625,31 +625,31 @@ export default function Studio() {
     }
     if (enterInFlight()) return;
     try {
-    clearError();
-    setPlanningEvents([]);
-    setSummary("");
-    setDesiredState(null);
+      clearError();
+      setPlanningEvents([]);
+      setSummary("");
+      setDesiredState(null);
 
-    try {
-      const res = await apiFetch(
-        `/api/guilds/${guildId}/conversations/${conversationId}/revise`,
-        {
-          method: "POST",
-          body: { prompt: prompt.trim() },
+      try {
+        const res = await apiFetch(
+          `/api/guilds/${guildId}/conversations/${conversationId}/revise`,
+          {
+            method: "POST",
+            body: { prompt: prompt.trim() },
+          }
+        );
+
+        if (!res.ok) {
+          const data = (await res.json()) as { error: string };
+          showError(data.error || "Failed to revise");
+          return;
         }
-      );
 
-      if (!res.ok) {
-        const data = (await res.json()) as { error: string };
-        showError(data.error || "Failed to revise");
-        return;
+        setPhase("planning");
+        connectPlanningSSE(conversationId);
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
       }
-
-      setPhase("planning");
-      connectPlanningSSE(conversationId);
-    } catch (err) {
-      showError(err instanceof Error ? err.message : String(err));
-    }
     } finally {
       exitInFlight();
     }
@@ -670,9 +670,11 @@ export default function Studio() {
     setGuildsLoading(true);
     apiFetch("/api/guilds")
       .then((res) => (res.ok ? res.json() : []))
-      .then((data: Array<{ id: string; name: string; icon: string | null; memberCount: number }>) => {
-        setAvailableGuilds(data);
-      })
+      .then(
+        (data: Array<{ id: string; name: string; icon: string | null; memberCount: number }>) => {
+          setAvailableGuilds(data);
+        }
+      )
       .catch(() => setAvailableGuilds([]))
       .finally(() => setGuildsLoading(false));
   }, [guildId]);
@@ -742,7 +744,9 @@ export default function Studio() {
           <div className="space-y-4 max-w-2xl">
             {!guildId && (
               <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 space-y-3">
-                <div className="text-sm text-gray-300 font-medium">Select a guild to plan against</div>
+                <div className="text-sm text-gray-300 font-medium">
+                  Select a guild to plan against
+                </div>
                 {guildsLoading ? (
                   <div className="text-sm text-gray-500">Loading guilds…</div>
                 ) : availableGuilds.length === 0 ? (
@@ -758,7 +762,9 @@ export default function Studio() {
                         className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm flex items-center gap-2 transition"
                       >
                         <span className="truncate">{g.name}</span>
-                        <span className="text-xs text-gray-400 ml-auto">{g.memberCount} members</span>
+                        <span className="text-xs text-gray-400 ml-auto">
+                          {g.memberCount} members
+                        </span>
                       </a>
                     ))}
                   </div>
@@ -856,7 +862,9 @@ export default function Studio() {
                 })}
               </div>
             )}
-            {(!askUserData.options || askUserData.options.length === 0 || askUserData.allowCustom) && (
+            {(!askUserData.options ||
+              askUserData.options.length === 0 ||
+              askUserData.allowCustom) && (
               <input
                 value={askUserCustom}
                 onChange={(e) => setAskUserCustom(e.target.value)}
@@ -870,9 +878,7 @@ export default function Studio() {
             )}
             <button
               onClick={submitAskUser}
-              disabled={
-                askUserSelected.length === 0 && !askUserCustom.trim()
-              }
+              disabled={askUserSelected.length === 0 && !askUserCustom.trim()}
               className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 text-white rounded transition"
             >
               Submit Answer

@@ -58,8 +58,7 @@ function makeFakeDb() {
                 values.lockAcquiredAt === null &&
                 values.lockAcquiredBy === null &&
                 values.lockLastHeartbeatAt === null;
-              const wantAcquire =
-                "currentPlanId" in values && values.currentPlanId !== null;
+              const wantAcquire = "currentPlanId" in values && values.currentPlanId !== null;
               const wantHeartbeat =
                 Object.keys(values).length === 1 && "lockLastHeartbeatAt" in values;
 

@@ -35,7 +35,10 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
     ...rest,
     credentials: "include",
     headers: finalHeaders,
-    body: body !== undefined && !(body instanceof FormData) ? JSON.stringify(body) : (body as BodyInit | undefined),
+    body:
+      body !== undefined && !(body instanceof FormData)
+        ? JSON.stringify(body)
+        : (body as BodyInit | undefined),
   });
 
   if (res.status === 401 && !skipAuthRedirect) {

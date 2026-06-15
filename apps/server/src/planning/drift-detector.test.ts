@@ -20,15 +20,11 @@ describe("detectDrift", () => {
     const input: DriftCheckInput = {
       guildId: "g1",
       cache: {
-        channels: [
-          { id: "c1", name: "general", type: 0, parentId: null, position: 0 },
-        ],
+        channels: [{ id: "c1", name: "general", type: 0, parentId: null, position: 0 }],
         roles: [{ id: "r1", name: "Member", position: 1 }],
       },
       live: {
-        channels: [
-          { id: "c1", name: "general", type: 0, parentId: null, position: 0 },
-        ],
+        channels: [{ id: "c1", name: "general", type: 0, parentId: null, position: 0 }],
         roles: [{ id: "r1", name: "Member", position: 1 }],
       },
     };
@@ -39,9 +35,7 @@ describe("detectDrift", () => {
     const input: DriftCheckInput = {
       ...emptyInput(),
       live: {
-        channels: [
-          { id: "c1", name: "general", type: 0, parentId: null, position: 0 },
-        ],
+        channels: [{ id: "c1", name: "general", type: 0, parentId: null, position: 0 }],
         roles: [],
       },
     };
@@ -56,9 +50,7 @@ describe("detectDrift", () => {
     const input: DriftCheckInput = {
       ...emptyInput(),
       cache: {
-        channels: [
-          { id: "c1", name: "old", type: 0, parentId: null, position: 0 },
-        ],
+        channels: [{ id: "c1", name: "old", type: 0, parentId: null, position: 0 }],
         roles: [],
       },
     };
@@ -72,15 +64,11 @@ describe("detectDrift", () => {
     const input: DriftCheckInput = {
       ...emptyInput(),
       cache: {
-        channels: [
-          { id: "c1", name: "old-name", type: 0, parentId: "cat1", position: 1 },
-        ],
+        channels: [{ id: "c1", name: "old-name", type: 0, parentId: "cat1", position: 1 }],
         roles: [],
       },
       live: {
-        channels: [
-          { id: "c1", name: "new-name", type: 2, parentId: "cat2", position: 5 },
-        ],
+        channels: [{ id: "c1", name: "new-name", type: 2, parentId: "cat2", position: 5 }],
         roles: [],
       },
     };
@@ -95,15 +83,11 @@ describe("detectDrift", () => {
     const input: DriftCheckInput = {
       ...emptyInput(),
       cache: {
-        channels: [
-          { id: "c1", name: "general", type: 0, parentId: null, position: 0 },
-        ],
+        channels: [{ id: "c1", name: "general", type: 0, parentId: null, position: 0 }],
         roles: [],
       },
       live: {
-        channels: [
-          { id: "c1", name: "general", type: 0, parentId: null, position: 7 },
-        ],
+        channels: [{ id: "c1", name: "general", type: 0, parentId: null, position: 7 }],
         roles: [],
       },
     };
@@ -142,15 +126,11 @@ describe("detectDrift", () => {
     const input: DriftCheckInput = {
       guildId: "g1",
       cache: {
-        channels: [
-          { id: "c1", name: "phantom", type: 0, parentId: null, position: 0 },
-        ],
+        channels: [{ id: "c1", name: "phantom", type: 0, parentId: null, position: 0 }],
         roles: [{ id: "r1", name: "stale", position: 1 }],
       },
       live: {
-        channels: [
-          { id: "c2", name: "new", type: 0, parentId: null, position: 0 },
-        ],
+        channels: [{ id: "c2", name: "new", type: 0, parentId: null, position: 0 }],
         roles: [],
       },
     };
@@ -167,9 +147,7 @@ describe("detectDrift", () => {
     const input: DriftCheckInput = {
       ...emptyInput(),
       live: {
-        channels: [
-          { id: "c1", name: "general", type: 0, parentId: null, position: 0 },
-        ],
+        channels: [{ id: "c1", name: "general", type: 0, parentId: null, position: 0 }],
         roles: [],
       },
     };
