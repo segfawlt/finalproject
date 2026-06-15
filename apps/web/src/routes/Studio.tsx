@@ -3,7 +3,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import ProcedureSidebar, { type PhaseProgress } from "../components/ProcedureSidebar";
 import { apiFetch } from "../lib/api";
 
-type Phase = "input" | "planning" | "ask_user" | "completed" | "executing" | "executed";
+type Phase =
+  | "input"
+  | "planning"
+  | "ask_user"
+  | "completed"
+  | "executing"
+  | "executed"
+  | "execute_failed";
 
 interface PlanningEvent {
   type: string;
@@ -81,6 +88,12 @@ export default function Studio() {
   const execEsRef = useRef<EventSource | null>(null);
   const esRefFailures = useRef(0);
   const inFlightRef = useRef(false);
+  // Mirror of askUserData so SSE listeners — which capture stale closures
+  // — can see the latest value when an error fires mid-ask_user.
+  const askUserDataRef = useRef<typeof askUserData>(null);
+  useEffect(() => {
+    askUserDataRef.current = askUserData;
+  }, [askUserData]);
 
   // ── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
@@ -302,11 +315,9 @@ export default function Studio() {
       if (pendingPhaseRef.current) {
         const phase = pendingPhaseRef.current;
         pendingPhaseRef.current = null;
-        setPhaseProgress((prev) => {
-          const updated = { ...prev, [phase]: true };
-          updatePhaseProgress(updated);
-          return updated;
-        });
+        const next = { ...phaseProgress, [phase]: true };
+        setPhaseProgress(next);
+        updatePhaseProgress(next);
         setSelectedPhase(null);
       }
 
@@ -320,7 +331,9 @@ export default function Studio() {
       planningEsRef.current = null;
       // If the user was mid-answer to an ask_user, keep that state so they
       // can retry instead of silently losing the question and selection.
-      if (!askUserData) {
+      // Read the latest value from the ref because the listener closure
+      // captured askUserData as null at attach time.
+      if (!askUserDataRef.current) {
         setPhase("input");
       } else {
         setPhase("ask_user");
@@ -474,14 +487,14 @@ export default function Studio() {
       if (!res.ok) {
         const data = (await res.json()) as { error: string };
         showError(data.error || `Execution failed (${res.status})`);
-        setPhase("completed");
+        setPhase("execute_failed");
         return;
       }
 
       const data = (await res.json()) as { success: boolean; error?: string };
       if (!data.success) {
         showError(data.error || "Execution failed");
-        setPhase("completed");
+        setPhase("execute_failed");
         return;
       }
 
@@ -490,7 +503,7 @@ export default function Studio() {
       setPhase("executing");
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
-      setPhase("completed");
+      setPhase("execute_failed");
     }
     } finally {
       exitInFlight();
@@ -564,8 +577,10 @@ export default function Studio() {
       // Surface the connection error and stop reconnect attempts after a few failures
       esRefFailures.current += 1;
       if (esRefFailures.current >= 3) {
-        execEsRef.current?.close();
-        execEsRef.current = null;
+        es.close();
+        if (execEsRef.current === es) {
+          execEsRef.current = null;
+        }
         setPhase("completed");
         showError("Lost connection to execution stream");
       }
@@ -963,6 +978,23 @@ export default function Studio() {
                 className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
               >
                 New Plan
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Phase 6b: Execution failed → distinguish from "completed" so the
+            user doesn't mistake it for a successful plan */}
+        {phase === "execute_failed" && (
+          <div className="space-y-4 max-w-2xl">
+            <div className="text-red-400 text-lg font-medium">Execution failed</div>
+            {error && <div className="text-white">{error}</div>}
+            <div className="flex gap-3">
+              <button
+                onClick={resetPlanningState}
+                className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
+              >
+                Start Over
               </button>
             </div>
           </div>
