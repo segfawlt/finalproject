@@ -601,6 +601,24 @@ export default function Studio() {
   const [activeTemplates, setActiveTemplates] = useState<Array<{ id: string; name: string }>>([]);
   const [showTemplatePanel, setShowTemplatePanel] = useState(false);
 
+  // ── Guild picker (only when /studio is hit without a guildId) ──────────────
+  const [availableGuilds, setAvailableGuilds] = useState<
+    Array<{ id: string; name: string; icon: string | null; memberCount: number }>
+  >([]);
+  const [guildsLoading, setGuildsLoading] = useState(false);
+
+  useEffect(() => {
+    if (guildId) return;
+    setGuildsLoading(true);
+    fetch("/api/guilds", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: Array<{ id: string; name: string; icon: string | null; memberCount: number }>) => {
+        setAvailableGuilds(data);
+      })
+      .catch(() => setAvailableGuilds([]))
+      .finally(() => setGuildsLoading(false));
+  }, [guildId]);
+
   async function removeTemplateFromContext(templateId: string) {
     if (!conversationId) return;
     try {
@@ -665,6 +683,31 @@ export default function Studio() {
         {/* Phase 1: Input */}
         {phase === "input" && (
           <div className="space-y-4 max-w-2xl">
+            {!guildId && (
+              <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 space-y-3">
+                <div className="text-sm text-gray-300 font-medium">Select a guild to plan against</div>
+                {guildsLoading ? (
+                  <div className="text-sm text-gray-500">Loading guilds…</div>
+                ) : availableGuilds.length === 0 ? (
+                  <div className="text-sm text-gray-500">
+                    No guilds available. Make sure the bot is invited to a guild you admin.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {availableGuilds.map((g) => (
+                      <a
+                        key={g.id}
+                        href={`/studio/${g.id}`}
+                        className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm flex items-center gap-2 transition"
+                      >
+                        <span className="truncate">{g.name}</span>
+                        <span className="text-xs text-gray-400 ml-auto">{g.memberCount} members</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <label className="block text-discord-text-muted text-sm">
               What would you like to configure?
             </label>
