@@ -80,6 +80,7 @@ export default function Studio() {
   const planningEsRef = useRef<EventSource | null>(null);
   const execEsRef = useRef<EventSource | null>(null);
   const esRefFailures = useRef(0);
+  const inFlightRef = useRef(false);
 
   // ── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
@@ -126,10 +127,25 @@ export default function Studio() {
     setError(msg);
   }
 
+  // Guard against double-click on action buttons (Create, Approve, Execute,
+  // Rollback, Revise, AskUser). Sets inFlightRef at entry and clears in
+  // a finally; returns true when a request is already in flight so the
+  // caller can bail.
+  function enterInFlight(): boolean {
+    if (inFlightRef.current) return true;
+    inFlightRef.current = true;
+    return false;
+  }
+  function exitInFlight() {
+    inFlightRef.current = false;
+  }
+
   // ── Sidebar scoped prompt ────────────────────────────────────────────────
   const pendingPhaseRef = useRef<string | null>(null);
 
   async function handleSidebarSendPrompt(phasePrompt: string, phase: string) {
+    if (enterInFlight()) return;
+    try {
     clearError();
     setPlanningEvents([]);
     setAskUserData(null);
@@ -164,6 +180,9 @@ export default function Studio() {
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
     }
+    } finally {
+      exitInFlight();
+    }
   }
 
   // ── Phase 1: Create conversation & start planning ────────────────────────
@@ -172,6 +191,8 @@ export default function Studio() {
       showError("Enter a prompt first.");
       return;
     }
+    if (enterInFlight()) return;
+    try {
     clearError();
     setPlanningEvents([]);
     setAskUserData(null);
@@ -203,6 +224,9 @@ export default function Studio() {
       connectPlanningSSE(conv.id);
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
+    }
+    } finally {
+      exitInFlight();
     }
   }
 
@@ -323,6 +347,8 @@ export default function Studio() {
   // ── Phase 3: Submit ask_user answer ──────────────────────────────────────
   async function submitAskUser() {
     if (!conversationId) return;
+    if (enterInFlight()) return;
+    try {
     const parts: string[] = [];
     if (askUserData?.multiSelect) {
       parts.push(...askUserSelected);
@@ -357,6 +383,9 @@ export default function Studio() {
       setPhase("planning");
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
+    }
+    } finally {
+      exitInFlight();
     }
   }
 
@@ -401,6 +430,8 @@ export default function Studio() {
   // ── Phase 4: Approve → create plan ───────────────────────────────────────
   async function approve() {
     if (!conversationId) return;
+    if (enterInFlight()) return;
+    try {
     clearError();
 
     try {
@@ -424,10 +455,15 @@ export default function Studio() {
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
     }
+    } finally {
+      exitInFlight();
+    }
   }
 
   // ── Phase 5: Execute plan ────────────────────────────────────────────────
   async function executePlan(pid: string) {
+    if (enterInFlight()) return;
+    try {
     setExecEvents([]);
 
     try {
@@ -455,6 +491,9 @@ export default function Studio() {
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
       setPhase("completed");
+    }
+    } finally {
+      exitInFlight();
     }
   }
 
@@ -536,6 +575,8 @@ export default function Studio() {
   // ── Phase 6: Rollback ──────────────────────────────────────────────────────
   async function rollback() {
     if (!planId) return;
+    if (enterInFlight()) return;
+    try {
     clearError();
 
     try {
@@ -556,6 +597,9 @@ export default function Studio() {
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
     }
+    } finally {
+      exitInFlight();
+    }
   }
 
   // ── Revise (continue from completed with new prompt) ──────────────────────
@@ -564,6 +608,8 @@ export default function Studio() {
       showError("Enter a new prompt to revise.");
       return;
     }
+    if (enterInFlight()) return;
+    try {
     clearError();
     setPlanningEvents([]);
     setSummary("");
@@ -588,6 +634,9 @@ export default function Studio() {
       connectPlanningSSE(conversationId);
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
+    }
+    } finally {
+      exitInFlight();
     }
   }
 
