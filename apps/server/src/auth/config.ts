@@ -1,17 +1,18 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@repo/db";
+import { validatedEnv } from "../env-validated";
 
 export const auth = betterAuth({
-  secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL || "http://localhost:5173",
+  secret: validatedEnv.BETTER_AUTH_SECRET,
+  baseURL: validatedEnv.BETTER_AUTH_URL,
   database: drizzleAdapter(db, {
     provider: "pg",
   }),
   socialProviders: {
     discord: {
-      clientId: process.env.DISCORD_CLIENT_ID || "",
-      clientSecret: process.env.DISCORD_CLIENT_SECRET || "",
+      clientId: validatedEnv.DISCORD_CLIENT_ID,
+      clientSecret: validatedEnv.DISCORD_CLIENT_SECRET,
     },
   },
   user: {

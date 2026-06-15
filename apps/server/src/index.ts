@@ -10,17 +10,28 @@ import { driftEvents } from "@repo/db";
 import { db } from "@repo/db";
 import { guildCache } from "./bot/cache";
 import { logger } from "./utils/logger";
+import { runMigrations } from "./migrate";
+import { validatedEnv, getValidatedEnv } from "./env-validated";
 
-const PORT = parseInt(process.env.PORT || "3001", 10);
+const env = getValidatedEnv();
 
 // Start Hono server
 serve(
   {
     fetch: app.fetch,
-    port: PORT,
+    port: env.PORT,
   },
   async (info) => {
     logger.info(`Hono API listening on http://localhost:${info.port}`);
+
+    // Run pending migrations before serving real traffic so a fresh deploy
+    // never lands in a half-migrated state.
+    try {
+      await runMigrations();
+    } catch (err) {
+      logger.error(err, "Failed to run migrations");
+      process.exit(1);
+    }
 
     // Clear any stale guild locks left by a previous crash
     try {
@@ -84,7 +95,7 @@ process.on("SIGINT", () => {
 
 // Start Discord bot
 async function startBot() {
-  const token = process.env.DISCORD_BOT_TOKEN;
+  const token = env.DISCORD_BOT_TOKEN;
   if (!token) {
     logger.warn("DISCORD_BOT_TOKEN not set — bot will not connect to Discord");
     return;

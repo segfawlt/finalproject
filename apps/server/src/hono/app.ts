@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { authMiddleware, requireUser } from "../auth/middleware";
 import { auth } from "../auth/config";
 import { userHasManageGuild } from "../auth/helpers";
+import { botClient } from "../bot/client";
 import { db, plans, conversations } from "@repo/db";
 import type { AppVariables } from "../types";
 import guildsApp from "./routes/guilds";
@@ -51,6 +52,7 @@ app.get("/api/health", async (c) => {
     status: "ok",
     timestamp: new Date().toISOString(),
     database: dbStatus,
+    botConnected: botClient.isReady(),
   });
 });
 
