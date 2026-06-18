@@ -41,6 +41,23 @@ app.use(
 
 app.use("/api/*", rateLimit({ maxRequests: 100, windowMs: 60 * 1000 }));
 
+app.get("/api/auth/sign-in/social", async (c) => {
+  const provider = c.req.query("provider");
+  if (!provider) return c.json({ error: "Missing provider parameter" }, 400);
+
+  const rawReq = c.req.raw;
+  const headers = new Headers(rawReq.headers);
+  headers.set("content-type", "application/json");
+
+  const newReq = new Request(rawReq.url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ provider }),
+  });
+
+  return auth.handler(newReq);
+});
+
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
 app.get("/api/health", async (c) => {

@@ -8,7 +8,11 @@ import { requireUser } from "../../auth/middleware";
 import { checkGuildOperable } from "../../planning/guild-check";
 import { acquireGuildLock, releaseGuildLock, heartbeatGuildLock } from "../../planning/locking";
 import { diffEngine } from "../../planning/diff-engine";
-import { executePlan, buildCurrentStateFromDiscord, rollbackFull } from "../../planning/execution-engine";
+import {
+  executePlan,
+  buildCurrentStateFromDiscord,
+  rollbackFull,
+} from "../../planning/execution-engine";
 import { validatePlan } from "../../planning/validation";
 import { emitPlanEvent } from "../../planning/event-bus";
 import { emitConversationEvent } from "../../planning/planning-event-bus";

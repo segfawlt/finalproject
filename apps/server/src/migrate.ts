@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { db } from "@repo/db";
 import { logger } from "./utils/logger";
@@ -10,6 +11,7 @@ import { logger } from "./utils/logger";
  */
 export async function runMigrations(): Promise<void> {
   const start = Date.now();
-  await migrate(db, { migrationsFolder: "./packages/db/drizzle" });
+  const migrationsFolder = resolve(import.meta.dirname!, "../../../packages/db/drizzle");
+  await migrate(db, { migrationsFolder });
   logger.info({ durationMs: Date.now() - start }, "Migrations applied");
 }

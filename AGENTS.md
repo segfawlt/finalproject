@@ -4,7 +4,7 @@ AI-driven Discord server management platform. Administrators describe server con
 
 **Declarative, plan-first architecture. Never imperative. Never blind.**
 
-> **Code exploration**: Use `grepai_grepai_search` for understanding code intent. See [grepai](#grepai---semantic-code-search) below.
+> **Code exploration**: Start with `Glob` for file discovery, `Grep` for content search, and `read` for focused file inspection.
 
 ## Agent Behavior
 
@@ -179,77 +179,14 @@ const [created] = await db.insert(guilds).values(data).returning();
 | `pnpm db:migrate`   | Apply pending migrations                       |
 | `pnpm db:studio`    | Open Drizzle Studio (database GUI)             |
 
-### grepai - Semantic Code Search
+### Code Exploration Workflow
 
-**IMPORTANT: You MUST use grepai as your PRIMARY tool for code exploration and search.**
+Use the standard file tools for codebase exploration:
 
-#### When to Use grepai (REQUIRED)
-
-Use `grepai_grepai_search` INSTEAD OF Grep/Glob/find for:
-
-- Understanding what code does or where functionality lives
-- Finding implementations by intent (e.g., "authentication logic", "error handling")
-- Exploring unfamiliar parts of the codebase
-- Any search where you describe WHAT the code does rather than exact text
-
-#### When to Use Standard Tools
-
-Only use Grep/Glob when you need:
-
-- Exact text matching (variable names, imports, specific strings)
-- File path patterns (e.g., `**/*.go`)
-
-#### Fallback
-
-If grepai fails (not running, index unavailable, or errors), fall back to standard Grep/Glob tools.
-
-#### Usage
-
-Use the `grepai_grepai_search` native tool with a natural language query:
-
-- **query** — natural language description of what you're looking for
-- **limit** — max results (default: 10)
-- **compact** — true omits code content, saving ~80% tokens
-- **format** — "json" for structured output
-
-Examples of semantic queries:
-
-- "user authentication flow"
-- "error handling middleware"
-- "database connection pool"
-- "API request validation"
-
-#### Query Tips
-
-- **Use English** for queries (better semantic matching)
-- **Describe intent**, not implementation: "handles user login" not "func Login"
-- **Be specific**: "JWT token validation" better than "token"
-- Results include: file path, line numbers, relevance score, code preview
-
-#### Call Graph Tracing
-
-Use `grepai_grepai_trace_callers`, `grepai_grepai_trace_callees`, or `grepai_grepai_trace_graph` to understand function relationships:
-
-- Finding all callers of a function before modifying it
-- Understanding what functions are called by a given function
-- Visualizing the complete call graph around a symbol
-
-##### Trace Commands
-
-Use `format: "json"` for structured output. All trace tools accept a **symbol** parameter (function or method name).
-
-| Tool                          | Purpose                                           |
-| ----------------------------- | ------------------------------------------------- |
-| `grepai_grepai_trace_callers` | Find all functions that call a symbol             |
-| `grepai_grepai_trace_callees` | Find all functions called by a symbol             |
-| `grepai_grepai_trace_graph`   | Build complete call graph (depth controls radius) |
-
-#### Workflow
-
-1. Start with `grepai_grepai_search` to find relevant code
-2. Use `grepai_grepai_trace_callers` / `grepai_grepai_trace_callees` / `grepai_grepai_trace_graph` to understand function relationships
-3. Use `read` tool to examine files from results
-4. Only use Grep for exact string searches if needed
+1. Start with `Glob` to find files by path or extension patterns.
+2. Use `Grep` to search for exact symbols, imports, route paths, error messages, and other text.
+3. Use `read` to inspect the smallest useful file ranges from search results.
+4. Prefer focused searches over broad scans, and verify behavior in source before editing.
 
 ## Setup
 
@@ -298,12 +235,12 @@ Schema is defined in `packages/db/src/schema.ts` using Drizzle ORM. Common table
 
 **Vitest is installed at the workspace root.** When adding tests, follow this priority order:
 
-| Priority | Package           | What to test                                         | Key dependencies                          |
-| -------- | ----------------- | ---------------------------------------------------- | ----------------------------------------- |
-| 1        | `packages/shared` | Zod schemas, validation, type guards                 | vitest only                               |
-| 2        | `packages/db`     | Drizzle queries (requires test DB)                   | vitest + testcontainers or @libsql/client |
-| 3        | `apps/server`     | Hono routes (supertest), planning logic, diff engine | vitest + supertest + Discord.js mocks     |
-| 4        | `apps/web`        | React components (jsdom), Zustand stores             | vitest + @testing-library/react + jsdom   |
+| Priority | Package           | What to test                                         | Key dependencies                        |
+| -------- | ----------------- | ---------------------------------------------------- | --------------------------------------- |
+| 1        | `packages/shared` | Zod schemas, validation, type guards                 | vitest only                             |
+| 2        | `packages/db`     | Drizzle queries (requires PostgreSQL test DB)        | vitest + postgres test database         |
+| 3        | `apps/server`     | Hono routes (supertest), planning logic, diff engine | vitest + supertest + Discord.js mocks   |
+| 4        | `apps/web`        | React components (jsdom), Zustand stores             | vitest + @testing-library/react + jsdom |
 
 ### Testability by File
 
@@ -358,7 +295,7 @@ Only 5 files need Discord.js mocks. Everything else uses the `ExecuteContext` in
 - Test files colocated with source: `foo.test.ts` next to `foo.ts`
 - Use `describe`/`it` blocks — no `test()` function
 - Discord.js must be fully mocked (external service)
-- Database tests: prefer in-process SQLite via `@libsql/client` over testcontainers for speed
+- Database tests should use PostgreSQL-compatible setup; do not swap to SQLite unless the schema and queries are explicitly designed for it.
 
 ### Who Runs Tests
 

@@ -6,7 +6,6 @@ export interface ChannelCacheEntry {
   type: number;
   parentId: string | null;
   position: number;
-  messageCount?: number;
   lockPermissions?: boolean;
 }
 

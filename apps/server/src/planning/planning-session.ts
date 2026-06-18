@@ -2,6 +2,7 @@ import { DesiredStateStore, getTool, getOpenAIFunctionDefinitions } from "@repo/
 import { logger } from "../utils/logger";
 import type { ServerState, DesiredState, PlanResult } from "@repo/shared";
 import { formatGuildForLLM } from "../bot/formatter";
+import { buildLLMRequest } from "./llm-request";
 import { parseOpenRouterStream } from "./stream-parser";
 
 export type PlanningStatus = "idle" | "planning" | "waiting_for_user" | "completed" | "error";
@@ -350,8 +351,9 @@ export class PlanningSession {
     const functions = getOpenAIFunctionDefinitions();
     this.trimMessages();
 
-    const model = process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini";
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const baseUrl = process.env.LLM_BASE_URL ?? "https://openrouter.ai/api/v1";
+    const model = process.env.LLM_MODEL ?? "openai/gpt-4o-mini";
+    const apiKey = process.env.LLM_API_KEY;
     const isDevEnv = process.env.NODE_ENV !== "production";
 
     if (!apiKey) {
@@ -359,37 +361,29 @@ export class PlanningSession {
         return this.mockLLMResponse();
       }
       throw new Error(
-        "OPENROUTER_API_KEY is not configured. Planning requires an LLM provider in production."
+        "LLM_API_KEY is not configured. Planning requires an LLM provider in production."
       );
     }
 
-    const fetchResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-        "HTTP-Referer": process.env.WEB_APP_URL ?? "http://localhost:5173",
-        "X-Title": "Discord Platform",
-      },
-      body: JSON.stringify({
-        model,
-        messages: this.messages,
-        tools: functions,
-        tool_choice: "auto",
-        temperature: 0.1,
-        max_tokens: 4096,
-        stream: true, // Enable streaming
-      }),
-      signal: this.abortController.signal,
+    const request = buildLLMRequest({
+      baseUrl,
+      apiKey,
+      model,
+      messages: this.messages,
+      functions,
+      webAppUrl: process.env.WEB_APP_URL ?? "http://localhost:5173",
+      abortSignal: this.abortController.signal,
     });
+
+    const fetchResponse = await fetch(request.url, request.fetchOptions);
 
     if (!fetchResponse.ok) {
       const text = await fetchResponse.text();
-      throw new Error(`OpenRouter error ${fetchResponse.status}: ${text}`);
+      throw new Error(`LLM provider error ${fetchResponse.status}: ${text}`);
     }
 
     if (!fetchResponse.body) {
-      throw new Error("OpenRouter returned empty body");
+      throw new Error("LLM provider returned empty body");
     }
 
     // Parse streaming response, dispatching tool calls incrementally

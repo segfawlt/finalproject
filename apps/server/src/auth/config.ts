@@ -8,6 +8,7 @@ export const auth = betterAuth({
   baseURL: validatedEnv.BETTER_AUTH_URL,
   database: drizzleAdapter(db, {
     provider: "pg",
+    usePlural: true,
   }),
   socialProviders: {
     discord: {

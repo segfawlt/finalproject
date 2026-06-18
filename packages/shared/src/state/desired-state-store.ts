@@ -107,7 +107,6 @@ export class DesiredStateStore {
     userLimit?: number;
     nsfw?: boolean;
     rateLimitPerUser?: number;
-    messageCount?: number;
     availableTags?: Array<{
       name: string;
       moderated?: boolean;
@@ -130,7 +129,6 @@ export class DesiredStateStore {
       type: params.type,
       parentId: params.parentId ?? null,
       position: params.position ?? 0,
-      messageCount: params.messageCount,
     };
 
     // Attach optional Discord-specific fields that exist on subtypes

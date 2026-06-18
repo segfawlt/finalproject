@@ -21,7 +21,7 @@ import { logger } from "../../utils/logger";
 import { guildCache } from "../../bot/cache";
 import { botClient } from "../../bot/client";
 import type { AppVariables } from "../../types";
-import type { ServerState } from "@repo/shared";
+import type { ServerState, DesiredState } from "@repo/shared";
 
 const conversationsApp = new Hono<{ Variables: AppVariables }>();
 
@@ -552,6 +552,148 @@ conversationsApp.post("/:convId/revert/:version", async (c) => {
   await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, convId));
 
   return c.json({ reverted: true, version: newVersion });
+});
+
+// ── Edit state (manual desired-state replacement) ───────────────────────────
+
+/**
+ * Schema for the manually-edited desired state. Mirrors the structure produced
+ * by `fork()` plus the per-resource fields the editor allows users to mutate.
+ * Anything not in this schema is dropped — the client is the source of truth
+ * for what the editor can change in v1.
+ */
+const editDesiredStateSchema = z.object({
+  guildId: z.string(),
+  guildName: z.string(),
+  active: z.object({
+    channels: z.record(
+      z.string(),
+      z
+        .object({
+          id: z.string(),
+          name: z.string(),
+          type: z.number().int(),
+          parentId: z.string().nullable(),
+          position: z.number().int(),
+          topic: z.string().nullable().optional(),
+          nsfw: z.boolean().optional(),
+          bitrate: z.number().int().optional(),
+          userLimit: z.number().int().optional(),
+          rateLimitPerUser: z.number().int().optional(),
+          lockPermissions: z.boolean().optional(),
+        })
+        .passthrough()
+    ),
+    roles: z.record(
+      z.string(),
+      z
+        .object({
+          id: z.string(),
+          name: z.string(),
+          position: z.number().int(),
+          permissions: z.array(z.string()),
+          color: z.number().int(),
+          hoist: z.boolean(),
+          mentionable: z.boolean(),
+        })
+        .passthrough()
+    ),
+    overwrites: z.record(z.string(), z.unknown()),
+    memberRoles: z
+      .record(
+        z.string(),
+        z.object({
+          memberId: z.string(),
+          roleIds: z.array(z.string()),
+        })
+      )
+      .optional(),
+  }),
+  tombstones: z.array(
+    z.object({
+      discordId: z.string(),
+      resourceType: z.enum(["channel", "role", "category"]),
+      name: z.string(),
+      deletedInVersion: z.number().int(),
+    })
+  ),
+  symbolCounter: z.number().int().nonnegative(),
+  version: z.number().int().nonnegative(),
+});
+
+const editStateSchema = z.object({
+  desiredState: editDesiredStateSchema,
+});
+
+conversationsApp.post("/:convId/edit-state", zValidator("json", editStateSchema), async (c) => {
+  const guildId = c.req.param("guildId")!;
+  const convId = c.req.param("convId")!;
+  const body = c.req.valid("json");
+
+  const access = await checkGuildAccess(c, guildId);
+  if (!access.allowed) {
+    return c.json({ error: access.error }, access.status as 404 | 403);
+  }
+
+  const staleCheck = await checkConversationNotStale(convId);
+  if (!staleCheck.ok) {
+    return c.json({ error: staleCheck.error }, staleCheck.status);
+  }
+
+  const lockCheck = await checkGuildNotLocked(guildId);
+  if (!lockCheck.ok) {
+    return c.json({ error: lockCheck.error }, lockCheck.status);
+  }
+
+  // Look up the session. Manual edits are only valid after planning is done;
+  // an active planning turn would clobber the edit on its next dispatch.
+  const session = getSession(convId);
+  if (!session) {
+    return c.json({ error: "Conversation is not active. Start a new planning session." }, 409);
+  }
+
+  if (session.status !== "completed") {
+    return c.json(
+      {
+        error:
+          "Cannot edit state while a planning turn is in progress. Wait for the current turn to finish or cancel the session.",
+      },
+      409
+    );
+  }
+
+  // Replace the store with the client-provided state. This validates the
+  // shape implicitly (zod) and reuses the canonical revert path.
+  const newDesiredState = body.desiredState as unknown as DesiredState;
+  session.store.revert(newDesiredState);
+
+  // Bump to a fresh version for this manual edit and persist it.
+  const newVersion = session.store.getState().version + 1;
+  session.store.getState().version = newVersion;
+
+  const [iteration] = await db
+    .insert(planIterations)
+    .values({
+      conversationId: convId,
+      version: newVersion,
+      type: "manual_edit",
+      desiredState: session.store.snapshot() as unknown as Record<string, unknown>,
+    })
+    .returning();
+
+  // Reserve the next version number for any subsequent turn.
+  session.store.getState().version = newVersion + 1;
+
+  await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, convId));
+
+  return c.json({
+    iteration: {
+      version: iteration.version,
+      type: iteration.type,
+      desiredState: iteration.desiredState,
+      createdAt: iteration.createdAt,
+    },
+  });
 });
 
 // ── Template context management ─────────────────────────────────────────────

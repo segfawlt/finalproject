@@ -5,7 +5,10 @@ import Login from "./routes/Login";
 import Studio from "./routes/Studio";
 import Dashboard from "./routes/Dashboard";
 import Setup from "./routes/Setup";
+import Templates from "./routes/Templates";
+import TemplateEditor from "./routes/TemplateEditor";
 import NotFound from "./routes/NotFound";
+import AppLayout from "./components/AppLayout";
 
 function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -36,30 +39,17 @@ function App() {
         path="/login"
         element={isAuthenticated ? <Navigate to="/studio" replace /> : <Login />}
       />
-      <Route
-        path="/studio"
-        element={isAuthenticated ? <Studio /> : <Navigate to="/login" replace />}
-      />
-      <Route
-        path="/studio/:guildId"
-        element={isAuthenticated ? <Studio /> : <Navigate to="/login" replace />}
-      />
-      <Route
-        path="/dashboard"
-        element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" replace />}
-      />
-      <Route
-        path="/dashboard/:guildId"
-        element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" replace />}
-      />
-      <Route
-        path="/setup"
-        element={isAuthenticated ? <Setup /> : <Navigate to="/login" replace />}
-      />
-      <Route
-        path="/setup/:guildId"
-        element={isAuthenticated ? <Setup /> : <Navigate to="/login" replace />}
-      />
+      <Route element={isAuthenticated ? <AppLayout /> : <Navigate to="/login" replace />}>
+        <Route path="/studio" element={<Studio />} />
+        <Route path="/studio/:guildId" element={<Studio />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard/:guildId" element={<Dashboard />} />
+        <Route path="/setup" element={<Setup />} />
+        <Route path="/setup/:guildId" element={<Setup />} />
+        <Route path="/templates" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/templates/:guildId" element={<Templates />} />
+        <Route path="/templates/:guildId/:templateId" element={<TemplateEditor />} />
+      </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

@@ -98,10 +98,8 @@ function formatChannels(guildId: string): string {
       const prefix = channelPrefix(sub.type);
       const overwrites = formatOverwrites(sub.id, guildId);
       const lockLabel = sub.lockPermissions === false ? " [unsynced]" : "";
-      // messageCount is approximate — see bot/index.ts for limitation notes
-      const msgInfo = sub.messageCount != null ? `, ${sub.messageCount} msgs` : "";
       lines.push(
-        `    ${prefix}${sub.name} — ${channelTypeLabel(sub.type)}${lockLabel}${msgInfo}${overwrites}`
+        `    ${prefix}${sub.name} — ${channelTypeLabel(sub.type)}${lockLabel}${overwrites}`
       );
     }
   }
@@ -110,9 +108,8 @@ function formatChannels(guildId: string): string {
     const prefix = channelPrefix(orphan.type);
     const overwrites = formatOverwrites(orphan.id, guildId);
     const lockLabel = orphan.lockPermissions === false ? " [unsynced]" : "";
-    const msgInfo = orphan.messageCount != null ? `, ${orphan.messageCount} msgs` : "";
     lines.push(
-      `  ${prefix}${orphan.name} — ${channelTypeLabel(orphan.type)}${lockLabel}${msgInfo}${overwrites}`
+      `  ${prefix}${orphan.name} — ${channelTypeLabel(orphan.type)}${lockLabel}${overwrites}`
     );
   }
 

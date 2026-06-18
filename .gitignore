@@ -9,3 +9,4 @@ dist/
 .DS_Store
 session-*.md
 .grepai/
+.worktrees/

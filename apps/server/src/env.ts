@@ -79,8 +79,9 @@ export interface ValidatedEnv {
   WEB_APP_URL: string;
   PORT: number;
   NODE_ENV: "development" | "production" | "test";
-  OPENROUTER_API_KEY: string | null;
-  OPENROUTER_MODEL: string;
+  LLM_BASE_URL: string;
+  LLM_API_KEY: string | null;
+  LLM_MODEL: string;
 }
 
 export function validateEnv(): ValidatedEnv {
@@ -103,8 +104,9 @@ export function validateEnv(): ValidatedEnv {
       "DISCORD_CLIENT_SECRET",
       process.env.DISCORD_CLIENT_SECRET
     ),
-    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || null,
-    OPENROUTER_MODEL: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
+    LLM_BASE_URL: process.env.LLM_BASE_URL || "https://openrouter.ai/api/v1",
+    LLM_API_KEY: process.env.LLM_API_KEY || process.env.OPENROUTER_API_KEY || null,
+    LLM_MODEL: process.env.LLM_MODEL || process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
   };
 
   return validated;

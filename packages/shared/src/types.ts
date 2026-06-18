@@ -16,7 +16,6 @@ export interface ChannelBase {
   type: number;
   parentId: string | null;
   position: number;
-  messageCount?: number;
   topic?: string | null;
   bitrate?: number;
   userLimit?: number;

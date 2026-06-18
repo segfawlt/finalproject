@@ -1,16 +1,14 @@
 import { useParams } from "react-router-dom";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { Loader, Check, CircleAlert, LayoutGrid } from "lucide-react";
 import ProcedureSidebar, { type PhaseProgress } from "../components/ProcedureSidebar";
+import DesiredStateView from "../components/DesiredStateView";
+import type { DesiredState, ServerState, ChannelBase, Role } from "../components/desired-state";
+import ActionBar, { type StudioPhase } from "../components/ActionBar";
+import ExecutionStatus, { type ExecEvent } from "../components/ExecutionStatus";
+import IterationHistory, { type IterationRow } from "../components/IterationHistory";
+import TemplatePanel from "../components/TemplatePanel";
 import { apiFetch } from "../lib/api";
-
-type Phase =
-  | "input"
-  | "planning"
-  | "ask_user"
-  | "completed"
-  | "executing"
-  | "executed"
-  | "execute_failed";
 
 interface PlanningEvent {
   type: string;
@@ -23,13 +21,6 @@ interface PlanningEvent {
   allowCustom?: boolean;
   summary?: string;
   error?: string;
-}
-
-interface ExecEvent {
-  type: string;
-  stepIndex?: number;
-  error?: string;
-  result?: Record<string, unknown>;
 }
 
 function parseSseData<T>(e: Event): T | null {
@@ -46,7 +37,7 @@ export default function Studio() {
   const { guildId } = useParams<{ guildId: string }>();
 
   // ── Phase & IDs ──────────────────────────────────────────────────────────
-  const [phase, setPhase] = useState<Phase>("input");
+  const [phase, setPhase] = useState<StudioPhase>("input");
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [planId, setPlanId] = useState<string | null>(null);
 
@@ -66,7 +57,9 @@ export default function Studio() {
 
   // ── Completed ────────────────────────────────────────────────────────────
   const [summary, setSummary] = useState("");
-  const [desiredState, setDesiredState] = useState<unknown>(null);
+  const [desiredState, setDesiredState] = useState<DesiredState | null>(null);
+  const [iterations, setIterations] = useState<IterationRow[]>([]);
+  const [currentState, setCurrentState] = useState<ServerState | null>(null);
 
   // ── Execution ────────────────────────────────────────────────────────────
   const [execEvents, setExecEvents] = useState<ExecEvent[]>([]);
@@ -143,14 +136,18 @@ export default function Studio() {
   // Guard against double-click on action buttons (Create, Approve, Execute,
   // Rollback, Revise, AskUser). Sets inFlightRef at entry and clears in
   // a finally; returns true when a request is already in flight so the
-  // caller can bail.
+  // caller can bail. Also mirrored to `inFlight` state for the ActionBar
+  // to disable its buttons.
+  const [inFlight, setInFlight] = useState(false);
   function enterInFlight(): boolean {
     if (inFlightRef.current) return true;
     inFlightRef.current = true;
+    setInFlight(true);
     return false;
   }
   function exitInFlight() {
     inFlightRef.current = false;
+    setInFlight(false);
   }
 
   // ── Sidebar scoped prompt ────────────────────────────────────────────────
@@ -166,6 +163,8 @@ export default function Studio() {
       setAskUserCustom("");
       setSummary("");
       setDesiredState(null);
+      setIterations([]);
+      setCurrentState(null);
       pendingPhaseRef.current = phase;
       setPrompt(phasePrompt);
 
@@ -213,6 +212,8 @@ export default function Studio() {
       setAskUserCustom("");
       setSummary("");
       setDesiredState(null);
+      setIterations([]);
+      setCurrentState(null);
 
       try {
         const res = await apiFetch(`/api/guilds/${guildId}/conversations`, {
@@ -297,18 +298,29 @@ export default function Studio() {
       planningEsRef.current?.close();
       planningEsRef.current = null;
 
-      // Fetch latest iteration to get desiredState
+      // Fetch conversation to get full iteration history and latest desiredState
       try {
         const res = await apiFetch(`/api/guilds/${guildId}/conversations/${convId}`);
         if (res.ok) {
-          const convData = (await res.json()) as {
-            iterations: Array<{ desiredState: unknown }>;
-          };
-          const latest = convData.iterations[convData.iterations.length - 1];
+          const convData = (await res.json()) as { iterations: IterationRow[] };
+          const iters = convData.iterations ?? [];
+          setIterations(iters);
+          const latest = iters.length > 0 ? iters[iters.length - 1] : null;
           if (latest) setDesiredState(latest.desiredState);
         }
       } catch {
         // ignore fetch errors here
+      }
+
+      // Fetch current Discord state for the diff overlay (best-effort).
+      setCurrentState(null);
+      try {
+        const stateRes = await apiFetch(`/api/guilds/${guildId}/state`);
+        if (stateRes.ok) {
+          setCurrentState((await stateRes.json()) as ServerState);
+        }
+      } catch {
+        // diff overlay just stays hidden
       }
 
       // Mark phase as complete if this was a scoped-plan from the sidebar
@@ -417,6 +429,8 @@ export default function Studio() {
     setAskUserCustom("");
     setSummary("");
     setDesiredState(null);
+    setIterations([]);
+    setCurrentState(null);
     setError("");
     setShowTemplatePanel(false);
     setActiveTemplates([]);
@@ -629,6 +643,8 @@ export default function Studio() {
       setPlanningEvents([]);
       setSummary("");
       setDesiredState(null);
+      setIterations([]);
+      setCurrentState(null);
 
       try {
         const res = await apiFetch(
@@ -655,9 +671,230 @@ export default function Studio() {
     }
   }
 
+  // ── Revert to a past iteration (completed phase only) ────────────────────
+  async function revert(version: number) {
+    if (!conversationId || !guildId) return;
+    if (enterInFlight()) return;
+    try {
+      clearError();
+
+      try {
+        const res = await apiFetch(
+          `/api/guilds/${guildId}/conversations/${conversationId}/revert/${version}`,
+          { method: "POST" }
+        );
+
+        if (!res.ok) {
+          const data = (await res.json()) as { error: string };
+          showError(data.error || "Revert failed");
+          return;
+        }
+
+        // Refetch conversation to pick up the new revert iteration and snapshot
+        const convRes = await apiFetch(`/api/guilds/${guildId}/conversations/${conversationId}`);
+        if (convRes.ok) {
+          const convData = (await convRes.json()) as { iterations: IterationRow[] };
+          const iters = convData.iterations ?? [];
+          setIterations(iters);
+          const latest = iters.length > 0 ? iters[iters.length - 1] : null;
+          if (latest) setDesiredState(latest.desiredState);
+        }
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      exitInFlight();
+    }
+  }
+
   // ── Template context ───────────────────────────────────────────────────────
   const [activeTemplates, setActiveTemplates] = useState<Array<{ id: string; name: string }>>([]);
   const [showTemplatePanel, setShowTemplatePanel] = useState(false);
+
+  // ── Manual edit mode ─────────────────────────────────────────────────────
+  const [editing, setEditing] = useState(false);
+  const [editableState, setEditableState] = useState<DesiredState | null>(null);
+
+  function enterEditMode() {
+    if (!desiredState) return;
+    setEditableState(structuredClone(desiredState));
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setEditableState(null);
+  }
+
+  async function saveEdit() {
+    if (!conversationId || !guildId || !editableState) return;
+    if (enterInFlight()) return;
+    try {
+      clearError();
+      try {
+        const res = await apiFetch(
+          `/api/guilds/${guildId}/conversations/${conversationId}/edit-state`,
+          { method: "POST", body: { desiredState: editableState } }
+        );
+        if (!res.ok) {
+          const data = (await res.json()) as { error: string };
+          showError(data.error || "Failed to save edit");
+          return;
+        }
+
+        // Refetch conversation to pick up the new manual_edit iteration.
+        const convRes = await apiFetch(`/api/guilds/${guildId}/conversations/${conversationId}`);
+        if (convRes.ok) {
+          const convData = (await convRes.json()) as { iterations: IterationRow[] };
+          const iters = convData.iterations ?? [];
+          setIterations(iters);
+          const latest = iters.length > 0 ? iters[iters.length - 1] : null;
+          if (latest) setDesiredState(latest.desiredState);
+        }
+        setEditing(false);
+        setEditableState(null);
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      exitInFlight();
+    }
+  }
+
+  // Helpers that splice changes into the working-copy DesiredState. Items are
+  // keyed by their id (real Discord id or `$ch_$N` symbol), so the parent map
+  // is rebuilt with the touched entry replaced in place.
+  function patchChannel(id: string, next: ChannelBase) {
+    setEditableState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        active: { ...prev.active, channels: { ...prev.active.channels, [id]: next } },
+      };
+    });
+  }
+  function patchRole(id: string, next: Role) {
+    setEditableState((prev) => {
+      if (!prev) return prev;
+      return { ...prev, active: { ...prev.active, roles: { ...prev.active.roles, [id]: next } } };
+    });
+  }
+  function deleteChannel(id: string) {
+    setEditableState((prev) => {
+      if (!prev) return prev;
+      const existing = prev.active.channels[id];
+      if (!existing) return prev;
+      const { [id]: _removed, ...rest } = prev.active.channels;
+      return {
+        ...prev,
+        active: { ...prev.active, channels: rest },
+        tombstones: [
+          ...prev.tombstones,
+          {
+            discordId: existing.id,
+            resourceType: existing.type === 4 ? ("category" as const) : ("channel" as const),
+            name: existing.name,
+            deletedInVersion: prev.version,
+          },
+        ],
+      };
+    });
+  }
+  function deleteRole(id: string) {
+    setEditableState((prev) => {
+      if (!prev) return prev;
+      const existing = prev.active.roles[id];
+      if (!existing) return prev;
+      const { [id]: _removed, ...rest } = prev.active.roles;
+      return {
+        ...prev,
+        active: { ...prev.active, roles: rest },
+        tombstones: [
+          ...prev.tombstones,
+          {
+            discordId: existing.id,
+            resourceType: "role" as const,
+            name: existing.name,
+            deletedInVersion: prev.version,
+          },
+        ],
+      };
+    });
+  }
+  // New items get a $prefix symbol mirroring the server-side store. Symbol
+  // counter is bumped inline; the server's revert/insert path assigns the
+  // final version but doesn't care which local symbol we picked.
+  function addChannel() {
+    setEditableState((prev) => {
+      if (!prev) return prev;
+      const id = `$${"ch"}_${prev.symbolCounter}`;
+      return {
+        ...prev,
+        symbolCounter: prev.symbolCounter + 1,
+        active: {
+          ...prev.active,
+          channels: {
+            ...prev.active.channels,
+            [id]: {
+              id,
+              name: "new-channel",
+              type: 0,
+              parentId: null,
+              position: Object.values(prev.active.channels).length,
+            },
+          },
+        },
+      };
+    });
+  }
+  function addCategory() {
+    setEditableState((prev) => {
+      if (!prev) return prev;
+      const id = `$${"cat"}_${prev.symbolCounter}`;
+      return {
+        ...prev,
+        symbolCounter: prev.symbolCounter + 1,
+        active: {
+          ...prev.active,
+          channels: {
+            ...prev.active.channels,
+            [id]: {
+              id,
+              name: "new-category",
+              type: 4,
+              parentId: null,
+              position: Object.values(prev.active.channels).length,
+            },
+          },
+        },
+      };
+    });
+  }
+  function addRole() {
+    setEditableState((prev) => {
+      if (!prev) return prev;
+      const id = `$${"role"}_${prev.symbolCounter}`;
+      return {
+        ...prev,
+        symbolCounter: prev.symbolCounter + 1,
+        active: {
+          ...prev.active,
+          roles: {
+            ...prev.active.roles,
+            [id]: {
+              id,
+              name: "new-role",
+              position: Object.values(prev.active.roles).length,
+              permissions: [],
+              color: 0,
+              hoist: false,
+              mentionable: false,
+            },
+          },
+        },
+      };
+    });
+  }
 
   // ── Guild picker (only when /studio is hit without a guildId) ──────────────
   const [availableGuilds, setAvailableGuilds] = useState<
@@ -679,348 +916,293 @@ export default function Studio() {
       .finally(() => setGuildsLoading(false));
   }, [guildId]);
 
-  async function removeTemplateFromContext(templateId: string) {
-    if (!conversationId) return;
-    try {
-      await apiFetch(
-        `/api/guilds/${guildId}/conversations/${conversationId}/templates/${templateId}`,
-        {
-          method: "DELETE",
-        }
-      );
-      setActiveTemplates((prev) => prev.filter((t) => t.id !== templateId));
-    } catch {
-      // ignore
-    }
-  }
-
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-discord-bg flex">
-      <div className="flex-1 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-white">Studio {guildId ? `— ${guildId}` : ""}</h1>
-          {conversationId && (
-            <button
-              onClick={() => setShowTemplatePanel(!showTemplatePanel)}
-              className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white rounded text-sm transition"
-            >
-              Templates ({activeTemplates.length})
-            </button>
-          )}
-        </div>
+    <div className="flex-1 flex flex-col min-h-0 bg-discord-bg">
+      <div className="flex flex-1 min-h-0">
+        <div className="flex-1 p-6">
+          <div className="flex items-center justify-between mb-6 gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-full bg-discord-bg-secondary border border-discord-divider flex items-center justify-center shrink-0">
+                <LayoutGrid size={18} className="text-discord-text-muted" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-wider text-discord-text-muted font-semibold">
+                  Studio
+                </div>
+                <h1 className="text-2xl font-semibold tracking-tight text-discord-text truncate">
+                  {guildId ? `Guild ${guildId}` : "Server Configuration"}
+                </h1>
+              </div>
+            </div>
+            {conversationId && (
+              <button
+                onClick={() => setShowTemplatePanel(!showTemplatePanel)}
+                className="px-4 py-2 bg-discord-accent hover:bg-discord-accent-hover text-white rounded text-sm transition"
+              >
+                Templates ({activeTemplates.length})
+              </button>
+            )}
+          </div>
 
-        {/* Template context panel */}
-        {showTemplatePanel && conversationId && (
-          <div className="mb-6 p-4 bg-gray-800 rounded-lg border border-gray-700 max-w-2xl">
-            <div className="text-sm text-gray-300 mb-3">Active Templates</div>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {activeTemplates.map((tmpl) => (
-                <span
-                  key={tmpl.id}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-purple-900/50 text-purple-200 rounded-full text-xs"
-                >
-                  {tmpl.name}
-                  <button
-                    onClick={() => removeTemplateFromContext(tmpl.id)}
-                    className="text-purple-300 hover:text-white ml-1"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-              {activeTemplates.length === 0 && (
-                <span className="text-gray-500 text-xs">No templates in context</span>
+          {/* Template context panel */}
+          {showTemplatePanel && conversationId && guildId && (
+            <TemplatePanel
+              guildId={guildId}
+              conversationId={conversationId}
+              active={activeTemplates}
+              onActiveChange={setActiveTemplates}
+            />
+          )}
+
+          {/* Phase 1: Input */}
+          {phase === "input" && (
+            <div className="space-y-4 max-w-2xl">
+              {!guildId && (
+                <div className="p-4 bg-discord-bg-secondary rounded-lg border border-discord-divider space-y-3">
+                  <div className="text-sm text-discord-text font-medium">
+                    Select a guild to plan against
+                  </div>
+                  {guildsLoading ? (
+                    <div className="text-sm text-discord-text-muted">Loading guilds…</div>
+                  ) : availableGuilds.length === 0 ? (
+                    <div className="text-sm text-discord-text-muted">
+                      No guilds available. Make sure the bot is invited to a guild you admin.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {availableGuilds.map((g) => (
+                        <a
+                          key={g.id}
+                          href={`/studio/${g.id}`}
+                          className="px-3 py-2 rounded bg-discord-bg-tertiary hover:bg-discord-channel-hover text-white text-sm flex items-center gap-2 transition"
+                        >
+                          <span className="truncate">{g.name}</span>
+                          <span className="text-xs text-discord-text-muted ml-auto">
+                            {g.memberCount} members
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              <label className="block text-discord-text-muted text-sm">
+                What would you like to configure?
+              </label>
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="e.g., Create a staff channel and a moderator role..."
+                className="w-full p-4 rounded bg-discord-bg-secondary text-discord-text border border-discord-divider focus:border-discord-accent focus:outline-none"
+                rows={3}
+              />
+              <button
+                onClick={createConversation}
+                className="px-6 py-2 bg-discord-accent hover:bg-discord-accent-hover text-white rounded transition"
+              >
+                Create & Plan
+              </button>
+            </div>
+          )}
+
+          {/* Phase 2: Planning in progress */}
+          {phase === "planning" && (
+            <div className="space-y-3 max-w-2xl">
+              <div className="flex items-center gap-2 text-discord-green">
+                <Loader size={14} className="animate-spin" />
+                Planning in progress...
+              </div>
+              <div className="bg-discord-bg-tertiary rounded p-4 max-h-64 overflow-auto font-mono text-xs space-y-1 border border-discord-divider">
+                {planningEvents.map((ev, i) => (
+                  <div key={i} className="text-discord-text">
+                    {ev.type === "turn_started" && (
+                      <span className="text-discord-text-link">→ Turn started</span>
+                    )}
+                    {ev.type === "tool_called" && (
+                      <span className="text-discord-yellow">
+                        → Tool: {(ev as PlanningEvent).toolName}
+                      </span>
+                    )}
+                    {ev.type === "tool_result" && (
+                      <span className="text-discord-green">
+                        ← Result: {JSON.stringify((ev as PlanningEvent).result)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Phase 3: Ask user */}
+          {phase === "ask_user" && askUserData && (
+            <div className="space-y-4 max-w-2xl p-6 bg-discord-bg-secondary rounded-lg border border-discord-divider">
+              <div className="text-lg text-discord-text font-medium">{askUserData.question}</div>
+              {askUserData.options && askUserData.options.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  {askUserData.options.map((opt) => {
+                    const selected = askUserData.multiSelect
+                      ? askUserSelected.includes(opt.label)
+                      : askUserSelected[0] === opt.label;
+                    return (
+                      <button
+                        key={opt.label}
+                        onClick={() => {
+                          if (askUserData.multiSelect) {
+                            setAskUserSelected((prev) =>
+                              prev.includes(opt.label)
+                                ? prev.filter((l) => l !== opt.label)
+                                : [...prev, opt.label]
+                            );
+                          } else {
+                            setAskUserSelected([opt.label]);
+                          }
+                        }}
+                        className={`px-4 py-2 rounded transition flex items-center gap-1 ${
+                          selected
+                            ? "bg-discord-accent text-white"
+                            : "bg-discord-bg-tertiary text-discord-text hover:bg-discord-channel-hover"
+                        }`}
+                      >
+                        {selected && askUserData.multiSelect ? <Check size={14} /> : null}
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {(!askUserData.options ||
+                askUserData.options.length === 0 ||
+                askUserData.allowCustom) && (
+                <input
+                  value={askUserCustom}
+                  onChange={(e) => setAskUserCustom(e.target.value)}
+                  className="w-full p-3 rounded bg-discord-bg-tertiary text-discord-text border border-discord-divider focus:border-discord-accent focus:outline-none"
+                  placeholder={
+                    askUserData.options && askUserData.options.length > 0
+                      ? "Or type a custom answer..."
+                      : "Your answer..."
+                  }
+                />
+              )}
+              <button
+                onClick={submitAskUser}
+                disabled={askUserSelected.length === 0 && !askUserCustom.trim()}
+                className="px-6 py-2 bg-discord-accent hover:bg-discord-accent-hover disabled:bg-discord-bg-tertiary text-white rounded transition"
+              >
+                Submit Answer
+              </button>
+            </div>
+          )}
+
+          {/* Phase 4: Completed → Approve / Revise / Edit */}
+          {phase === "completed" && (
+            <div className="space-y-4 max-w-2xl">
+              <div className="flex items-center gap-2 text-discord-green text-lg font-medium">
+                <Check size={18} />
+                Planning complete!
+              </div>
+              {summary && !editing && <div className="text-discord-text">{summary}</div>}
+              <DesiredStateView
+                desiredState={editing ? editableState : desiredState}
+                currentState={editing ? null : currentState}
+                editing={editing}
+                onChannelChange={patchChannel}
+                onChannelDelete={deleteChannel}
+                onChannelAdd={addChannel}
+                onCategoryChange={patchChannel}
+                onCategoryDelete={deleteChannel}
+                onCategoryAdd={addCategory}
+                onRoleChange={patchRole}
+                onRoleDelete={deleteRole}
+                onRoleAdd={addRole}
+              />
+              {!editing && (
+                <>
+                  <IterationHistory
+                    iterations={iterations}
+                    currentVersion={
+                      iterations.length > 0 ? Math.max(...iterations.map((i) => i.version)) : null
+                    }
+                    canRevert
+                    onRevert={revert}
+                  />
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Enter a revision prompt (optional)..."
+                    className="w-full p-3 rounded bg-discord-bg-secondary text-discord-text border border-discord-divider focus:border-discord-accent focus:outline-none text-sm"
+                    rows={2}
+                  />
+                </>
               )}
             </div>
-            <div className="text-xs text-gray-500">
-              Templates are added as ideas for the LLM. They are not merged automatically.
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* Phase 1: Input */}
-        {phase === "input" && (
-          <div className="space-y-4 max-w-2xl">
-            {!guildId && (
-              <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 space-y-3">
-                <div className="text-sm text-gray-300 font-medium">
-                  Select a guild to plan against
-                </div>
-                {guildsLoading ? (
-                  <div className="text-sm text-gray-500">Loading guilds…</div>
-                ) : availableGuilds.length === 0 ? (
-                  <div className="text-sm text-gray-500">
-                    No guilds available. Make sure the bot is invited to a guild you admin.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {availableGuilds.map((g) => (
-                      <a
-                        key={g.id}
-                        href={`/studio/${g.id}`}
-                        className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm flex items-center gap-2 transition"
-                      >
-                        <span className="truncate">{g.name}</span>
-                        <span className="text-xs text-gray-400 ml-auto">
-                          {g.memberCount} members
-                        </span>
-                      </a>
-                    ))}
-                  </div>
-                )}
+          {/* Phase 5: Executing */}
+          {phase === "executing" && (
+            <div className="space-y-3 max-w-2xl">
+              <div className="flex items-center gap-2 text-discord-yellow">
+                <Loader size={14} className="animate-spin" />
+                Executing plan...
               </div>
-            )}
-            <label className="block text-discord-text-muted text-sm">
-              What would you like to configure?
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="e.g., Create a staff channel and a moderator role..."
-              className="w-full p-4 rounded bg-gray-800 text-white border border-gray-700 focus:border-blue-500 focus:outline-none"
-              rows={3}
-            />
-            <button
-              onClick={createConversation}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded transition"
-            >
-              Create & Plan
-            </button>
-          </div>
-        )}
-
-        {/* Phase 2: Planning in progress */}
-        {phase === "planning" && (
-          <div className="space-y-3 max-w-2xl">
-            <div className="flex items-center gap-2 text-green-400">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              Planning in progress...
+              <ExecutionStatus events={execEvents} />
             </div>
-            <div className="bg-gray-900 rounded p-4 max-h-64 overflow-auto font-mono text-xs space-y-1">
-              {planningEvents.map((ev, i) => (
-                <div key={i} className="text-gray-300">
-                  {ev.type === "turn_started" && (
-                    <span className="text-blue-400">→ Turn started</span>
-                  )}
-                  {ev.type === "tool_called" && (
-                    <span className="text-yellow-400">
-                      → Tool: {(ev as PlanningEvent).toolName}
-                    </span>
-                  )}
-                  {ev.type === "tool_result" && (
-                    <span className="text-green-400">
-                      ← Result: {JSON.stringify((ev as PlanningEvent).result)}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={cancelPlanning}
-              className="px-4 py-1 bg-red-700 hover:bg-red-600 text-white rounded text-sm transition"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
+          )}
 
-        {/* Phase 3: Ask user */}
-        {phase === "ask_user" && askUserData && (
-          <div className="space-y-4 max-w-2xl p-6 bg-gray-800 rounded-lg border border-gray-700">
-            <div className="text-lg text-white font-medium">{askUserData.question}</div>
-            {askUserData.options && askUserData.options.length > 0 && (
-              <div className="flex gap-2 flex-wrap">
-                {askUserData.options.map((opt) => {
-                  const selected = askUserData.multiSelect
-                    ? askUserSelected.includes(opt.label)
-                    : askUserSelected[0] === opt.label;
-                  return (
-                    <button
-                      key={opt.label}
-                      onClick={() => {
-                        if (askUserData.multiSelect) {
-                          setAskUserSelected((prev) =>
-                            prev.includes(opt.label)
-                              ? prev.filter((l) => l !== opt.label)
-                              : [...prev, opt.label]
-                          );
-                        } else {
-                          setAskUserSelected([opt.label]);
-                        }
-                      }}
-                      className={`px-4 py-2 rounded transition ${
-                        selected
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-700 text-gray-200 hover:bg-gray-600"
-                      }`}
-                    >
-                      {selected && askUserData.multiSelect ? "✓ " : ""}
-                      {opt.label}
-                    </button>
-                  );
-                })}
+          {/* Phase 6: Executed — footer (ActionBar) provides Rollback / New Plan */}
+          {phase === "executed" && (
+            <div className="space-y-4 max-w-2xl">
+              <div className="flex items-center gap-2 text-discord-green text-lg font-medium">
+                <Check size={18} />
+                Execution complete!
               </div>
-            )}
-            {(!askUserData.options ||
-              askUserData.options.length === 0 ||
-              askUserData.allowCustom) && (
-              <input
-                value={askUserCustom}
-                onChange={(e) => setAskUserCustom(e.target.value)}
-                className="w-full p-3 rounded bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
-                placeholder={
-                  askUserData.options && askUserData.options.length > 0
-                    ? "Or type a custom answer..."
-                    : "Your answer..."
-                }
-              />
-            )}
-            <button
-              onClick={submitAskUser}
-              disabled={askUserSelected.length === 0 && !askUserCustom.trim()}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 text-white rounded transition"
-            >
-              Submit Answer
-            </button>
-          </div>
-        )}
-
-        {/* Phase 4: Completed → Approve / Revise */}
-        {phase === "completed" && (
-          <div className="space-y-4 max-w-2xl">
-            <div className="text-green-400 text-lg font-medium">Planning complete!</div>
-            {summary && <div className="text-white">{summary}</div>}
-            {desiredState !== null && (
-              <div className="bg-gray-900 rounded p-4 overflow-auto max-h-96">
-                <pre className="text-xs text-gray-300">{JSON.stringify(desiredState, null, 2)}</pre>
-              </div>
-            )}
-            <div className="flex gap-3 flex-wrap">
-              <button
-                onClick={approve}
-                className="px-6 py-2 bg-green-600 hover:bg-green-500 text-white rounded transition"
-              >
-                Approve & Execute
-              </button>
-              <button
-                onClick={revise}
-                className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded transition"
-              >
-                Revise
-              </button>
-              <button
-                onClick={resetPlanningState}
-                className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
-              >
-                New Prompt
-              </button>
+              <ExecutionStatus events={execEvents} />
             </div>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Enter a revision prompt (optional)..."
-              className="w-full p-3 rounded bg-gray-800 text-white border border-gray-700 focus:border-purple-500 focus:outline-none text-sm"
-              rows={2}
-            />
-          </div>
-        )}
+          )}
 
-        {/* Phase 5: Executing */}
-        {phase === "executing" && (
-          <div className="space-y-3 max-w-2xl">
-            <div className="flex items-center gap-2 text-yellow-400">
-              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-              Executing plan...
-            </div>
-            <div className="bg-gray-900 rounded p-4 max-h-64 overflow-auto font-mono text-xs space-y-1">
-              {execEvents.map((ev, i) => (
-                <div key={i} className="text-gray-300">
-                  {ev.type === "step_started" && (
-                    <span className="text-yellow-400">
-                      → Step {(ev as ExecEvent).stepIndex} started
-                    </span>
-                  )}
-                  {ev.type === "step_completed" && (
-                    <span className="text-green-400">
-                      ← Step {(ev as ExecEvent).stepIndex} completed
-                    </span>
-                  )}
-                  {ev.type === "step_failed" && (
-                    <span className="text-red-400">
-                      ✗ Step {(ev as ExecEvent).stepIndex} failed: {(ev as ExecEvent).error}
-                    </span>
-                  )}
-                  {ev.type === "step_retry" && (
-                    <span className="text-orange-400">
-                      ⟳ Step {(ev as ExecEvent).stepIndex} retrying: {(ev as ExecEvent).error}
-                    </span>
-                  )}
-                  {ev.type === "rollback_started" && (
-                    <span className="text-purple-400">↺ Rollback started...</span>
-                  )}
-                  {ev.type === "rollback_completed" && (
-                    <span className="text-green-400">↺ Rollback completed</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Phase 6: Executed → Rollback */}
-        {phase === "executed" && (
-          <div className="space-y-4 max-w-2xl">
-            <div className="text-green-400 text-lg font-medium">Execution complete!</div>
-            <div className="flex gap-3">
-              <button
-                onClick={rollback}
-                className="px-6 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded transition"
-              >
-                Rollback
-              </button>
-              <button
-                onClick={resetPlanningState}
-                className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
-              >
-                New Plan
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Phase 6b: Execution failed → distinguish from "completed" so the
+          {/* Phase 6b: Execution failed → distinguish from "completed" so the
             user doesn't mistake it for a successful plan */}
-        {phase === "execute_failed" && (
-          <div className="space-y-4 max-w-2xl">
-            <div className="text-red-400 text-lg font-medium">Execution failed</div>
-            {error && <div className="text-white">{error}</div>}
-            <div className="flex gap-3">
-              <button
-                onClick={resetPlanningState}
-                className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition"
-              >
-                Start Over
-              </button>
+          {phase === "execute_failed" && (
+            <div className="space-y-4 max-w-2xl">
+              <div className="flex items-center gap-2 text-discord-red text-lg font-medium">
+                <CircleAlert size={18} />
+                Execution failed
+              </div>
+              {error && <div className="text-discord-text">{error}</div>}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Error banner */}
-        {error && (
-          <div className="mt-6 p-4 bg-red-900/50 border border-red-700 rounded text-red-200 max-w-2xl">
-            {error}
-          </div>
+          {/* Error banner */}
+          {error && (
+            <div className="mt-6 p-4 bg-red-900/50 border border-red-700 rounded text-red-200 max-w-2xl">
+              {error}
+            </div>
+          )}
+        </div>
+        {guildId && (
+          <ProcedureSidebar
+            phaseProgress={phaseProgress}
+            onSendPrompt={handleSidebarSendPrompt}
+            selectedPhase={selectedPhase}
+            onSelectPhase={setSelectedPhase}
+          />
         )}
       </div>
-      {guildId && (
-        <ProcedureSidebar
-          phaseProgress={phaseProgress}
-          onSendPrompt={handleSidebarSendPrompt}
-          selectedPhase={selectedPhase}
-          onSelectPhase={setSelectedPhase}
-        />
-      )}
+      <ActionBar
+        phase={phase}
+        inFlight={inFlight}
+        onApprove={approve}
+        onRevise={revise}
+        onCancel={cancelPlanning}
+        onRollback={rollback}
+        onNewPlan={resetPlanningState}
+        editing={editing}
+        onEnterEdit={enterEditMode}
+        onSaveEdit={saveEdit}
+        onCancelEdit={cancelEdit}
+      />
     </div>
   );
 }

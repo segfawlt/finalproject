@@ -115,7 +115,6 @@ export function setupBotEvents() {
           type: channel.type,
           parentId: channel.parentId,
           position: (channel as { position?: number }).position ?? 0,
-          messageCount: 0,
           lockPermissions:
             (channel as unknown as { permissionsLocked?: boolean | null }).permissionsLocked ??
             undefined,
@@ -176,11 +175,6 @@ export function setupBotEvents() {
       type: channel.type,
       parentId: channel.parentId,
       position: (channel as { position?: number }).position ?? 0,
-      // NOTE: messageCount starts at 0 because Discord does not expose a
-      // historical message count API. The count only includes messages
-      // observed while the bot is running. This is a known Phase 1
-      // limitation — the count is approximate and understated.
-      messageCount: 0,
       lockPermissions: channel.permissionsLocked ?? undefined,
     });
   });
@@ -190,14 +184,12 @@ export function setupBotEvents() {
     const cache = guildCache.get(newChannel.guildId);
     if (!cache) return;
 
-    const existing = cache.channels.get(newChannel.id);
     cache.channels.set(newChannel.id, {
       id: newChannel.id,
       name: newChannel.name,
       type: newChannel.type,
       parentId: newChannel.parentId,
       position: (newChannel as { position?: number }).position ?? 0,
-      messageCount: existing?.messageCount ?? 0,
       lockPermissions: newChannel.permissionsLocked ?? undefined,
     });
 
@@ -303,41 +295,6 @@ export function setupBotEvents() {
     }
   });
 
-  botClient.on(Events.MessageCreate, (message) => {
-    if (message.guildId) {
-      const cache = guildCache.get(message.guildId);
-      if (cache) {
-        const entry = cache.channels.get(message.channelId);
-        if (entry) {
-          entry.messageCount = (entry.messageCount ?? 0) + 1;
-        }
-      }
-    }
-  });
-
-  botClient.on(Events.MessageDelete, (message) => {
-    if (message.guildId) {
-      const cache = guildCache.get(message.guildId);
-      if (cache) {
-        const entry = cache.channels.get(message.channelId);
-        if (entry) {
-          entry.messageCount = Math.max(0, (entry.messageCount ?? 0) - 1);
-        }
-      }
-    }
-  });
-
-  botClient.on(Events.MessageBulkDelete, (messages) => {
-    const first = messages.first();
-    if (!first?.guildId) return;
-    const cache = guildCache.get(first.guildId);
-    if (!cache) return;
-    const entry = cache.channels.get(first.channelId);
-    if (entry) {
-      entry.messageCount = Math.max(0, (entry.messageCount ?? 0) - messages.size);
-    }
-  });
-
   botClient.on(Events.GuildCreate, async (guild) => {
     initGuildCache(guild.id);
 
@@ -361,7 +318,6 @@ export function setupBotEvents() {
       await db.update(guilds).set({ name: guild.name }).where(eq(guilds.id, guild.id));
     }
 
-    // Initialize channels with messageCount: 0
     const cache = guildCache.get(guild.id);
     if (cache) {
       for (const [, channel] of guild.channels.cache) {
@@ -371,7 +327,6 @@ export function setupBotEvents() {
           type: channel.type,
           parentId: channel.parentId,
           position: (channel as { position?: number }).position ?? 0,
-          messageCount: 0,
           lockPermissions:
             (channel as unknown as { permissionsLocked?: boolean | null }).permissionsLocked ??
             undefined,

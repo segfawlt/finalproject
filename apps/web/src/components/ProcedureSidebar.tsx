@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Check, Circle, ArrowRight } from "lucide-react";
 
 const PHASE_ORDER = ["foundation", "layout", "access", "people"] as const;
 
@@ -97,8 +98,8 @@ export default function ProcedureSidebar({
   }
 
   return (
-    <div className="w-64 shrink-0 bg-gray-900 border-l border-gray-800 p-4 flex flex-col h-full">
-      <div className="text-sm font-semibold text-gray-300 mb-3">Recommended order</div>
+    <div className="w-64 shrink-0 bg-discord-bg-tertiary border-l border-discord-divider p-4 flex flex-col h-full">
+      <div className="text-sm font-semibold text-discord-text mb-3">Recommended order</div>
 
       <div className="space-y-2 mb-4">
         {PHASE_ORDER.map((phase) => {
@@ -109,56 +110,62 @@ export default function ProcedureSidebar({
             <button
               key={phase}
               onClick={() => handlePhaseClick(phase)}
-              className={`w-full text-left px-3 py-2 rounded text-sm transition ${
+              className={`w-full text-left px-3 py-2 rounded text-sm transition flex items-center gap-2 ${
                 isSelected
-                  ? "bg-purple-800 text-purple-200"
+                  ? "bg-discord-accent text-white"
                   : completed
-                    ? "bg-gray-800 text-green-400"
-                    : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                    ? "bg-discord-bg-secondary text-discord-green"
+                    : "bg-discord-bg-secondary text-discord-text-muted hover:bg-discord-channel-hover"
               }`}
             >
-              <span className="mr-2">{completed ? "✅" : "○"}</span>
+              {completed ? (
+                <Check size={14} className="shrink-0" />
+              ) : (
+                <Circle size={14} className="shrink-0" />
+              )}
               {PHASE_NAMES[phase]}
             </button>
           );
         })}
       </div>
 
-      <div className="border-t border-gray-700 my-3" />
+      <div className="border-t border-discord-divider my-3" />
 
       {selectedPhase ? (
         <div className="flex-1 flex flex-col">
-          <div className="text-sm text-purple-300 mb-2">Phase: {PHASE_NAMES[selectedPhase]}</div>
+          <div className="text-sm text-discord-text-link mb-2">
+            Phase: {PHASE_NAMES[selectedPhase]}
+          </div>
           <button
             onClick={handleSendPrompt}
-            className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded text-sm transition"
+            className="w-full px-4 py-2 bg-discord-accent hover:bg-discord-accent-hover text-white rounded text-sm transition flex items-center justify-center gap-2"
           >
-            Use prompt →
+            Use prompt <ArrowRight size={14} />
           </button>
         </div>
       ) : (
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-discord-text-muted">
           Select a phase above to use its predefined prompt, or type your own prompt below.
         </div>
       )}
 
       {showWarning && editingPrompt && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md mx-4">
-            <div className="text-sm text-yellow-300 mb-4">
+          <div className="bg-discord-bg-secondary border border-discord-divider rounded-lg p-6 max-w-md mx-4">
+            <div className="text-sm text-discord-yellow mb-4">
               {getDeprecationWarning(editingPrompt, phaseProgress)}
               {" Continue anyway?"}
             </div>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={handleCancelWarning}
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm transition"
+                className="px-4 py-2 bg-discord-bg-tertiary hover:bg-discord-channel-hover text-white rounded text-sm transition"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmWarning}
-                className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded text-sm transition"
+                className="px-4 py-2 bg-discord-yellow hover:bg-discord-yellow/80 text-discord-bg-tertiary rounded text-sm transition"
               >
                 Continue
               </button>

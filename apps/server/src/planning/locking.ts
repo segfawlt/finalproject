@@ -78,8 +78,8 @@ export async function clearStaleLocks(
   const heartbeatStaleMs = options.heartbeatStaleMs ?? DEFAULT_HEARTBEAT_STALE_MS;
   const ttlMs = options.ttlMs ?? DEFAULT_LOCK_TTL_MS;
   const now = Date.now();
-  const heartbeatCutoff = new Date(now - heartbeatStaleMs);
-  const ttlCutoff = new Date(now - ttlMs);
+  const heartbeatCutoff = new Date(now - heartbeatStaleMs).toISOString();
+  const ttlCutoff = new Date(now - ttlMs).toISOString();
 
   const stale = await db
     .select({ id: guilds.id })
