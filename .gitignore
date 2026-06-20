@@ -1,4 +1,10 @@
-.opencode/
+# .opencode/ contains a local OpenCode install (its own package.json, node_modules, etc.)
+# Track the project-specific skills and prompts; the inner .opencode/.gitignore
+# handles the vendored dependencies.
+.opencode/node_modules/
+.opencode/package.json
+.opencode/package-lock.json
+.opencode/bun.lock
 node_modules/
 dist/
 .turbo/
@@ -10,3 +16,4 @@ dist/
 session-*.md
 .grepai/
 .worktrees/
+docs/api/
