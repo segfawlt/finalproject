@@ -32,6 +32,31 @@ AI-driven Discord server management platform. Administrators describe server con
 - For multi-step tasks, state a brief plan with verification checkpoints.
 - Loop until verified — don't stop at "should work now."
 
+### Keep Docs In Sync
+
+When you change code, update the affected docs in the same change. If a rule, command, env var, or file path in AGENTS.md no longer matches the code, fix the doc. Same for design docs under `docs/design/`. Don't expand doc scope — just keep it accurate. Line counts, file lists, and command tables go stale fast; treat them as living.
+
+**Specifically for `docs/IMPLEMENTATION_STATUS.md`:** when you add, remove, or significantly change a feature/route/file, update the matching entry in the same commit — add new files to the right subsection, move resolved gaps to "Recently resolved", and bump the "Last updated" date at the top. If a sweep is overdue, run a fresh inventory check before editing.
+
+### Compound Learnings
+
+`docs/learnings/` holds durable lessons captured by the `compound` skill — bug fixes, design decisions, non-obvious workarounds. Each learning is a standalone markdown file with YAML frontmatter, organized by category.
+
+**Before non-trivial work:** read `docs/learnings/README.md` (the index) and check entries with relevant tags. If a learning's tag matches your current task, read the full file and apply the lesson. When you apply an existing learning, increment its `## References` count (the `compound` skill will surface the increment for you).
+
+**When to write a new learning:** invoke the `compound` skill after any of these:
+- **After any `systematic-debugging` session resolves a bug, invoke `compound` before moving on to the next task** (this is the primary trigger)
+- Fixed a non-trivial bug (outside of formal debugging)
+- Solved a tricky problem that took more than one attempt
+- Discovered a non-obvious workaround for a library, framework, or Discord.js quirk
+- Resolved a design decision with surprising rationale
+
+**Promotion:** the `compound` skill surfaces lessons referenced 3+ times in `docs/learnings/README.md` → "## Promote Candidates". Review weekly. If a lesson deserves a spot in this file as a project-wide rule, copy its core directive here. The agent never writes to AGENTS.md directly.
+
+**Hygiene:** run the `compound-refresh` skill monthly (or after major refactors) to detect stale references, duplicates, and obsolete docs.
+
+**Session-end check:** if this session produced a durable lesson and `compound` was not invoked during the work, invoke it before ending.
+
 ## Tech Stack
 
 | Layer     | Technology                                           |
@@ -49,14 +74,32 @@ AI-driven Discord server management platform. Administrators describe server con
 ```
 apps/
 ├── web/          Vite + React SPA (Studio + Dashboard)
-├── server/       Hono API + Discord.js Bot (monolith)
-└── docs/         Astro (Landing page + Documentation)
+└── server/       Hono API + Discord.js Bot (monolith)
 packages/
 ├── shared/       Tool registry, types, validation utilities
 └── db/           Drizzle ORM schema, migrations
+docs/             Design docs + issues (markdown)
 ```
 
 Key design documents live under [`docs/design/`](./docs/design/). Change management uses Superpowers skills.
+
+## Implementation Status
+
+Before exploring code, read [`docs/IMPLEMENTATION_STATUS.md`](./docs/IMPLEMENTATION_STATUS.md) — it's a flat checklist of what's actually built per subsystem, with file paths, plus known gaps and a drift log of corrections to other docs. When design docs, issue docs, or comments disagree with code, that file wins.
+
+For API-level detail (function signatures, types, interfaces), run `pnpm docs:api` to generate HTML reference in `docs/api/`, then grep the output. Output is gitignored.
+
+**Entry points:**
+
+| App      | File                           | Purpose                               |
+| -------- | ------------------------------ | ------------------------------------- |
+| `server` | `apps/server/src/index.ts`     | Process entry — starts Hono + bot     |
+| `server` | `apps/server/src/hono/app.ts`  | Hono app composition, mounts routes   |
+| `server` | `apps/server/src/bot/index.ts` | Discord bot lifecycle                 |
+| `web`    | `apps/web/src/main.tsx`        | React entry, mounts router            |
+| `web`    | `apps/web/src/App.tsx`         | Route table                           |
+| `shared` | `packages/shared/src/index.ts` | Public barrel (`export *`)            |
+| `db`     | `packages/db/src/index.ts`     | DB barrel; `schema.ts` exports tables |
 
 ## Code Conventions
 
@@ -172,9 +215,12 @@ const [created] = await db.insert(guilds).values(data).returning();
 | Command             | Description                                    |
 | ------------------- | ---------------------------------------------- |
 | `pnpm dev`          | Start web app + server concurrently            |
+| `pnpm test`         | Run Vitest in watch mode                       |
+| `pnpm test:run`     | Run Vitest once (CI)                           |
 | `pnpm lint`         | Run ESLint across all packages                 |
 | `pnpm format`       | Format code with Prettier                      |
 | `pnpm format:check` | Check formatting (CI)                          |
+| `pnpm typecheck`    | Run `tsc --noEmit` across all packages         |
 | `pnpm db:generate`  | Generate Drizzle migration from schema changes |
 | `pnpm db:migrate`   | Apply pending migrations                       |
 | `pnpm db:studio`    | Open Drizzle Studio (database GUI)             |
@@ -214,7 +260,7 @@ Copy `.env.example` to `.env` and fill in:
 | `NODE_ENV`              | Environment (`development`, `production`)                   |
 | `VITE_API_URL`          | API URL for the web app (in `apps/web/.env`)                |
 
-`OPENROUTER_API_KEY` and `OPENROUTER_MODEL` are required at runtime for AI features but not yet in `.env.example` — add them when configuring OpenRouter.
+`LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL` are required at runtime for AI features (see `.env.example`). Leave `LLM_API_KEY` unset in development to use the mock planner.
 
 **Never commit `.env` files or secrets.**
 
@@ -250,14 +296,14 @@ The codebase has a clean architecture: most planning code depends on the `Execut
 
 | File                                                                                                     | What to test                                                                   |
 | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `packages/shared/src/state/desired-state-store.ts` (293 lines)                                           | CRUD operations, validation errors, symbol generation, fork/snapshot/revert    |
+| `packages/shared/src/state/desired-state-store.ts`                                                       | CRUD operations, validation errors, symbol generation, fork/snapshot/revert    |
 | `packages/shared/src/state/fork.ts`                                                                      | ServerState → DesiredState transformation                                      |
 | `packages/shared/src/constants.ts`                                                                       | bitfieldToPermissionNames, permissionNamesToBitfield, parsePermissionString    |
 | `packages/shared/src/hash-server-state.ts`                                                               | Deterministic hashing, stable stringify                                        |
 | `packages/shared/src/tools/channels.ts`, `roles.ts`, `categories.ts`, `permissions.ts`, `interaction.ts` | plan functions, assumptions, execute (with mock ctx)                           |
 | `packages/shared/src/tools/registry.ts`                                                                  | Registry invariants, getTool error cases                                       |
 | `packages/shared/src/zod-schemas.ts`                                                                     | Schema parse/safeParse                                                         |
-| `apps/server/src/planning/diff-engine.ts` (519 lines)                                                    | Full 3-phase diff algorithm, edge cases — **highest-value test target**        |
+| `apps/server/src/planning/diff-engine.ts`                                                                | Full 3-phase diff algorithm, edge cases — **highest-value test target**        |
 | `apps/server/src/planning/validation.ts`                                                                 | Validation groups B–E (pure functions on PlanStep[]/DesiredState)              |
 | `apps/server/src/planning/event-bus.ts`                                                                  | Pub/sub subscribe/emit/unsubscribe                                             |
 | `apps/server/src/planning/execution-engine.ts`                                                           | resolveSymbols, isTransientError, isKnownError, computeBackoff, getInverseTool |
