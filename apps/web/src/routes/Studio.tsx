@@ -10,6 +10,8 @@ import TemplatePanel from "../components/TemplatePanel";
 import StudioShell from "../components/studio/StudioShell";
 import StudioHeader from "../components/studio/StudioHeader";
 import ConversationSidebar from "../components/studio/ConversationSidebar";
+import WelcomeScreen from "../components/studio/WelcomeScreen";
+import { useGuildName } from "../hooks/useGuildName";
 import { apiFetch } from "../lib/api";
 
 interface PlanningEvent {
@@ -37,6 +39,7 @@ function parseSseData<T>(e: Event): T | null {
 
 export default function Studio() {
   const { guildId } = useParams<{ guildId: string }>();
+  const guildName = useGuildName(guildId);
 
   // ── Phase & IDs ──────────────────────────────────────────────────────────
   const [phase, setPhase] = useState<StudioPhase>("input");
@@ -119,8 +122,9 @@ export default function Studio() {
   // The 4-phase model was internal scaffolding; chat UX replaces it.
 
   // ── Phase 1: Create conversation & start planning ────────────────────────
-  async function createConversation() {
-    if (!prompt.trim()) {
+  async function createConversation(initialPrompt?: string) {
+    const userPrompt = (initialPrompt ?? prompt).trim();
+    if (!userPrompt) {
       showError("Enter a prompt first.");
       return;
     }
@@ -135,11 +139,12 @@ export default function Studio() {
       setDesiredState(null);
       setIterations([]);
       setCurrentState(null);
+      setPrompt(userPrompt);
 
       try {
         const res = await apiFetch(`/api/guilds/${guildId}/conversations`, {
           method: "POST",
-          body: { userPrompt: prompt },
+          body: { userPrompt },
         });
 
         if (!res.ok) {
@@ -940,18 +945,18 @@ export default function Studio() {
             />
           )}
 
-          {/* Phase 1: Input */}
+          {/* Phase 1: Input — guild picker (no guild) or welcome (guild picked) */}
           {phase === "input" && (
-            <div className="space-y-4 max-w-2xl">
+            <>
               {!guildId && (
-                <div className="p-4 bg-discord-bg-secondary rounded-lg border border-discord-divider space-y-3">
-                  <div className="text-sm text-discord-text font-medium">
+                <div className="max-w-2xl mx-auto py-8 space-y-3">
+                  <div className="text-sm text-shell-text font-medium">
                     Select a guild to plan against
                   </div>
                   {guildsLoading ? (
-                    <div className="text-sm text-discord-text-muted">Loading guilds…</div>
+                    <div className="text-sm text-shell-text-muted">Loading guilds…</div>
                   ) : availableGuilds.length === 0 ? (
-                    <div className="text-sm text-discord-text-muted">
+                    <div className="text-sm text-shell-text-muted">
                       No guilds available. Make sure the bot is invited to a guild you admin.
                     </div>
                   ) : (
@@ -960,10 +965,10 @@ export default function Studio() {
                         <a
                           key={g.id}
                           href={`/studio/${g.id}`}
-                          className="px-3 py-2 rounded bg-discord-bg-tertiary hover:bg-discord-channel-hover text-white text-sm flex items-center gap-2 transition"
+                          className="px-3 py-2 rounded bg-shell-surface hover:bg-shell-surface2 text-shell-text text-sm flex items-center gap-2 border border-shell-border hover:border-shell-border-strong transition"
                         >
                           <span className="truncate">{g.name}</span>
-                          <span className="text-xs text-discord-text-muted ml-auto">
+                          <span className="text-xs text-shell-text-muted ml-auto">
                             {g.memberCount} members
                           </span>
                         </a>
@@ -972,23 +977,14 @@ export default function Studio() {
                   )}
                 </div>
               )}
-              <label className="block text-discord-text-muted text-sm">
-                What would you like to configure?
-              </label>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g., Create a staff channel and a moderator role..."
-                className="w-full p-4 rounded bg-discord-bg-secondary text-discord-text border border-discord-divider focus:border-discord-accent focus:outline-none"
-                rows={3}
-              />
-              <button
-                onClick={createConversation}
-                className="px-6 py-2 bg-discord-accent hover:bg-discord-accent-hover text-white rounded transition"
-              >
-                Create & Plan
-              </button>
-            </div>
+              {guildId && (
+                <WelcomeScreen
+                  guildName={guildName || guildId}
+                  onPromptSelect={createConversation}
+                  disabled={inFlight}
+                />
+              )}
+            </>
           )}
 
           {/* Phase 2: Planning in progress */}

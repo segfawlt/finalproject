@@ -1,7 +1,6 @@
 import { Link, useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
 import { ArrowLeft, FileText, Settings } from "lucide-react";
-import { apiFetch } from "../../lib/api";
+import { useGuildName } from "../../hooks/useGuildName";
 
 /**
  * Contextual header for the Studio route. Renders below the top-level
@@ -9,26 +8,7 @@ import { apiFetch } from "../../lib/api";
  */
 export default function StudioHeader() {
   const { guildId } = useParams<{ guildId: string }>();
-  const [guildName, setGuildName] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!guildId) {
-      setGuildName(null);
-      return;
-    }
-    let cancelled = false;
-    apiFetch(`/api/guilds/${guildId}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { name?: string } | null) => {
-        if (!cancelled && data?.name) setGuildName(data.name);
-      })
-      .catch(() => {
-        /* swallow — name stays null and the header falls back to the id */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [guildId]);
+  const guildName = useGuildName(guildId);
 
   return (
     <div className="h-12 shrink-0 border-b border-shell-border bg-shell-surface flex items-center px-4 gap-3">
