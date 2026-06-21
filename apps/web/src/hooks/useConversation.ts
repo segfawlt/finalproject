@@ -1,0 +1,758 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "../lib/api";
+import { parseSseData } from "../lib/sse";
+import type { DesiredState, ServerState } from "../components/desired-state";
+import type { IterationRow } from "../components/IterationHistory";
+
+// ── Phase + event types ───────────────────────────────────────────────────
+
+export type StudioPhase =
+  | "input"
+  | "planning"
+  | "ask_user"
+  | "completed"
+  | "executing"
+  | "executed"
+  | "execute_failed";
+
+export interface PlanningEvent {
+  type: "turn_started" | "tool_called" | "tool_result";
+  toolName?: string;
+  params?: unknown;
+  result?: unknown;
+}
+
+export type ExecEvent =
+  | { type: "step_started"; stepIndex?: number }
+  | { type: "step_completed"; stepIndex?: number; result?: unknown }
+  | { type: "step_failed"; stepIndex?: number; error?: string }
+  | { type: "step_retry"; stepIndex?: number; error?: string }
+  | { type: "rollback_started" }
+  | { type: "rollback_completed" };
+
+export interface AskUserData {
+  question: string;
+  options?: Array<{ label: string }>;
+  multiSelect?: boolean;
+  allowCustom?: boolean;
+}
+
+export interface ActiveTemplate {
+  id: string;
+  name: string;
+}
+
+export interface UseConversationArgs {
+  guildId: string | undefined;
+}
+
+export interface UseConversationResult {
+  // Lifecycle
+  phase: StudioPhase;
+  conversationId: string | null;
+  planId: string | null;
+  error: string;
+  inFlight: boolean;
+
+  // User-authored prompt (for the revise textarea and as the fallback
+  // for createConversation when no initial prompt is supplied)
+  prompt: string;
+
+  // Planning data
+  planningEvents: PlanningEvent[];
+  askUserData: AskUserData | null;
+  askUserSelected: string[];
+  askUserCustom: string;
+  summary: string;
+  desiredState: DesiredState | null;
+  iterations: IterationRow[];
+  currentState: ServerState | null;
+
+  // Execution data
+  execEvents: ExecEvent[];
+
+  // Templates
+  activeTemplates: ActiveTemplate[];
+  showTemplatePanel: boolean;
+
+  // Setters for child-controlled inputs (useState setters — accept value
+  // or a functional updater, matching React's standard signature)
+  setAskUserSelected: React.Dispatch<React.SetStateAction<string[]>>;
+  setAskUserCustom: (v: string) => void;
+  setActiveTemplates: React.Dispatch<React.SetStateAction<ActiveTemplate[]>>;
+  setShowTemplatePanel: (v: boolean) => void;
+  setPrompt: (v: string) => void;
+  setError: (v: string) => void;
+
+  // Actions
+  createConversation: (initialPrompt?: string) => Promise<void>;
+  submitAskUser: () => Promise<void>;
+  loadConversation: (convId: string) => Promise<void>;
+  reset: () => void;
+  cancelPlanning: () => Promise<void>;
+  approve: () => Promise<void>;
+  rollback: () => Promise<void>;
+  revise: (newPrompt: string) => Promise<void>;
+  revert: (version: number) => Promise<void>;
+  clearError: () => void;
+}
+
+// ── Hook ──────────────────────────────────────────────────────────────────
+
+/**
+ * Owns the conversation lifecycle for a single guild: planning SSE,
+ * execution SSE, approve/rollback/revise/revert, in-flight guards, and
+ * reset. Pure data layer — no rendering. The chat UI consumes the
+ * returned state and dispatches actions.
+ */
+export function useConversation({ guildId }: UseConversationArgs): UseConversationResult {
+  // State
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [phase, setPhase] = useState<StudioPhase>("input");
+  const [error, setError] = useState("");
+  const [planningEvents, setPlanningEvents] = useState<PlanningEvent[]>([]);
+  const [execEvents, setExecEvents] = useState<ExecEvent[]>([]);
+  const [askUserData, setAskUserData] = useState<AskUserData | null>(null);
+  const [askUserSelected, setAskUserSelected] = useState<string[]>([]);
+  const [askUserCustom, setAskUserCustom] = useState("");
+  const [summary, setSummary] = useState("");
+  const [desiredState, setDesiredState] = useState<DesiredState | null>(null);
+  const [iterations, setIterations] = useState<IterationRow[]>([]);
+  const [currentState, setCurrentState] = useState<ServerState | null>(null);
+  const [activeTemplates, setActiveTemplates] = useState<ActiveTemplate[]>([]);
+  const [showTemplatePanel, setShowTemplatePanel] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [inFlight, setInFlight] = useState(false);
+
+  // Refs
+  const planningEsRef = useRef<EventSource | null>(null);
+  const execEsRef = useRef<EventSource | null>(null);
+  const esRefFailures = useRef(0);
+  const inFlightRef = useRef(false);
+  const askUserDataRef = useRef<AskUserData | null>(null);
+
+  // Keep the ask_user mirror in sync so SSE error listeners (which
+  // capture stale closures) can see the latest value mid-ask_user.
+  useEffect(() => {
+    askUserDataRef.current = askUserData;
+  }, [askUserData]);
+
+  // Close any open SSE streams when the component unmounts.
+  useEffect(() => {
+    return () => {
+      planningEsRef.current?.close();
+      execEsRef.current?.close();
+    };
+  }, []);
+
+  // In-flight guard (mirrors state for child disabled-ness + ref for
+  // synchronous re-entry checks across async boundaries).
+  const enterInFlight = useCallback((): boolean => {
+    if (inFlightRef.current) return true;
+    inFlightRef.current = true;
+    setInFlight(true);
+    return false;
+  }, []);
+  const exitInFlight = useCallback(() => {
+    inFlightRef.current = false;
+    setInFlight(false);
+  }, []);
+
+  const clearError = useCallback(() => setError(""), []);
+  const showError = useCallback((msg: string) => setError(msg), []);
+  const setErrorExplicit = useCallback((msg: string) => setError(msg), []);
+
+  // ── Planning SSE ─────────────────────────────────────────────────────
+  const connectPlanningSSE = useCallback(
+    (convId: string) => {
+      planningEsRef.current?.close();
+
+      const es = new EventSource(`/api/conversations/${convId}/stream`);
+      planningEsRef.current = es;
+
+      es.addEventListener("status", () => {
+        /* streaming_ready — no-op */
+      });
+
+      es.addEventListener("turn_started", () => {
+        setPlanningEvents((prev) => [...prev, { type: "turn_started" }]);
+      });
+
+      es.addEventListener("tool_called", (e) => {
+        const data = parseSseData<{ toolName?: string; params?: unknown }>(e);
+        if (!data) return;
+        setPlanningEvents((prev) => [
+          ...prev,
+          { type: "tool_called", toolName: data.toolName, params: data.params },
+        ]);
+      });
+
+      es.addEventListener("tool_result", (e) => {
+        const data = parseSseData<{ toolName?: string; result?: unknown }>(e);
+        if (!data) return;
+        setPlanningEvents((prev) => [
+          ...prev,
+          { type: "tool_result", toolName: data.toolName, result: data.result },
+        ]);
+      });
+
+      es.addEventListener("ask_user", (e) => {
+        const data = parseSseData<AskUserData & { question?: string }>(e);
+        if (!data) return;
+        setAskUserData({
+          question: data.question ?? "",
+          options: data.options,
+          multiSelect: data.multiSelect,
+          allowCustom: data.allowCustom,
+        });
+        setAskUserSelected([]);
+        setAskUserCustom("");
+        setPhase("ask_user");
+      });
+
+      es.addEventListener("completed", async (e) => {
+        const data = parseSseData<{ summary?: string }>(e);
+        if (!data) return;
+        setSummary(data.summary ?? "");
+        planningEsRef.current?.close();
+        planningEsRef.current = null;
+
+        // Fetch conversation to get full iteration history + latest desiredState
+        try {
+          const res = await apiFetch(`/api/guilds/${guildId}/conversations/${convId}`);
+          if (res.ok) {
+            const convData = (await res.json()) as { iterations: IterationRow[] };
+            const iters = convData.iterations ?? [];
+            setIterations(iters);
+            const latest = iters.length > 0 ? iters[iters.length - 1] : null;
+            if (latest) setDesiredState(latest.desiredState);
+          }
+        } catch {
+          /* ignore — completed view can show what we have */
+        }
+
+        // Fetch current Discord state for the diff overlay (best-effort).
+        setCurrentState(null);
+        try {
+          const stateRes = await apiFetch(`/api/guilds/${guildId}/state`);
+          if (stateRes.ok) {
+            setCurrentState((await stateRes.json()) as ServerState);
+          }
+        } catch {
+          /* diff overlay just stays hidden */
+        }
+
+        setPhase("completed");
+      });
+
+      es.addEventListener("error", (e) => {
+        const data = parseSseData<{ error?: string }>(e);
+        showError(data?.error ?? "Planning error");
+        planningEsRef.current?.close();
+        planningEsRef.current = null;
+        // If the user was mid-answer to an ask_user, keep that state so
+        // they can retry instead of silently losing the question. Read
+        // from the ref because the listener closure captured the
+        // initial value.
+        if (!askUserDataRef.current) {
+          setPhase("input");
+        } else {
+          setPhase("ask_user");
+        }
+      });
+
+      es.addEventListener("expired", (e) => {
+        const data = parseSseData<{ error?: string }>(e);
+        showError(data?.error ?? "Ask user response timed out");
+        planningEsRef.current?.close();
+        planningEsRef.current = null;
+        setAskUserData(null);
+        setAskUserSelected([]);
+        setAskUserCustom("");
+        setPhase("input");
+      });
+    },
+    [guildId, showError]
+  );
+
+  // ── Execution SSE ────────────────────────────────────────────────────
+  const connectExecSSE = useCallback(
+    (pid: string) => {
+      execEsRef.current?.close();
+      esRefFailures.current = 0;
+
+      const es = new EventSource(`/api/plan/${pid}/stream`);
+      execEsRef.current = es;
+
+      es.addEventListener("step_started", (e) => {
+        const data = parseSseData<{ stepIndex?: number }>(e);
+        if (!data) return;
+        setExecEvents((prev) => [...prev, { type: "step_started", stepIndex: data.stepIndex }]);
+      });
+
+      es.addEventListener("step_completed", (e) => {
+        const data = parseSseData<{ stepIndex?: number; result?: unknown }>(e);
+        if (!data) return;
+        setExecEvents((prev) => [
+          ...prev,
+          { type: "step_completed", stepIndex: data.stepIndex, result: data.result },
+        ]);
+      });
+
+      es.addEventListener("step_failed", (e) => {
+        const data = parseSseData<{ stepIndex?: number; error?: string }>(e);
+        if (!data) return;
+        setExecEvents((prev) => [
+          ...prev,
+          { type: "step_failed", stepIndex: data.stepIndex, error: data.error },
+        ]);
+      });
+
+      es.addEventListener("plan_completed", () => {
+        execEsRef.current?.close();
+        execEsRef.current = null;
+        setPhase("executed");
+      });
+
+      es.addEventListener("step_retry", (e) => {
+        const data = parseSseData<{ stepIndex?: number; error?: string }>(e);
+        if (!data) return;
+        setExecEvents((prev) => [
+          ...prev,
+          { type: "step_retry", stepIndex: data.stepIndex, error: data.error },
+        ]);
+      });
+
+      es.addEventListener("rollback_started", () => {
+        setExecEvents((prev) => [...prev, { type: "rollback_started" }]);
+      });
+
+      es.addEventListener("rollback_completed", () => {
+        setExecEvents((prev) => [...prev, { type: "rollback_completed" }]);
+      });
+
+      es.addEventListener("plan_failed", (e) => {
+        const data = parseSseData<{ error?: string }>(e);
+        showError(data?.error || "Execution failed");
+        execEsRef.current?.close();
+        execEsRef.current = null;
+        setPhase("completed");
+      });
+
+      es.onerror = () => {
+        esRefFailures.current += 1;
+        if (esRefFailures.current >= 3) {
+          es.close();
+          if (execEsRef.current === es) {
+            execEsRef.current = null;
+          }
+          setPhase("completed");
+          showError("Lost connection to execution stream");
+        }
+      };
+    },
+    [showError]
+  );
+
+  // ── Actions ──────────────────────────────────────────────────────────
+
+  const createConversation = useCallback(
+    async (initialPrompt?: string) => {
+      const userPrompt = (initialPrompt ?? prompt).trim();
+      if (!userPrompt) {
+        showError("Enter a prompt first.");
+        return;
+      }
+      if (enterInFlight()) return;
+      try {
+        clearError();
+        setPlanningEvents([]);
+        setAskUserData(null);
+        setAskUserSelected([]);
+        setAskUserCustom("");
+        setSummary("");
+        setDesiredState(null);
+        setIterations([]);
+        setCurrentState(null);
+        setPrompt(userPrompt);
+
+        try {
+          const res = await apiFetch(`/api/guilds/${guildId}/conversations`, {
+            method: "POST",
+            body: { userPrompt },
+          });
+          if (!res.ok) {
+            const data = (await res.json()) as { error: string };
+            showError(data.error || `Failed to create conversation (${res.status})`);
+            return;
+          }
+          const conv = (await res.json()) as { id: string };
+          setConversationId(conv.id);
+          setPhase("planning");
+          // Open SSE immediately. The planning session starts on the
+          // server as soon as the conversation is created, so events
+          // emitted before this EventSource is attached are lost. LLM
+          // turns take seconds, so the race window is narrow.
+          connectPlanningSSE(conv.id);
+        } catch (err) {
+          showError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        exitInFlight();
+      }
+    },
+    [guildId, prompt, enterInFlight, exitInFlight, clearError, showError, connectPlanningSSE]
+  );
+
+  const submitAskUser = useCallback(async () => {
+    if (!conversationId) return;
+    if (enterInFlight()) return;
+    try {
+      const parts: string[] = [];
+      if (askUserData?.multiSelect) {
+        parts.push(...askUserSelected);
+      } else if (askUserSelected.length > 0) {
+        parts.push(askUserSelected[0]!);
+      }
+      if (askUserData?.allowCustom && askUserCustom.trim()) {
+        parts.push(askUserCustom.trim());
+      }
+      const answer = parts.join(", ");
+      if (!answer) return;
+      clearError();
+
+      try {
+        const res = await apiFetch(
+          `/api/guilds/${guildId}/conversations/${conversationId}/ask-user`,
+          { method: "POST", body: { answer } }
+        );
+        if (!res.ok) {
+          const data = (await res.json()) as { error: string };
+          showError(data.error || "Failed to submit answer");
+          return;
+        }
+        setAskUserData(null);
+        setAskUserSelected([]);
+        setAskUserCustom("");
+        setPhase("planning");
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      exitInFlight();
+    }
+  }, [
+    guildId,
+    conversationId,
+    askUserData,
+    askUserSelected,
+    askUserCustom,
+    enterInFlight,
+    exitInFlight,
+    clearError,
+    showError,
+  ]);
+
+  const loadConversation = useCallback(
+    async (convId: string) => {
+      if (enterInFlight()) return;
+      try {
+        planningEsRef.current?.close();
+        planningEsRef.current = null;
+        execEsRef.current?.close();
+        execEsRef.current = null;
+
+        setConversationId(convId);
+        setPlanId(null);
+        setPlanningEvents([]);
+        setExecEvents([]);
+        setAskUserData(null);
+        setAskUserSelected([]);
+        setAskUserCustom("");
+        setSummary("");
+        setError("");
+        setPhase("completed");
+        setActiveTemplates([]);
+
+        try {
+          const res = await apiFetch(`/api/guilds/${guildId}/conversations/${convId}`);
+          if (res.ok) {
+            const convData = (await res.json()) as { iterations: IterationRow[] };
+            const iters = convData.iterations ?? [];
+            setIterations(iters);
+            const latest = iters.length > 0 ? iters[iters.length - 1] : null;
+            if (latest) setDesiredState(latest.desiredState);
+          } else {
+            const data = (await res.json().catch(() => ({}))) as { error?: string };
+            showError(data.error || `Failed to load conversation (${res.status})`);
+          }
+        } catch (err) {
+          showError(err instanceof Error ? err.message : String(err));
+        }
+
+        setCurrentState(null);
+        try {
+          const stateRes = await apiFetch(`/api/guilds/${guildId}/state`);
+          if (stateRes.ok) {
+            setCurrentState((await stateRes.json()) as ServerState);
+          }
+        } catch {
+          /* diff overlay just stays hidden */
+        }
+      } finally {
+        exitInFlight();
+      }
+    },
+    [guildId, enterInFlight, exitInFlight, showError]
+  );
+
+  const reset = useCallback(() => {
+    planningEsRef.current?.close();
+    planningEsRef.current = null;
+    execEsRef.current?.close();
+    execEsRef.current = null;
+    setConversationId(null);
+    setPlanId(null);
+    setPlanningEvents([]);
+    setExecEvents([]);
+    setAskUserData(null);
+    setAskUserSelected([]);
+    setAskUserCustom("");
+    setSummary("");
+    setDesiredState(null);
+    setIterations([]);
+    setCurrentState(null);
+    setError("");
+    setShowTemplatePanel(false);
+    setActiveTemplates([]);
+    setPhase("input");
+  }, []);
+
+  const cancelPlanning = useCallback(async () => {
+    if (!conversationId) return;
+    clearError();
+    try {
+      await apiFetch(`/api/guilds/${guildId}/conversations/${conversationId}/cancel`, {
+        method: "POST",
+      });
+    } catch {
+      /* ignore */
+    }
+    reset();
+  }, [guildId, conversationId, clearError, reset]);
+
+  const executePlan = useCallback(
+    async (pid: string) => {
+      setExecEvents([]);
+      try {
+        connectExecSSE(pid);
+        setPhase("executing");
+
+        const res = await apiFetch(`/api/guilds/${guildId}/plans/${pid}/execute`, {
+          method: "POST",
+        });
+
+        if (!res.ok) {
+          const data = (await res.json()) as {
+            error: string;
+            conflicts?: string[];
+            blockers?: { message: string }[];
+            warnings?: { message: string }[];
+          };
+          const details = [
+            ...(data.conflicts ?? []),
+            ...(data.blockers?.map((b) => b.message) ?? []),
+          ].join("\n");
+          showError(details ? `${data.error}\n${details}` : data.error);
+          execEsRef.current?.close();
+          execEsRef.current = null;
+          setPhase("execute_failed");
+          return;
+        }
+
+        const data = (await res.json()) as { success: boolean; error?: string };
+        if (!data.success) {
+          showError(data.error || "Execution failed");
+          execEsRef.current?.close();
+          execEsRef.current = null;
+          setPhase("execute_failed");
+          return;
+        }
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
+        execEsRef.current?.close();
+        execEsRef.current = null;
+        setPhase("execute_failed");
+      }
+    },
+    [guildId, connectExecSSE, showError]
+  );
+
+  const approve = useCallback(async () => {
+    if (!conversationId) return;
+    if (enterInFlight()) return;
+    try {
+      clearError();
+      try {
+        const res = await apiFetch(
+          `/api/guilds/${guildId}/conversations/${conversationId}/approve`,
+          { method: "POST" }
+        );
+        if (!res.ok) {
+          const data = (await res.json()) as { error: string };
+          showError(data.error || "Failed to approve plan");
+          return;
+        }
+        const data = (await res.json()) as { planId: string };
+        setPlanId(data.planId);
+        setPhase("executing");
+        await executePlan(data.planId);
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      exitInFlight();
+    }
+  }, [guildId, conversationId, enterInFlight, exitInFlight, clearError, showError, executePlan]);
+
+  const rollback = useCallback(async () => {
+    if (!planId) return;
+    if (enterInFlight()) return;
+    try {
+      clearError();
+      try {
+        const res = await apiFetch(`/api/guilds/${guildId}/plans/${planId}/rollback`, {
+          method: "POST",
+        });
+        if (!res.ok) {
+          const data = (await res.json()) as { error: string };
+          showError(data.error || "Rollback failed");
+          return;
+        }
+        const data = (await res.json()) as { rolledBack: boolean; steps: number };
+        if (data.rolledBack) {
+          showError(`Rolled back ${data.steps} steps successfully.`);
+        }
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      exitInFlight();
+    }
+  }, [guildId, planId, enterInFlight, exitInFlight, clearError, showError]);
+
+  const revise = useCallback(
+    async (newPrompt: string) => {
+      if (!conversationId) return;
+      if (!newPrompt.trim()) {
+        showError("Enter a new prompt to revise.");
+        return;
+      }
+      if (enterInFlight()) return;
+      try {
+        clearError();
+        setPlanningEvents([]);
+        setSummary("");
+        setDesiredState(null);
+        setIterations([]);
+        setCurrentState(null);
+
+        try {
+          const res = await apiFetch(
+            `/api/guilds/${guildId}/conversations/${conversationId}/revise`,
+            { method: "POST", body: { prompt: newPrompt.trim() } }
+          );
+          if (!res.ok) {
+            const data = (await res.json()) as { error: string };
+            showError(data.error || "Failed to revise");
+            return;
+          }
+          setPhase("planning");
+          connectPlanningSSE(conversationId);
+        } catch (err) {
+          showError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        exitInFlight();
+      }
+    },
+    [guildId, conversationId, enterInFlight, exitInFlight, clearError, showError, connectPlanningSSE]
+  );
+
+  const revert = useCallback(
+    async (version: number) => {
+      if (!conversationId) return;
+      if (enterInFlight()) return;
+      try {
+        clearError();
+        try {
+          const res = await apiFetch(
+            `/api/guilds/${guildId}/conversations/${conversationId}/revert/${version}`,
+            { method: "POST" }
+          );
+          if (!res.ok) {
+            const data = (await res.json()) as { error: string };
+            showError(data.error || "Revert failed");
+            return;
+          }
+          const convRes = await apiFetch(`/api/guilds/${guildId}/conversations/${conversationId}`);
+          if (convRes.ok) {
+            const convData = (await convRes.json()) as { iterations: IterationRow[] };
+            const iters = convData.iterations ?? [];
+            setIterations(iters);
+            const latest = iters.length > 0 ? iters[iters.length - 1] : null;
+            if (latest) setDesiredState(latest.desiredState);
+          }
+        } catch (err) {
+          showError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        exitInFlight();
+      }
+    },
+    [guildId, conversationId, enterInFlight, exitInFlight, clearError, showError]
+  );
+
+  return {
+    // Lifecycle
+    phase,
+    conversationId,
+    planId,
+    error,
+    inFlight,
+    prompt,
+    // Planning
+    planningEvents,
+    askUserData,
+    askUserSelected,
+    askUserCustom,
+    summary,
+    desiredState,
+    iterations,
+    currentState,
+    // Execution
+    execEvents,
+    // Templates
+    activeTemplates,
+    showTemplatePanel,
+    // Setters
+    setAskUserSelected,
+    setAskUserCustom,
+    setActiveTemplates,
+    setShowTemplatePanel,
+    setPrompt,
+    setError: setErrorExplicit,
+    // Actions
+    createConversation,
+    submitAskUser,
+    loadConversation,
+    reset,
+    cancelPlanning,
+    approve,
+    rollback,
+    revise,
+    revert,
+    clearError,
+  };
+}
