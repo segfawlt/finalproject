@@ -1,13 +1,13 @@
 import { useParams } from "react-router-dom";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Loader, Check, CircleAlert, LayoutGrid } from "lucide-react";
-import ProcedureSidebar, { type PhaseProgress } from "../components/ProcedureSidebar";
 import DesiredStateView from "../components/DesiredStateView";
 import type { DesiredState, ServerState, ChannelBase, Role } from "../components/desired-state";
 import ActionBar, { type StudioPhase } from "../components/ActionBar";
 import ExecutionStatus, { type ExecEvent } from "../components/ExecutionStatus";
 import IterationHistory, { type IterationRow } from "../components/IterationHistory";
 import TemplatePanel from "../components/TemplatePanel";
+import StudioShell from "../components/studio/StudioShell";
 import { apiFetch } from "../lib/api";
 
 interface PlanningEvent {
@@ -67,15 +67,6 @@ export default function Studio() {
   // ── Error ────────────────────────────────────────────────────────────────
   const [error, setError] = useState("");
 
-  // ── Sidebar / Phase Progress ──────────────────────────────────────────────
-  const [phaseProgress, setPhaseProgress] = useState<PhaseProgress>({
-    foundation: false,
-    layout: false,
-    access: false,
-    people: false,
-  });
-  const [selectedPhase, setSelectedPhase] = useState<string | null>(null);
-
   // ── SSE refs ─────────────────────────────────────────────────────────────
   const planningEsRef = useRef<EventSource | null>(null);
   const execEsRef = useRef<EventSource | null>(null);
@@ -95,34 +86,6 @@ export default function Studio() {
       execEsRef.current?.close();
     };
   }, []);
-
-  // ── Fetch guild phase progress ────────────────────────────────────────────
-  useEffect(() => {
-    if (!guildId) return;
-    apiFetch(`/api/guilds/${guildId}`)
-      .then((res) => res.json())
-      .then((data: { phaseProgress?: PhaseProgress }) => {
-        if (data.phaseProgress) {
-          setPhaseProgress(data.phaseProgress);
-        }
-      })
-      .catch(() => {});
-  }, [guildId]);
-
-  const updatePhaseProgress = useCallback(
-    async (progress: PhaseProgress) => {
-      if (!guildId) return;
-      try {
-        await apiFetch(`/api/guilds/${guildId}`, {
-          method: "PATCH",
-          body: { phaseProgress: progress },
-        });
-      } catch {
-        // silent
-      }
-    },
-    [guildId]
-  );
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function clearError() {
@@ -150,52 +113,8 @@ export default function Studio() {
     setInFlight(false);
   }
 
-  // ── Sidebar scoped prompt ────────────────────────────────────────────────
-  const pendingPhaseRef = useRef<string | null>(null);
-
-  async function handleSidebarSendPrompt(phasePrompt: string, phase: string) {
-    if (enterInFlight()) return;
-    try {
-      clearError();
-      setPlanningEvents([]);
-      setAskUserData(null);
-      setAskUserSelected([]);
-      setAskUserCustom("");
-      setSummary("");
-      setDesiredState(null);
-      setIterations([]);
-      setCurrentState(null);
-      pendingPhaseRef.current = phase;
-      setPrompt(phasePrompt);
-
-      try {
-        const res = await apiFetch(`/api/guilds/${guildId}/conversations`, {
-          method: "POST",
-          body: { userPrompt: phasePrompt },
-        });
-
-        if (!res.ok) {
-          const data = (await res.json()) as { error: string };
-          showError(data.error || `Failed to create conversation (${res.status})`);
-          return;
-        }
-
-        const conv = (await res.json()) as { id: string };
-        setConversationId(conv.id);
-        setPhase("planning");
-        // Open SSE immediately. The planning session starts on the server as
-        // soon as the conversation is created, so events emitted before this
-        // EventSource is attached are lost. LLM turns take seconds, so the
-        // race window is narrow. A future improvement could add a
-        // /conversations/:id/state endpoint to replay current status on connect.
-        connectPlanningSSE(conv.id);
-      } catch (err) {
-        showError(err instanceof Error ? err.message : String(err));
-      }
-    } finally {
-      exitInFlight();
-    }
-  }
+  // ── Sidebar scoped prompt (removed with ProcedureSidebar) ───────────────
+  // The 4-phase model was internal scaffolding; chat UX replaces it.
 
   // ── Phase 1: Create conversation & start planning ────────────────────────
   async function createConversation() {
@@ -323,16 +242,6 @@ export default function Studio() {
         // diff overlay just stays hidden
       }
 
-      // Mark phase as complete if this was a scoped-plan from the sidebar
-      if (pendingPhaseRef.current) {
-        const phase = pendingPhaseRef.current;
-        pendingPhaseRef.current = null;
-        const next = { ...phaseProgress, [phase]: true };
-        setPhaseProgress(next);
-        updatePhaseProgress(next);
-        setSelectedPhase(null);
-      }
-
       setPhase("completed");
     });
 
@@ -434,7 +343,6 @@ export default function Studio() {
     setError("");
     setShowTemplatePanel(false);
     setActiveTemplates([]);
-    pendingPhaseRef.current = null;
     setPhase("input");
   }
 
@@ -928,9 +836,8 @@ export default function Studio() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-discord-bg">
-      <div className="flex flex-1 min-h-0">
-        <div className="flex-1 p-6">
+    <StudioShell>
+      <div className="flex-1 p-6 overflow-y-auto">
           <div className="flex items-center justify-between mb-6 gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-full bg-discord-bg-secondary border border-discord-divider flex items-center justify-center shrink-0">
@@ -1190,15 +1097,6 @@ export default function Studio() {
               {error}
             </div>
           )}
-        </div>
-        {guildId && (
-          <ProcedureSidebar
-            phaseProgress={phaseProgress}
-            onSendPrompt={handleSidebarSendPrompt}
-            selectedPhase={selectedPhase}
-            onSelectPhase={setSelectedPhase}
-          />
-        )}
       </div>
       <ActionBar
         phase={phase}
@@ -1213,6 +1111,6 @@ export default function Studio() {
         onSaveEdit={saveEdit}
         onCancelEdit={cancelEdit}
       />
-    </div>
+    </StudioShell>
   );
 }

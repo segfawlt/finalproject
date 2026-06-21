@@ -1,44 +1,112 @@
 import { create } from "zustand";
 
-interface PanelState {
-  leftPanel: "summary" | "reasoning";
-  rightPanel: "preview" | "diff";
-  showProgress: boolean;
+// ── Tab model ──────────────────────────────────────────────────────────────
+
+export type TabType = "server" | "desired" | "channel" | "roles" | "members" | "templates" | "drift";
+
+export interface Tab {
+  /** Stable unique key. Format: type or `type:payload` (e.g. "channel:123"). */
+  id: string;
+  type: TabType;
+  channelId?: string;
+  closable: boolean;
+  title: string;
 }
 
-interface ActiveTemplate {
+export function makeTab(
+  type: TabType,
+  opts: { channelId?: string; closable?: boolean; title?: string } = {}
+): Tab {
+  const id = type === "channel" && opts.channelId ? `channel:${opts.channelId}` : type;
+  const closable = opts.closable ?? (type !== "server" && type !== "desired");
+  const title = opts.title ?? defaultTitle(type, opts.channelId);
+  return { id, type, channelId: opts.channelId, closable, title };
+}
+
+function defaultTitle(type: TabType, channelId?: string): string {
+  switch (type) {
+    case "server":
+      return "Server";
+    case "desired":
+      return "Desired";
+    case "channel":
+      return channelId ? `#${channelId}` : "Channel";
+    case "roles":
+      return "Roles";
+    case "members":
+      return "Members";
+    case "templates":
+      return "Templates";
+    case "drift":
+      return "Drift";
+  }
+}
+
+// ── Conversation phase ────────────────────────────────────────────────────
+
+export type StudioPhase =
+  | "input"
+  | "planning"
+  | "ask_user"
+  | "completed"
+  | "executing"
+  | "executed"
+  | "execute_failed";
+
+// ── Templates in context ──────────────────────────────────────────────────
+
+export interface ActiveTemplate {
   id: string;
   name: string;
 }
 
+// ── Store ──────────────────────────────────────────────────────────────────
+
 interface StudioState {
+  // Guild
   selectedGuild: string | null;
-  selectedItems: string[];
-  panelState: PanelState;
-  isDragging: boolean;
-  activeTemplates: ActiveTemplate[];
   setSelectedGuild: (guildId: string | null) => void;
+
+  // Selection
+  selectedItems: string[];
   toggleSelectedItem: (itemId: string) => void;
   clearSelectedItems: () => void;
-  setLeftPanel: (panel: "summary" | "reasoning") => void;
-  setRightPanel: (panel: "preview" | "diff") => void;
-  toggleProgress: () => void;
+
+  // Drag
+  isDragging: boolean;
   setIsDragging: (dragging: boolean) => void;
+
+  // Tabs (right panel)
+  openTabs: Tab[];
+  activeTab: string | null;
+  openTab: (tab: Tab) => void;
+  closeTab: (id: string) => void;
+  switchTab: (id: string) => void;
+
+  // Conversation
+  conversationId: string | null;
+  planId: string | null;
+  phase: StudioPhase;
+  error: string;
+  setConversationId: (id: string | null) => void;
+  setPlanId: (id: string | null) => void;
+  setPhase: (phase: StudioPhase) => void;
+  setError: (error: string) => void;
+  resetConversation: () => void;
+
+  // Templates attached to the active conversation
+  activeTemplates: ActiveTemplate[];
   addTemplate: (template: ActiveTemplate) => void;
   removeTemplate: (templateId: string) => void;
 }
 
 export const useStudioStore = create<StudioState>((set) => ({
+  // Guild
   selectedGuild: null,
-  selectedItems: [],
-  panelState: {
-    leftPanel: "summary",
-    rightPanel: "preview",
-    showProgress: false,
-  },
-  isDragging: false,
-  activeTemplates: [],
   setSelectedGuild: (guildId) => set({ selectedGuild: guildId }),
+
+  // Selection
+  selectedItems: [],
   toggleSelectedItem: (itemId) =>
     set((state) => ({
       selectedItems: state.selectedItems.includes(itemId)
@@ -46,15 +114,58 @@ export const useStudioStore = create<StudioState>((set) => ({
         : [...state.selectedItems, itemId],
     })),
   clearSelectedItems: () => set({ selectedItems: [] }),
-  setLeftPanel: (panel) =>
-    set((state) => ({ panelState: { ...state.panelState, leftPanel: panel } })),
-  setRightPanel: (panel) =>
-    set((state) => ({ panelState: { ...state.panelState, rightPanel: panel } })),
-  toggleProgress: () =>
-    set((state) => ({
-      panelState: { ...state.panelState, showProgress: !state.panelState.showProgress },
-    })),
+
+  // Drag
+  isDragging: false,
   setIsDragging: (dragging) => set({ isDragging: dragging }),
+
+  // Tabs
+  openTabs: [makeTab("server"), makeTab("desired")],
+  activeTab: "server",
+  openTab: (tab) =>
+    set((state) => {
+      if (state.openTabs.some((t) => t.id === tab.id)) {
+        return { activeTab: tab.id };
+      }
+      return { openTabs: [...state.openTabs, tab], activeTab: tab.id };
+    }),
+  closeTab: (id) =>
+    set((state) => {
+      const idx = state.openTabs.findIndex((t) => t.id === id);
+      if (idx === -1) return state;
+      const target = state.openTabs[idx];
+      if (!target?.closable) return state;
+      const nextTabs = state.openTabs.filter((t) => t.id !== id);
+      let nextActive = state.activeTab;
+      if (state.activeTab === id) {
+        const fallback = nextTabs[idx] ?? nextTabs[idx - 1] ?? nextTabs[0];
+        nextActive = fallback?.id ?? null;
+      }
+      return { openTabs: nextTabs, activeTab: nextActive };
+    }),
+  switchTab: (id) =>
+    set((state) => (state.openTabs.some((t) => t.id === id) ? { activeTab: id } : state)),
+
+  // Conversation
+  conversationId: null,
+  planId: null,
+  phase: "input",
+  error: "",
+  setConversationId: (id) => set({ conversationId: id }),
+  setPlanId: (id) => set({ planId: id }),
+  setPhase: (phase) => set({ phase }),
+  setError: (error) => set({ error }),
+  resetConversation: () =>
+    set({
+      conversationId: null,
+      planId: null,
+      phase: "input",
+      error: "",
+      activeTemplates: [],
+    }),
+
+  // Templates
+  activeTemplates: [],
   addTemplate: (template) =>
     set((state) => ({
       activeTemplates: state.activeTemplates.some((t) => t.id === template.id)
