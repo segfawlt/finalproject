@@ -419,3 +419,17 @@ After each fix: `pnpm lint && pnpm tsc --noEmit -p apps/server/tsconfig.json`
 | System prompt architecture | Low      | Design issue #7 — guidance file loading into planning prompt. Deferred                |
 | Plan optimizer             | Rejected | Design issue #10 — explicitly rejected by 4-layer prevention stack                    |
 | Diff engine heuristics     | Rejected | Design issue #9 — explicitly rejected by "dumb and deterministic" principle           |
+
+## Fix 5: System prompt — prevent LLM from asking for symbols it already has
+
+**Problem:** The LLM sometimes asks the user for category IDs or symbols to use as `parent_id` in `create_channel`, even though the `create_category` tool already returned the symbol in its previous tool result. The LLM has the symbol in its own message history but doesn't use it.
+
+**File:** `apps/server/src/planning/planning-session.ts` — system prompt (lines ~530-565)
+
+**Change:** Add a rule to the system prompt in `buildSystemPrompt()`:
+
+Add the following bullet after the existing bullet `"When creating channels inside a category, set parent_id to the category's symbol or ID."` (around line 537):
+
+> If a `create_category` tool call returned a `symbol`, use that symbol as the `parent_id` for channels inside that category. Do NOT ask the user for category IDs or symbols — the symbol from the previous tool result IS the answer.
+
+**Verification:** Start a conversation requesting a new category + channels inside it. The LLM should use the symbol from `create_category`'s result directly instead of asking the user.

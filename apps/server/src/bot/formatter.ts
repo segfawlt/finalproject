@@ -92,14 +92,14 @@ function formatChannels(guildId: string): string {
   const lines: string[] = [];
 
   for (const cat of categories) {
-    lines.push(`  ${cat.name}`);
+    lines.push(`  ${cat.name} (id:${cat.id})`);
     const subs = (children.get(cat.id) ?? []).sort((a, b) => a.position - b.position);
     for (const sub of subs) {
       const prefix = channelPrefix(sub.type);
       const overwrites = formatOverwrites(sub.id, guildId);
       const lockLabel = sub.lockPermissions === false ? " [unsynced]" : "";
       lines.push(
-        `    ${prefix}${sub.name} — ${channelTypeLabel(sub.type)}${lockLabel}${overwrites}`
+        `    ${prefix}${sub.name} — ${channelTypeLabel(sub.type)} (id:${sub.id})${lockLabel}${overwrites}`
       );
     }
   }
@@ -109,7 +109,7 @@ function formatChannels(guildId: string): string {
     const overwrites = formatOverwrites(orphan.id, guildId);
     const lockLabel = orphan.lockPermissions === false ? " [unsynced]" : "";
     lines.push(
-      `  ${prefix}${orphan.name} — ${channelTypeLabel(orphan.type)}${lockLabel}${overwrites}`
+      `  ${prefix}${orphan.name} — ${channelTypeLabel(orphan.type)} (id:${orphan.id})${lockLabel}${overwrites}`
     );
   }
 
@@ -138,14 +138,14 @@ function formatRoles(guildId: string): string {
     const permStr = formatPermissions(role.permissions);
     const memberStr = role.memberCount != null ? `${role.memberCount} members` : "";
     const parts = [memberStr, `pos:${role.position}`, permStr].filter(Boolean);
-    lines.push(`  ${role.name} — ${parts.join(", ")}`);
+    lines.push(`  ${role.name} (id:${role.id}) — ${parts.join(", ")}`);
   }
 
   if (everyoneRole) {
     const permStr = formatPermissions(everyoneRole.permissions);
     const memberStr = everyoneRole.memberCount != null ? `${everyoneRole.memberCount} members` : "";
     const parts = [memberStr, `pos:${everyoneRole.position}`, permStr].filter(Boolean);
-    lines.push(`  @everyone — ${parts.join(", ")}`);
+    lines.push(`  @everyone (id:${everyoneRole.id}) — ${parts.join(", ")}`);
   }
 
   return lines.join("\n");

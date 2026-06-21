@@ -103,8 +103,8 @@ Strategies to avoid recurrence. Include test cases or assertions where applicabl
 
 \`\`\`ts
 it("should cast JSONB to PlanData", () => {
-  // Example — adapt to the actual behavior you want to verify
-  expect(row.planData).toMatchObject({ steps: expect.any(Array) });
+// Example — adapt to the actual behavior you want to verify
+expect(row.planData).toMatchObject({ steps: expect.any(Array) });
 });
 \`\`\`
 
@@ -153,6 +153,7 @@ Concrete before/after or usage examples showing the practice in action.
 ```
 
 **Frontmatter rules:**
+
 - All four required: `title`, `category`, `tags`, `date`
 - `module` is optional but recommended (helps grep by area)
 - `problem_type` is optional but recommended (e.g., `runtime-error`, `build-error`, `design-decision`, `convention`)
@@ -175,11 +176,11 @@ Before writing, search the target category directory for similar problems using 
 
 If a closely related learning exists, **read it first** and assess overlap:
 
-| Overlap | Action |
-|---|---|
+| Overlap                                              | Action                                                                                                    |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | **High** (same problem + same root cause + same fix) | **Update the existing doc** with fresher context. Add `last_updated: <today>`. Do not create a duplicate. |
-| **Moderate** (same area, different angle) | Create the new doc, then add a "Related" link in both files |
-| **Low or none** | Create the new doc normally |
+| **Moderate** (same area, different angle)            | Create the new doc, then add a "Related" link in both files                                               |
+| **Low or none**                                      | Create the new doc normally                                                                               |
 
 Two docs describing the same problem will drift apart. Updating the existing one is always better than creating a second one that immediately needs consolidation.
 
@@ -224,6 +225,7 @@ Lessons referenced 3+ times that may deserve a spot in `AGENTS.md` as a project-
 After writing, scan the new learning for project-specific terms that have meaning beyond their obvious dictionary definition. Strong examples in this project: `Tombstone`, `Symbol`, `DesiredState`, `DriftEvent`, `Assumption`, `PlanStatus`, `IterationType`. (Self-explanatory UI surface names like `Studio` and `Dashboard` do NOT qualify — they're not domain terms with project-specific meaning.)
 
 If you identify a qualifying term:
+
 - If `CONCEPTS.md` exists at repo root → add the term to it (one-line definition)
 - If not → add the term to the "## Pending Terms" section of `docs/learnings/README.md`
 
@@ -247,6 +249,7 @@ The user reviews "Promote Candidates" weekly and decides whether to promote any 
 ## Preconditions (Advisory)
 
 This skill is advisory, not enforced. The preconditions are:
+
 - `problem_solved` — the problem has a working fix
 - `solution_verified` — the fix has been tested or observed working
 - `non_trivial` — not a typo, not a one-line change

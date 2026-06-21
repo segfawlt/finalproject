@@ -1,3 +1,5 @@
+import { logger } from "../utils/logger";
+
 interface ToolCallAccumulator {
   id: string;
   type: string;
@@ -36,6 +38,9 @@ export async function parseOpenRouterStream(
   const completedToolCalls: ToolCallAccumulator[] = [];
 
   let buffer = "";
+  let malformedLineCount = 0;
+
+  logger.debug("[stream-parser] starting");
 
   try {
     while (true) {
@@ -119,6 +124,10 @@ export async function parseOpenRouterStream(
             for (const [idx, tc] of toolCallAccumulators) {
               if (tc.function.name && tc.function.arguments) {
                 completedToolCalls.push(tc);
+                logger.debug(
+                  { toolName: tc.function.name, index: idx },
+                  "[stream-parser] tool call complete"
+                );
                 await options?.onToolCall?.(tc);
                 toolCallAccumulators.delete(idx);
               }
@@ -126,6 +135,7 @@ export async function parseOpenRouterStream(
           }
         } catch {
           // Ignore malformed JSON in SSE stream
+          malformedLineCount += 1;
         }
       }
     }
@@ -162,6 +172,15 @@ export async function parseOpenRouterStream(
   } finally {
     reader.releaseLock();
   }
+
+  logger.debug(
+    {
+      toolCallCount: completedToolCalls.length,
+      thinkingChars: thinking.length,
+      malformedLineCount,
+    },
+    "[stream-parser] finished"
+  );
 
   return {
     thinking,

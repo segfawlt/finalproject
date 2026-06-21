@@ -4,12 +4,12 @@ import { PermissionFlagsBits } from "discord.js";
 import { logger } from "../utils/logger";
 
 export async function getUserDiscordId(userId: string): Promise<string | null> {
-  const result = await queryClient<[{ provider_account_id: string }?]>`
-    SELECT "provider_account_id" FROM "account"
+  const result = await queryClient<[{ account_id: string }?]>`
+    SELECT "account_id" FROM "accounts"
     WHERE "user_id" = ${userId} AND "provider_id" = 'discord'
     LIMIT 1
   `;
-  return result[0]?.provider_account_id ?? null;
+  return result[0]?.account_id ?? null;
 }
 
 export class DiscordApiError extends Error {
@@ -48,7 +48,8 @@ export async function userHasManageGuild(userId: string, guildId: string): Promi
   let allowed: boolean;
   try {
     const member = await guild.members.fetch(discordId);
-    allowed = member.permissions.has(PermissionFlagsBits.ManageGuild);
+    allowed =
+      member.id === guild.ownerId || member.permissions.has(PermissionFlagsBits.ManageGuild);
   } catch (err) {
     // Don't silently swallow Discord errors as "not allowed" — that turns
     // any transient Discord outage into a 100% auth outage. Surface so

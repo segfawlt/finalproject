@@ -240,7 +240,6 @@ conversationsApp.post("/", zValidator("json", createConversationSchema), async (
       }
 
       if (event.type === "completed") {
-        removeSession(conversation.id);
         await db
           .update(conversations)
           .set({ status: "completed", updatedAt: new Date() })
@@ -432,6 +431,8 @@ conversationsApp.post("/:convId/approve", async (c) => {
       planData: planData as unknown as Record<string, unknown>,
     })
     .returning();
+
+  removeSession(convId);
 
   return c.json({ planId: plan.id });
 });

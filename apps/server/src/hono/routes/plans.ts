@@ -247,6 +247,16 @@ plansApp.post("/:planId/execute", async (c) => {
   const failedAssumptions = assumptionResults.filter((r) => !r.passed);
 
   if (failedAssumptions.length > 0) {
+    logger.warn(
+      {
+        planId,
+        guildId,
+        stepCount: diffResult.steps.length,
+        failedCount: failedAssumptions.length,
+        conflicts: failedAssumptions.map((r) => r.message),
+      },
+      "[plans] pre-execution assumptions failed"
+    );
     return c.json(
       {
         error: "Pre-execution assumptions failed",
@@ -268,6 +278,18 @@ plansApp.post("/:planId/execute", async (c) => {
   if (!validationResult.passed) {
     const blockers = validationResult.issues.filter((i) => i.severity === "block");
     const warnings = validationResult.issues.filter((i) => i.severity === "warning");
+    logger.warn(
+      {
+        planId,
+        guildId,
+        stepCount: diffResult.steps.length,
+        blockerCount: blockers.length,
+        warningCount: warnings.length,
+        blockers,
+        warnings,
+      },
+      "[plans] plan validation failed"
+    );
     return c.json(
       {
         error: "Plan validation failed",

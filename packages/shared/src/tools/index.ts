@@ -31,6 +31,7 @@ export {
   getChannelEditAssumptions,
   getChannelDeleteAssumptions,
   getChannelMoveAssumptions,
+  channelTypeNumberToString,
 } from "./channels";
 export type {
   CreateChannelParams,

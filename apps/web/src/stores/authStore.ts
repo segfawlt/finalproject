@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { apiFetch } from "../lib/api";
+import { authClient } from "../lib/auth";
 
 interface User {
   id: string;
@@ -24,13 +25,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isLoading: true,
   setUser: (user) => set({ user, isAuthenticated: !!user }),
-  login: () => {
-    const base = (import.meta.env.VITE_API_URL ?? "").trim().replace(/\/+$/, "");
-    window.location.href = `${base}/api/auth/sign-in/social?provider=discord`;
+  login: async () => {
+    await authClient.signIn.social({ provider: "discord" });
   },
   logout: async () => {
     try {
-      await apiFetch("/api/auth/sign-out", { method: "POST", skipAuthRedirect: true });
+      await authClient.signOut();
     } catch {
       // ignore
     }

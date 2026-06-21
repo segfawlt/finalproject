@@ -307,3 +307,124 @@ describe("diffEngine — lockPermissions", () => {
     expect(removeSteps).toHaveLength(1);
   });
 });
+
+describe("diffEngine — dangling symbol resolution", () => {
+  function makeChannel(overrides: Partial<ChannelBase> = {}): ChannelBase {
+    return {
+      id: "ch-1",
+      name: "general",
+      type: 0,
+      parentId: null,
+      position: 0,
+      ...overrides,
+    };
+  }
+
+  it("resolves parent_id symbol to real Discord category ID by name match", () => {
+    const real = makeServerState({
+      channels: [makeChannel({ id: "cat-real-1", name: "Text Channels", type: 4, parentId: null })],
+    });
+    const desired = makeDesiredState({
+      active: {
+        channels: {
+          "$new-channel-1": makeChannel({
+            id: "$new-channel-1",
+            name: "new-channel",
+            type: 0,
+            parentId: "$text-channels-1",
+          }),
+        },
+        roles: {},
+        overwrites: {},
+        memberRoles: {},
+      },
+    });
+
+    const result = diffEngine(real, desired);
+    const createStep = result.steps.find((s) => s.toolName === "create_channel");
+
+    expect(createStep).toBeDefined();
+    expect(createStep?.params.parent_id).toBe("cat-real-1");
+    expect(createStep?.dependsOn ?? []).not.toContain(-1);
+  });
+
+  it("resolves parent_id symbol by slugified name match (hyphens to spaces)", () => {
+    const real = makeServerState({
+      channels: [makeChannel({ id: "cat-real-1", name: "text-channels", type: 4, parentId: null })],
+    });
+    const desired = makeDesiredState({
+      active: {
+        channels: {
+          "$new-channel-1": makeChannel({
+            id: "$new-channel-1",
+            name: "new-channel",
+            type: 0,
+            parentId: "$text-channels-1",
+          }),
+        },
+        roles: {},
+        overwrites: {},
+        memberRoles: {},
+      },
+    });
+
+    const result = diffEngine(real, desired);
+    const createStep = result.steps.find((s) => s.toolName === "create_channel");
+
+    expect(createStep?.params.parent_id).toBe("cat-real-1");
+  });
+
+  it("leaves symbol unchanged when no matching entity exists in server state", () => {
+    const real = makeServerState({ channels: [] });
+    const desired = makeDesiredState({
+      active: {
+        channels: {
+          "$new-channel-1": makeChannel({
+            id: "$new-channel-1",
+            name: "new-channel",
+            type: 0,
+            parentId: "$ghost-category-1",
+          }),
+        },
+        roles: {},
+        overwrites: {},
+        memberRoles: {},
+      },
+    });
+
+    const result = diffEngine(real, desired);
+    const createStep = result.steps.find((s) => s.toolName === "create_channel");
+
+    expect(createStep?.params.parent_id).toBe("$ghost-category-1");
+  });
+
+  it("does not resolve symbols that are defined in this plan's symbol table", () => {
+    const real = makeServerState({ channels: [] });
+    const desired = makeDesiredState({
+      active: {
+        channels: {
+          "$new-category-1": makeChannel({
+            id: "$new-category-1",
+            name: "New Category",
+            type: 4,
+            parentId: null,
+          }),
+          "$new-channel-1": makeChannel({
+            id: "$new-channel-1",
+            name: "new-channel",
+            type: 0,
+            parentId: "$new-category-1",
+          }),
+        },
+        roles: {},
+        overwrites: {},
+        memberRoles: {},
+      },
+    });
+
+    const result = diffEngine(real, desired);
+    const createChannelStep = result.steps.find((s) => s.toolName === "create_channel");
+
+    expect(createChannelStep?.params.parent_id).toBe("$new-category-1");
+  });
+});

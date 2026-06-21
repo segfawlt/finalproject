@@ -8,6 +8,8 @@ import type {
   PlanStep,
   SymbolTable,
 } from "@repo/shared";
+import { channelTypeNumberToString } from "@repo/shared";
+import { logger } from "../utils/logger";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -63,7 +65,7 @@ function generateChannelSteps(
       // NEW channel
       const params: Record<string, unknown> = {
         name: ch.name,
-        type: ch.type,
+        type: channelTypeNumberToString[ch.type] ?? ch.type,
         symbol: key,
       };
       if (ch.parentId != null) params.parent_id = ch.parentId;
@@ -95,7 +97,7 @@ function generateChannelSteps(
       const moveDiff: Record<string, unknown> = { id: key };
 
       if (ch.name !== realCh.name) editDiff.name = ch.name;
-      if (ch.type !== realCh.type) editDiff.type = ch.type;
+      if (ch.type !== realCh.type) editDiff.type = channelTypeNumberToString[ch.type] ?? ch.type;
       if ((ch as { topic?: string }).topic !== (realCh as { topic?: string }).topic) {
         editDiff.topic = (ch as { topic?: string }).topic;
       }
@@ -392,6 +394,64 @@ function buildSymbolTable(rawSteps: RawStep[]): SymbolTable {
   return table;
 }
 
+function resolveDanglingSymbols(
+  steps: RawStep[],
+  symbolTable: SymbolTable,
+  serverState: ServerState
+): RawStep[] {
+  return steps.map((step) => {
+    const newParams: Record<string, unknown> = {};
+    const resolvedRefs = new Set<string>();
+    let modified = false;
+
+    for (const [key, value] of Object.entries(step.params)) {
+      if (typeof value === "string" && value.startsWith("$") && !symbolTable[value]) {
+        const realId = resolveSymbolToDiscordId(value, serverState);
+        if (realId) {
+          newParams[key] = realId;
+          resolvedRefs.add(value);
+          modified = true;
+        } else {
+          newParams[key] = value;
+        }
+      } else {
+        newParams[key] = value;
+      }
+    }
+
+    if (!modified) return step;
+    return {
+      ...step,
+      params: newParams,
+      symbolsReferenced: step.symbolsReferenced.filter((s) => !resolvedRefs.has(s)),
+    };
+  });
+}
+
+function resolveSymbolToDiscordId(symbol: string, serverState: ServerState): string | null {
+  const slug = symbol.slice(1).replace(/-\d+$/, "");
+  const normalizedSlug = slug.toLowerCase().replace(/-/g, " ");
+
+  for (const ch of serverState.channels) {
+    if (ch.type === 4 && nameMatchesSlug(ch.name, slug, normalizedSlug)) {
+      return ch.id;
+    }
+  }
+  for (const role of serverState.roles) {
+    if (nameMatchesSlug(role.name, slug, normalizedSlug)) {
+      return role.id;
+    }
+  }
+  return null;
+}
+
+function nameMatchesSlug(name: string, slug: string, normalizedSlug: string): boolean {
+  const normalizedName = name.toLowerCase();
+  if (normalizedName === normalizedSlug) return true;
+  if (normalizedName === slug.toLowerCase()) return true;
+  return false;
+}
+
 function buildDependencies(rawSteps: RawStep[], symbolTable: SymbolTable): number[][] {
   const deps: number[][] = rawSteps.map(() => []);
 
@@ -571,8 +631,14 @@ export function diffEngine(realState: ServerState, desiredState: DesiredState): 
     }
   }
 
+  // Resolve dangling symbols (referenced but not defined in this plan) against
+  // the current Discord state by name. This is needed when the LLM uses a
+  // symbol-like placeholder (e.g. "$text-channels-1") to refer to a category
+  // or role that already exists in Discord and is NOT being created here.
+  const resolved = resolveDanglingSymbols(optimized, symbolTable, realState);
+
   // Map dependencies to final indices
-  const steps: PlanStep[] = optimized.map((step, i) => ({
+  const steps: PlanStep[] = resolved.map((step, i) => ({
     index: i,
     toolName: step.toolName,
     params: step.params,
@@ -588,6 +654,20 @@ export function diffEngine(realState: ServerState, desiredState: DesiredState): 
       })
       .filter((idx) => idx !== -1 && idx !== i),
   }));
+
+  const byTool: Record<string, number> = {};
+  for (const step of steps) {
+    byTool[step.toolName] = (byTool[step.toolName] ?? 0) + 1;
+  }
+
+  logger.info(
+    {
+      stepCount: steps.length,
+      symbolCount: Object.keys(symbolTable).length,
+      byTool,
+    },
+    "[diff-engine] computed"
+  );
 
   return { steps, symbolTable };
 }

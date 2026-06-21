@@ -115,11 +115,16 @@ export class PlanningSession {
   async start(): Promise<void> {
     this.status = "planning";
     this.abortController = new AbortController();
+    logger.info(
+      { conversationId: this.conversationId, guildId: this.guildId },
+      "[planning-session] starting"
+    );
     try {
       await this.runLoop();
     } catch (err) {
       this.status = "error";
       const error = err instanceof Error ? err.message : String(err);
+      logger.error({ conversationId: this.conversationId, error }, "[planning-session] failed");
       await this.emit({ type: "error", error });
       throw err;
     }
@@ -216,6 +221,7 @@ export class PlanningSession {
 
   /** Cancel the current planning loop. Reverts to last snapshot if called mid-turn. */
   cancel(reason = "User cancelled"): void {
+    logger.info({ conversationId: this.conversationId, reason }, "[planning-session] cancelled");
     this.status = "idle";
     this.abortController.abort(reason);
     // Revert to pre-turn snapshot if available
@@ -228,16 +234,28 @@ export class PlanningSession {
 
   private async runLoop(): Promise<void> {
     let maxTurns = 20;
+    let turnNumber = 0;
 
     while (this.status === "planning" && maxTurns-- > 0) {
+      turnNumber += 1;
       // Save snapshot before this turn for possible cancellation
       this.preTurnSnapshot = this.store.snapshot();
+
+      logger.info(
+        { conversationId: this.conversationId, turnNumber, maxTurns },
+        "[planning-session] turn started"
+      );
 
       await this.emit({ type: "turn_started" });
 
       const response = await this.callLLM();
 
       const turnResult = await this.processTurn(response);
+
+      logger.info(
+        { conversationId: this.conversationId, turnNumber, turnResult },
+        "[planning-session] turn completed"
+      );
 
       // Persist iteration snapshot after this turn
       try {
@@ -308,11 +326,21 @@ export class PlanningSession {
     const toolName = toolCall.function.name;
     const params = JSON.parse(toolCall.function.arguments);
 
+    logger.debug(
+      { conversationId: this.conversationId, toolName, params },
+      "[planning-session] dispatching tool"
+    );
+
     await this.emit({ type: "tool_called", toolName, params });
 
     try {
       const tool = getTool(toolName);
       const result = tool.plan(params, this.store);
+
+      logger.debug(
+        { conversationId: this.conversationId, toolName, result },
+        "[planning-session] tool succeeded"
+      );
 
       await this.emit({ type: "tool_result", toolName, result });
 
@@ -329,6 +357,10 @@ export class PlanningSession {
       return { type: "success", result };
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
+      logger.error(
+        { conversationId: this.conversationId, toolName, error },
+        "[planning-session] tool failed"
+      );
       await this.emit({ type: "tool_result", toolName, result: { error } });
       return { type: "error", result: { error } };
     }
@@ -375,10 +407,29 @@ export class PlanningSession {
       abortSignal: this.abortController.signal,
     });
 
+    logger.info(
+      {
+        conversationId: this.conversationId,
+        url: request.url,
+        model,
+        messageCount: this.messages.length,
+      },
+      "[planning-session] calling LLM"
+    );
+
+    const fetchStart = Date.now();
     const fetchResponse = await fetch(request.url, request.fetchOptions);
 
     if (!fetchResponse.ok) {
       const text = await fetchResponse.text();
+      logger.error(
+        {
+          conversationId: this.conversationId,
+          status: fetchResponse.status,
+          body: text.slice(0, 500),
+        },
+        "[planning-session] LLM provider error"
+      );
       throw new Error(`LLM provider error ${fetchResponse.status}: ${text}`);
     }
 
@@ -394,6 +445,17 @@ export class PlanningSession {
         await this.handleStreamedToolCall(tc);
       },
     });
+
+    logger.info(
+      {
+        conversationId: this.conversationId,
+        status: fetchResponse.status,
+        durationMs: Date.now() - fetchStart,
+        toolCallCount: result.toolCalls.length,
+        thinkingChars: result.thinking.length,
+      },
+      "[planning-session] LLM response received"
+    );
 
     // Emit turn completion with thinking text
     await this.emit({
@@ -533,7 +595,10 @@ export class PlanningSession {
     lines.push("- Use ask_user when the request is ambiguous or missing critical details.");
     lines.push("- Always use edit_role to change role permissions, not delete+create.");
     lines.push(
-      "- When creating channels inside a category, set parent_id to the category's symbol or ID."
+      "- When creating channels inside a category, set parent_id to the category's ID (shown as 'id:...' in the server state above) or a symbol for a category being created in this plan."
+    );
+    lines.push(
+      "- If a create_category tool call returned a symbol, use that symbol as the parent_id for channels inside that category. Do NOT ask the user for category IDs or symbols — the symbol from the previous tool result IS the answer."
     );
     lines.push(
       "- Permission names must be exact: VIEW_CHANNEL, SEND_MESSAGES, MANAGE_CHANNELS, etc."

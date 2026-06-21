@@ -23,6 +23,7 @@ Ask **one question at a time** using the platform's blocking question tool. Pref
 If the user provides a scope hint (filename, category, or module), narrow to that scope. Otherwise, process all of `docs/learnings/`.
 
 For broad scope (20+ learnings), do a lightweight triage:
+
 1. Read frontmatter of all learnings, group by category
 2. For each cluster, check if primary referenced files still exist
 3. Recommend starting with the cluster that has the most broken references
@@ -31,13 +32,13 @@ For broad scope (20+ learnings), do a lightweight triage:
 
 For each candidate learning, classify into one of five outcomes:
 
-| Outcome | When | Action |
-|---|---|---|
-| **Keep** | Still accurate and still useful | No file edit. Report reviewed-without-edits. |
-| **Update** | Core lesson correct, but file paths/names/links drifted | Apply in-place edits, set `last_updated: <today>` |
-| **Consolidate** | Two learnings overlap heavily but are both correct | Merge unique content into canonical doc, delete subsumed doc |
-| **Replace** | Core guidance is now misleading, but a better replacement exists | Write a successor (use the `compound` skill), delete the old |
-| **Delete** | Code/workflow gone, problem domain gone, no inbound links | Delete the file. Git history preserves it. |
+| Outcome         | When                                                             | Action                                                       |
+| --------------- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
+| **Keep**        | Still accurate and still useful                                  | No file edit. Report reviewed-without-edits.                 |
+| **Update**      | Core lesson correct, but file paths/names/links drifted          | Apply in-place edits, set `last_updated: <today>`            |
+| **Consolidate** | Two learnings overlap heavily but are both correct               | Merge unique content into canonical doc, delete subsumed doc |
+| **Replace**     | Core guidance is now misleading, but a better replacement exists | Write a successor (use the `compound` skill), delete the old |
+| **Delete**      | Code/workflow gone, problem domain gone, no inbound links        | Delete the file. Git history preserves it.                   |
 
 ## Drift Classification: Update vs Replace
 
@@ -55,6 +56,7 @@ If you find yourself rewriting the "Solution" or "Why This Works" section, stop 
 3. **Are there inbound links?** Use Grep on all `*.md` files in the repo for the filename slug. If other docs cite this learning, signal Replace (don't leave dangling references).
 
 **Auto-delete only when all three hold:**
+
 - Implementation is gone (or fully superseded)
 - Problem domain is gone
 - Inbound links are absent or only decorative ("see also" pointers)
@@ -73,6 +75,7 @@ After processing learnings, check `docs/learnings/README.md` → "## Pending Ter
 - If less → no action
 
 **Bootstrap process** (one-time action when threshold hit):
+
 1. Create `CONCEPTS.md` at repo root with this preamble:
 
    > Shared domain vocabulary for this project — entities, named processes, and status concepts with project-specific meaning. Seeded from accumulated learnings, then accretes over time; direct edits are fine. Glossary only, not a spec or catch-all.
@@ -85,6 +88,7 @@ After processing learnings, check `docs/learnings/README.md` → "## Pending Ter
 The `compound` skill tracks references via the "## Promote Candidates" section in `docs/learnings/README.md`. A learning hits "promote candidate" status after 3 references.
 
 This refresh skill does NOT auto-promote. It only:
+
 - Verifies the reference counts in the README are accurate
 - Surfaces the "Promote Candidates" list for human review
 

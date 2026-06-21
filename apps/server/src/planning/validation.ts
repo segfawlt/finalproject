@@ -6,8 +6,12 @@ import type {
   PermissionOverwrite,
 } from "@repo/shared";
 import { DISCORD_PERMISSIONS } from "@repo/shared";
+import { db, rules } from "@repo/db";
+import { eq } from "drizzle-orm";
 import { botHasAdministrator, getBotHighestRolePosition } from "../bot/permissions";
 import { guildCache } from "../bot/cache";
+import { validatedEnv } from "../env-validated";
+import { logger } from "../utils/logger";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -437,6 +441,109 @@ function validatePlanIntegrity(steps: PlanStep[], status: string): ValidationIss
   return issues;
 }
 
+// ── Group F: LLM Policy Check ────────────────────────────────────────────────
+
+function summarizePlanStep(step: PlanStep): string {
+  const name = (step.params.name as string) ?? (step.params.id as string) ?? "";
+  switch (step.toolName) {
+    case "create_channel":
+      return `Create channel "${name}" (${step.params.type})`;
+    case "create_category":
+      return `Create category "${name}"`;
+    case "create_role":
+      return `Create role "${name}"`;
+    case "delete_channel":
+    case "delete_category":
+      return `Delete ${step.toolName.replace("delete_", "")} "${name}"`;
+    case "delete_role":
+      return `Delete role "${name}"`;
+    case "edit_channel":
+    case "edit_category":
+    case "edit_role":
+      return `Edit ${step.toolName.replace("edit_", "")} "${name}"`;
+    case "set_overwrite":
+      return `Set permission overwrite on ${step.params.channel_id} for ${step.params.role_id}`;
+    case "remove_overwrite":
+      return `Remove permission overwrite on ${step.params.channel_id} for ${step.params.role_id}`;
+    case "move_channel":
+    case "move_role":
+      return `Move ${step.toolName.replace("move_", "")} "${name}"`;
+    default:
+      return step.toolName;
+  }
+}
+
+async function validateWithLLM(steps: PlanStep[], guildId: string): Promise<ValidationIssue[]> {
+  const apiKey = validatedEnv.LLM_API_KEY;
+  if (!apiKey) return [];
+
+  const guildRules = await db.select().from(rules).where(eq(rules.guildId, guildId));
+  if (guildRules.length === 0) return [];
+
+  const planSummary = steps.map(summarizePlanStep).join("\n");
+  if (!planSummary) return [];
+
+  const rulesText = guildRules.map((r, i) => `${i + 1}. ${r.ruleText}`).join("\n");
+
+  try {
+    const response = await fetch(`${validatedEnv.LLM_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer": validatedEnv.WEB_APP_URL,
+        "X-Title": "Discord Platform",
+      },
+      body: JSON.stringify({
+        model: validatedEnv.LLM_MODEL,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a server rule compliance checker. " +
+              "Given a proposed plan for changes to a Discord server and a list of server rules, " +
+              "identify any violations. " +
+              "Return ONLY a valid JSON object with this exact shape:\n" +
+              '{ "violations": [{ "rule": string, "severity": "warning" | "block", "message": string }] }\n' +
+              "If there are no violations, return { violations: [] }.",
+          },
+          {
+            role: "user",
+            content: `Server rules:\n${rulesText}\n\nProposed plan:\n${planSummary}`,
+          },
+        ],
+        temperature: 0.1,
+        response_format: { type: "json_object" },
+        max_tokens: 1024,
+      }),
+    });
+
+    if (!response.ok) {
+      logger.error({ status: response.status, guildId }, "[validateWithLLM] OpenRouter error");
+      return [];
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return [];
+
+    const parsed = JSON.parse(content) as {
+      violations?: Array<{ rule: string; severity: string; message: string }>;
+    };
+
+    return (parsed.violations ?? []).map((v) => ({
+      group: "Stage 2: Policy",
+      message: v.message,
+      severity: (v.severity === "block" ? "block" : "warning") as ValidationSeverity,
+    }));
+  } catch (err) {
+    logger.error({ err, guildId }, "[validateWithLLM] failed");
+    return [];
+  }
+}
+
 // ── Main Entry Point ─────────────────────────────────────────────────────────
 
 export interface ValidatePlanOptions {
@@ -448,9 +555,10 @@ export interface ValidatePlanOptions {
 }
 
 /**
- * Deterministic validation pipeline.
+ * Validation pipeline.
  *
- * Five groups of hard-coded checks (fast, no LLM).
+ * Stages 1: five groups of hard-coded checks (fast, no LLM).
+ * Stage 2: LLM-based policy check against server-defined rules.
  *
  * Returns passed=true only if there are zero block-level issues.
  */
@@ -464,9 +572,21 @@ export async function validatePlan(options: ValidatePlanOptions): Promise<Valida
     ...validateSafetyGuards(steps),
     ...validateOverwriteConsolidation(steps, desiredState),
     ...validatePlanIntegrity(steps, status),
+    ...(await validateWithLLM(steps, guildId)),
   ];
 
   const hasBlockers = issues.some((i) => i.severity === "block");
+  const blockerCount = issues.filter((i) => i.severity === "block").length;
+  const warningCount = issues.filter((i) => i.severity === "warning").length;
+
+  if (hasBlockers) {
+    logger.warn(
+      { guildId, stepCount: steps.length, blockerCount, warningCount },
+      "[validation] plan has blockers"
+    );
+  } else {
+    logger.info({ guildId, stepCount: steps.length, warningCount }, "[validation] plan passed");
+  }
 
   return {
     passed: !hasBlockers,

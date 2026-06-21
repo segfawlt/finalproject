@@ -1,0 +1,11 @@
+{
+  "tsconfig": "packages/shared/tsconfig.json",
+  "entryPoints": ["packages/shared/src/index.ts"],
+  "entryPointStrategy": "expand",
+  "out": "docs/api",
+  "name": "Discord Platform API",
+  "readme": "none",
+  "categorizeByGroup": true,
+  "excludePrivate": true,
+  "excludeInternal": true
+}

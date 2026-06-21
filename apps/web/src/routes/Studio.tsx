@@ -488,39 +488,49 @@ export default function Studio() {
   }
 
   // ── Phase 5: Execute plan ────────────────────────────────────────────────
+  // Called internally from approve(), which already holds the in-flight lock.
   async function executePlan(pid: string) {
-    if (enterInFlight()) return;
+    setExecEvents([]);
+
     try {
-      setExecEvents([]);
+      connectExecSSE(pid);
+      setPhase("executing");
 
-      try {
-        const res = await apiFetch(`/api/guilds/${guildId}/plans/${pid}/execute`, {
-          method: "POST",
-        });
+      const res = await apiFetch(`/api/guilds/${guildId}/plans/${pid}/execute`, {
+        method: "POST",
+      });
 
-        if (!res.ok) {
-          const data = (await res.json()) as { error: string };
-          showError(data.error || `Execution failed (${res.status})`);
-          setPhase("execute_failed");
-          return;
-        }
-
-        const data = (await res.json()) as { success: boolean; error?: string };
-        if (!data.success) {
-          showError(data.error || "Execution failed");
-          setPhase("execute_failed");
-          return;
-        }
-
-        // Only open SSE after the plan has been accepted for execution
-        connectExecSSE(pid);
-        setPhase("executing");
-      } catch (err) {
-        showError(err instanceof Error ? err.message : String(err));
+      if (!res.ok) {
+        const data = (await res.json()) as {
+          error: string;
+          conflicts?: string[];
+          blockers?: { message: string }[];
+          warnings?: { message: string }[];
+        };
+        const details = [
+          ...(data.conflicts ?? []),
+          ...(data.blockers?.map((b) => b.message) ?? []),
+        ].join("\n");
+        showError(details ? `${data.error}\n${details}` : data.error);
+        execEsRef.current?.close();
+        execEsRef.current = null;
         setPhase("execute_failed");
+        return;
       }
-    } finally {
-      exitInFlight();
+
+      const data = (await res.json()) as { success: boolean; error?: string };
+      if (!data.success) {
+        showError(data.error || "Execution failed");
+        execEsRef.current?.close();
+        execEsRef.current = null;
+        setPhase("execute_failed");
+        return;
+      }
+    } catch (err) {
+      showError(err instanceof Error ? err.message : String(err));
+      execEsRef.current?.close();
+      execEsRef.current = null;
+      setPhase("execute_failed");
     }
   }
 

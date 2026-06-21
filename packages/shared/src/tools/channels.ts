@@ -81,6 +81,15 @@ const channelTypeMap: Record<string, number> = {
   media: 16,
 };
 
+export const channelTypeNumberToString: Record<number, string> = {
+  0: "text",
+  2: "voice",
+  5: "announcement",
+  13: "stage",
+  15: "forum",
+  16: "media",
+};
+
 // ── plan() functions ─────────────────────────────────────────────────────────
 
 export function planChannelCreate(

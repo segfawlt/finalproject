@@ -21,6 +21,7 @@ import {
 } from "@repo/shared";
 import { diffEngine } from "./diff-engine";
 import { botClient } from "../bot/client";
+import { logger } from "../utils/logger";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,10 @@ function resolveSymbols(
   const resolved: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(params)) {
+    if (key === "symbol") {
+      resolved[key] = value;
+      continue;
+    }
     if (typeof value === "string" && value.startsWith("$") && symbolTable[value]) {
       const entry = symbolTable[value];
       if (entry.resolvedDiscordId) {
@@ -311,6 +316,7 @@ export async function rollbackFull(
   ctx: ExecuteContext,
   emit: EventEmitter
 ): Promise<ExecutionResult> {
+  logger.warn({ planId, guildId: ctx.guildId }, "[execution-engine] rollback starting");
   await emit({ type: "rollback_started", planId });
 
   const currentState = await buildCurrentStateFromDiscord(ctx.guildId);
@@ -318,9 +324,15 @@ export async function rollbackFull(
   const diffResult = diffEngine(currentState, desiredBefore);
 
   if (diffResult.steps.length === 0) {
+    logger.info({ planId }, "[execution-engine] rollback no-op (no diff)");
     await emit({ type: "rollback_completed", planId });
     return { success: true, completedSteps: [] };
   }
+
+  logger.info(
+    { planId, stepCount: diffResult.steps.length },
+    "[execution-engine] rollback steps computed"
+  );
 
   const result = await executePlan({
     planId,
@@ -329,6 +341,11 @@ export async function rollbackFull(
     ctx,
     emit,
   });
+
+  logger.info(
+    { planId, success: result.success, error: result.error },
+    "[execution-engine] rollback finished"
+  );
 
   await emit({ type: "rollback_completed", planId });
   return result;
@@ -349,11 +366,17 @@ export async function executePlan(options: ExecutionOptions): Promise<ExecutionR
   const { planId, steps, symbolTable, ctx, emit, abortSignal, beforeSnapshot } = options;
   const completedSteps: PlanStep[] = [];
 
+  logger.info(
+    { planId, stepCount: steps.length, guildId: ctx.guildId },
+    "[execution-engine] starting"
+  );
+
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
 
     // Check abort signal
     if (abortSignal?.aborted) {
+      logger.warn({ planId, stepIndex: i }, "[execution-engine] aborted by signal");
       if (beforeSnapshot) {
         const rollbackResult = await rollbackFull(beforeSnapshot, planId, ctx, emit);
         if (!rollbackResult.success) {
@@ -371,11 +394,25 @@ export async function executePlan(options: ExecutionOptions): Promise<ExecutionR
     );
     if (depsFailed) {
       step.status = "skipped";
+      logger.info(
+        { planId, stepIndex: i, toolName: step.toolName },
+        "[execution-engine] step skipped (dependency failed)"
+      );
       continue;
     }
 
     // Resolve symbols
     step.resolvedParams = resolveSymbols(step.params, symbolTable);
+
+    logger.info(
+      {
+        planId,
+        stepIndex: i,
+        toolName: step.toolName,
+        resolvedParams: step.resolvedParams,
+      },
+      "[execution-engine] step started"
+    );
 
     await emit({ type: "step_started", stepIndex: i, planId });
 
@@ -405,6 +442,18 @@ export async function executePlan(options: ExecutionOptions): Promise<ExecutionR
 
         if (isTransientError(err) && attempt < MAX_RETRIES) {
           const backoff = computeBackoff(attempt);
+          logger.warn(
+            {
+              planId,
+              stepIndex: i,
+              toolName: step.toolName,
+              attempt: attempt + 1,
+              maxRetries: MAX_RETRIES,
+              backoffMs: backoff,
+              error: lastError.message,
+            },
+            "[execution-engine] transient error, retrying"
+          );
           await emit({
             type: "step_retry",
             stepIndex: i,
@@ -428,12 +477,27 @@ export async function executePlan(options: ExecutionOptions): Promise<ExecutionR
 
     if (success) {
       completedSteps.push(step);
+      logger.info(
+        { planId, stepIndex: i, toolName: step.toolName, result: step.result },
+        "[execution-engine] step completed"
+      );
       await emit({ type: "step_completed", stepIndex: i, planId, result: step.result });
     } else {
       step.status = "failed";
       step.error = lastError?.message;
 
       const diagnosis = diagnoseError(lastError);
+
+      logger.error(
+        {
+          planId,
+          stepIndex: i,
+          toolName: step.toolName,
+          error: lastError?.message,
+          diagnosis,
+        },
+        "[execution-engine] step failed"
+      );
 
       await emit({
         type: "step_failed",
@@ -445,10 +509,16 @@ export async function executePlan(options: ExecutionOptions): Promise<ExecutionR
 
       // Rollback all completed steps using full diff-based rollback
       if (beforeSnapshot) {
+        logger.warn(
+          { planId, completedCount: completedSteps.length },
+          "[execution-engine] starting rollback"
+        );
         await rollbackFull(beforeSnapshot, planId, ctx, emit);
       }
 
       await emit({ type: "plan_failed", planId, error: lastError?.message });
+
+      logger.error({ planId, error: lastError?.message }, "[execution-engine] plan failed");
 
       return {
         success: false,
@@ -460,6 +530,11 @@ export async function executePlan(options: ExecutionOptions): Promise<ExecutionR
   }
 
   await emit({ type: "plan_completed", planId });
+
+  logger.info(
+    { planId, completedCount: completedSteps.length },
+    "[execution-engine] plan completed"
+  );
 
   return {
     success: true,

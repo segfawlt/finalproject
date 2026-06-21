@@ -18,6 +18,7 @@ import conversationsApp from "./routes/conversations";
 import templatesApp from "./routes/templates";
 import botApp from "./routes/bot";
 import { rateLimit } from "./middleware/rate-limit";
+import { logger } from "../utils/logger";
 
 const app = new Hono();
 
@@ -28,6 +29,8 @@ app.onError((err, c) => {
   if (err instanceof DiscordApiError) {
     return c.json({ error: "Discord API is temporarily unavailable. Please retry." }, 503);
   }
+  logger.error({ path: c.req.path, method: c.req.method }, "[hono] unhandled error");
+  logger.error(err, "[hono] unhandled error in route");
   return c.json({ error: "Internal server error" }, 500);
 });
 

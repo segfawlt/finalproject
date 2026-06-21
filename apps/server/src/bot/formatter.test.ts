@@ -83,3 +83,66 @@ describe("formatMemberRoles", () => {
     expect(output).toContain("@everyone (1): (all members)");
   });
 });
+
+describe("formatGuildForLLM — IDs in output", () => {
+  beforeEach(() => {
+    guildCache.clear();
+  });
+
+  it("includes category IDs alongside names", () => {
+    const cache = initGuildCache("g1");
+    cache.channels.set("cat-1", {
+      id: "cat-1",
+      name: "Text Channels",
+      type: 4,
+      parentId: null,
+      position: 0,
+      lockPermissions: false,
+    });
+
+    const output = formatGuildForLLM("g1");
+
+    expect(output).toContain("Text Channels (id:cat-1)");
+  });
+
+  it("includes channel IDs alongside names", () => {
+    const cache = initGuildCache("g1");
+    cache.channels.set("cat-1", {
+      id: "cat-1",
+      name: "Text Channels",
+      type: 4,
+      parentId: null,
+      position: 0,
+      lockPermissions: false,
+    });
+    cache.channels.set("ch-1", {
+      id: "ch-1",
+      name: "general",
+      type: 0,
+      parentId: "cat-1",
+      position: 0,
+      lockPermissions: true,
+    });
+
+    const output = formatGuildForLLM("g1");
+
+    expect(output).toContain("#general — text (id:ch-1)");
+  });
+
+  it("includes role IDs alongside names", () => {
+    const cache = initGuildCache("g1");
+    cache.roles.set("role-1", {
+      id: "role-1",
+      name: "Admin",
+      position: 5,
+      permissions: [],
+      color: 0,
+      hoist: true,
+      mentionable: false,
+    });
+
+    const output = formatGuildForLLM("g1");
+
+    expect(output).toContain("Admin (id:role-1)");
+  });
+});

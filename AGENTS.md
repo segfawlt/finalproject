@@ -45,6 +45,7 @@ When you change code, update the affected docs in the same change. If a rule, co
 **Before non-trivial work:** read `docs/learnings/README.md` (the index) and check entries with relevant tags. If a learning's tag matches your current task, read the full file and apply the lesson. When you apply an existing learning, increment its `## References` count (the `compound` skill will surface the increment for you).
 
 **When to write a new learning:** invoke the `compound` skill after any of these:
+
 - **After any `systematic-debugging` session resolves a bug, invoke `compound` before moving on to the next task** (this is the primary trigger)
 - Fixed a non-trivial bug (outside of formal debugging)
 - Solved a tricky problem that took more than one attempt

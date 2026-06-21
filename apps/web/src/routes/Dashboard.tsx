@@ -12,6 +12,7 @@ import {
   Compass,
 } from "lucide-react";
 import EmptyState from "../components/EmptyState";
+import RulesSection from "../components/RulesSection";
 
 interface GuildSummary {
   id: string;
@@ -209,11 +210,9 @@ function GuildDashboardView({ guildId }: { guildId: string }) {
 
       <section>
         <h2 className="text-sm font-semibold text-discord-text-muted uppercase tracking-wide mb-3 flex items-center gap-2">
-          <Settings size={14} /> Settings
+          <Settings size={14} /> Rules
         </h2>
-        <div className="p-4 bg-discord-bg-secondary/50 border border-dashed border-discord-divider rounded-lg text-discord-text-muted text-sm">
-          Rules, allowed tools, and notification settings — coming soon.
-        </div>
+        <RulesSection guildId={guildId} />
       </section>
     </div>
   );

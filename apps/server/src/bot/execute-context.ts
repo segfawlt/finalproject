@@ -78,6 +78,11 @@ export class DiscordExecuteContext implements ExecuteContext {
       lockPermissions: options?.lockPermissions,
     } as any);
 
+    logger.debug(
+      { guildId: this.guildId, name, type, id: (channel as { id: string }).id },
+      "[discord] channel created"
+    );
+
     return { id: (channel as { id: string }).id };
   }
 
@@ -137,29 +142,43 @@ export class DiscordExecuteContext implements ExecuteContext {
         }
       : undefined;
 
-    await channel.edit({
-      name: options.name,
-      parent: parent?.id ?? undefined,
-      position: options.position,
-      topic: options.topic,
-      bitrate: options.bitrate,
-      userLimit: options.userLimit,
-      nsfw: options.nsfw,
-      rateLimitPerUser: options.rateLimitPerUser,
-      availableTags,
-      defaultReactionEmoji,
-      defaultSortOrder: options.defaultSortOrder ?? undefined,
-      defaultForumLayout: options.defaultForumLayout ?? undefined,
-      defaultThreadRateLimitPerUser: options.defaultThreadRateLimitPerUser,
-      flags: options.flags,
-      lockPermissions: options.lockPermissions,
-    });
+    const editOptions: Record<string, unknown> = {};
+    if (options.name !== undefined) editOptions.name = options.name;
+    if (parent?.id !== undefined) editOptions.parent = parent.id;
+    if (options.position !== undefined) editOptions.position = options.position;
+    if (options.topic !== undefined) editOptions.topic = options.topic;
+    if (options.bitrate !== undefined) editOptions.bitrate = options.bitrate;
+    if (options.userLimit !== undefined) editOptions.userLimit = options.userLimit;
+    if (options.nsfw !== undefined) editOptions.nsfw = options.nsfw;
+    if (options.rateLimitPerUser !== undefined) {
+      editOptions.rateLimitPerUser = options.rateLimitPerUser;
+    }
+    if (availableTags !== undefined) editOptions.availableTags = availableTags;
+    if (defaultReactionEmoji !== undefined) editOptions.defaultReactionEmoji = defaultReactionEmoji;
+    if (options.defaultSortOrder !== undefined) {
+      editOptions.defaultSortOrder = options.defaultSortOrder;
+    }
+    if (options.defaultForumLayout !== undefined) {
+      editOptions.defaultForumLayout = options.defaultForumLayout;
+    }
+    if (options.defaultThreadRateLimitPerUser !== undefined) {
+      editOptions.defaultThreadRateLimitPerUser = options.defaultThreadRateLimitPerUser;
+    }
+    if (options.flags !== undefined) editOptions.flags = options.flags;
+    if (options.lockPermissions !== undefined) {
+      editOptions.lockPermissions = options.lockPermissions;
+    }
+
+    await channel.edit(editOptions);
+
+    logger.debug({ guildId: this.guildId, id, name: options.name }, "[discord] channel edited");
   }
 
   async deleteChannel(id: string): Promise<void> {
     const channel = this.guild.channels.cache.get(id);
     if (!channel) throw new Error(`Channel ${id} not found`);
     await channel.delete();
+    logger.debug({ guildId: this.guildId, id, name: channel.name }, "[discord] channel deleted");
   }
 
   async moveChannel(
@@ -177,11 +196,18 @@ export class DiscordExecuteContext implements ExecuteContext {
       ? (this.guild.channels.cache.get(options.parentId) as CategoryChannel | undefined)
       : undefined;
 
-    await channel.edit({
-      parent: parent?.id ?? undefined,
-      position: options.position,
-      lockPermissions: options.lockPermissions,
-    });
+    const editOptions: Record<string, unknown> = {};
+    if (parent?.id !== undefined) editOptions.parent = parent.id;
+    if (options.position !== undefined) editOptions.position = options.position;
+    if (options.lockPermissions !== undefined)
+      editOptions.lockPermissions = options.lockPermissions;
+
+    await channel.edit(editOptions);
+
+    logger.debug(
+      { guildId: this.guildId, id, parentId: options.parentId, position: options.position },
+      "[discord] channel moved"
+    );
   }
 
   // ── Role operations ────────────────────────────────────────────────────────
@@ -196,14 +222,18 @@ export class DiscordExecuteContext implements ExecuteContext {
       position?: number;
     }
   ): Promise<CreateRoleResult> {
-    const role = await this.guild.roles.create({
-      name,
-      permissions: options?.permissions ? this.parsePermissions(options.permissions) : undefined,
-      color: options?.color ?? undefined,
-      hoist: options?.hoist,
-      mentionable: options?.mentionable,
-      position: options?.position,
-    });
+    const createOptions: Record<string, unknown> = { name };
+    if (options?.permissions !== undefined) {
+      createOptions.permissions = this.parsePermissions(options.permissions);
+    }
+    if (options?.color !== undefined) createOptions.color = options.color;
+    if (options?.hoist !== undefined) createOptions.hoist = options.hoist;
+    if (options?.mentionable !== undefined) createOptions.mentionable = options.mentionable;
+    if (options?.position !== undefined) createOptions.position = options.position;
+
+    const role = await this.guild.roles.create(createOptions);
+
+    logger.debug({ guildId: this.guildId, name, id: role.id }, "[discord] role created");
 
     return { id: role.id };
   }
@@ -222,26 +252,33 @@ export class DiscordExecuteContext implements ExecuteContext {
     const role = this.guild.roles.cache.get(id);
     if (!role) throw new Error(`Role ${id} not found`);
 
-    await role.edit({
-      name: options.name,
-      permissions: options.permissions ? this.parsePermissions(options.permissions) : undefined,
-      color: options.color ?? undefined,
-      hoist: options.hoist,
-      mentionable: options.mentionable,
-      position: options.position,
-    });
+    const editOptions: Record<string, unknown> = {};
+    if (options.name !== undefined) editOptions.name = options.name;
+    if (options.permissions !== undefined) {
+      editOptions.permissions = this.parsePermissions(options.permissions);
+    }
+    if (options.color !== undefined) editOptions.color = options.color;
+    if (options.hoist !== undefined) editOptions.hoist = options.hoist;
+    if (options.mentionable !== undefined) editOptions.mentionable = options.mentionable;
+    if (options.position !== undefined) editOptions.position = options.position;
+
+    await role.edit(editOptions);
+
+    logger.debug({ guildId: this.guildId, id, name: options.name }, "[discord] role edited");
   }
 
   async deleteRole(id: string): Promise<void> {
     const role = this.guild.roles.cache.get(id);
     if (!role) throw new Error(`Role ${id} not found`);
     await role.delete();
+    logger.debug({ guildId: this.guildId, id, name: role.name }, "[discord] role deleted");
   }
 
   async moveRole(id: string, position: number): Promise<void> {
     const role = this.guild.roles.cache.get(id);
     if (!role) throw new Error(`Role ${id} not found`);
     await role.setPosition(position);
+    logger.debug({ guildId: this.guildId, id, name: role.name, position }, "[discord] role moved");
   }
 
   // ── Permission operations ────────────────────────────────────────────────────
@@ -278,6 +315,11 @@ export class DiscordExecuteContext implements ExecuteContext {
       if (!role) throw new Error(`Role ${roleId} not found`);
       await ch.permissionOverwrites.edit(role, { allow, deny });
     }
+
+    logger.debug(
+      { guildId: this.guildId, channelId, roleId, allow, deny },
+      "[discord] overwrite set"
+    );
   }
 
   async removeOverwrite(channelId: string, roleId: string): Promise<void> {
@@ -302,6 +344,8 @@ export class DiscordExecuteContext implements ExecuteContext {
       if (!role) throw new Error(`Role ${roleId} not found`);
       await ch.permissionOverwrites.delete(role);
     }
+
+    logger.debug({ guildId: this.guildId, channelId, roleId }, "[discord] overwrite removed");
   }
 
   // ── Member operations ────────────────────────────────────────────────────────
@@ -311,11 +355,16 @@ export class DiscordExecuteContext implements ExecuteContext {
     const role = this.guild.roles.cache.get(roleId);
     if (!role) throw new Error(`Role ${roleId} not found`);
     await member.roles.add(role);
+    logger.debug(
+      { guildId: this.guildId, memberId, roleId, roleName: role.name },
+      "[discord] role added to member"
+    );
   }
 
   async removeRoleFromMember(memberId: string, roleId: string): Promise<void> {
     const member = await this.guild.members.fetch(memberId);
     await member.roles.remove(roleId);
+    logger.debug({ guildId: this.guildId, memberId, roleId }, "[discord] role removed from member");
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
