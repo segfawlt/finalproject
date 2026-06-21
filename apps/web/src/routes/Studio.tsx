@@ -8,6 +8,8 @@ import ExecutionStatus, { type ExecEvent } from "../components/ExecutionStatus";
 import IterationHistory, { type IterationRow } from "../components/IterationHistory";
 import TemplatePanel from "../components/TemplatePanel";
 import StudioShell from "../components/studio/StudioShell";
+import StudioHeader from "../components/studio/StudioHeader";
+import ConversationSidebar from "../components/studio/ConversationSidebar";
 import { apiFetch } from "../lib/api";
 
 interface PlanningEvent {
@@ -344,6 +346,60 @@ export default function Studio() {
     setShowTemplatePanel(false);
     setActiveTemplates([]);
     setPhase("input");
+  }
+
+  // ── Load a past conversation from history ───────────────────────────────
+  // Closes any active SSE, fetches the conversation + its iteration
+  // history, and lands the studio on the "completed" view so the user
+  // can see the prior desired state with its diff overlay.
+  async function loadConversation(convId: string) {
+    if (enterInFlight()) return;
+    try {
+      planningEsRef.current?.close();
+      planningEsRef.current = null;
+      execEsRef.current?.close();
+      execEsRef.current = null;
+
+      setConversationId(convId);
+      setPlanId(null);
+      setPlanningEvents([]);
+      setExecEvents([]);
+      setAskUserData(null);
+      setAskUserSelected([]);
+      setAskUserCustom("");
+      setSummary("");
+      setError("");
+      setPhase("completed");
+      setActiveTemplates([]);
+
+      try {
+        const res = await apiFetch(`/api/guilds/${guildId}/conversations/${convId}`);
+        if (res.ok) {
+          const convData = (await res.json()) as { iterations: IterationRow[] };
+          const iters = convData.iterations ?? [];
+          setIterations(iters);
+          const latest = iters.length > 0 ? iters[iters.length - 1] : null;
+          if (latest) setDesiredState(latest.desiredState);
+        } else {
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          showError(data.error || `Failed to load conversation (${res.status})`);
+        }
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
+      }
+
+      setCurrentState(null);
+      try {
+        const stateRes = await apiFetch(`/api/guilds/${guildId}/state`);
+        if (stateRes.ok) {
+          setCurrentState((await stateRes.json()) as ServerState);
+        }
+      } catch {
+        // diff overlay just stays hidden
+      }
+    } finally {
+      exitInFlight();
+    }
   }
 
   // ── Cancel planning ────────────────────────────────────────────────────────
@@ -836,7 +892,19 @@ export default function Studio() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <StudioShell>
+    <StudioShell
+      header={<StudioHeader />}
+      sidebar={
+        guildId ? (
+          <ConversationSidebar
+            guildId={guildId}
+            activeConversationId={conversationId}
+            onSelectConversation={loadConversation}
+            onNewChat={resetPlanningState}
+          />
+        ) : undefined
+      }
+    >
       <div className="flex-1 p-6 overflow-y-auto">
           <div className="flex items-center justify-between mb-6 gap-3">
             <div className="flex items-center gap-3 min-w-0">
