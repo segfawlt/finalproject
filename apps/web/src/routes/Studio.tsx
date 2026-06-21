@@ -7,6 +7,7 @@ import StudioShell from "../components/studio/StudioShell";
 import StudioHeader from "../components/studio/StudioHeader";
 import ConversationSidebar from "../components/studio/ConversationSidebar";
 import ChatArea, { type ChatAreaEditProps } from "../components/studio/ChatArea";
+import RightPanel from "../components/studio/RightPanel";
 import { useGuildName } from "../hooks/useGuildName";
 import { useConversation } from "../hooks/useConversation";
 import { apiFetch } from "../lib/api";
@@ -235,6 +236,7 @@ export default function Studio() {
           />
         ) : undefined
       }
+      rightPanel={guildId ? <RightPanel c={c} guildId={guildId} /> : undefined}
     >
       <div className="flex-1 flex flex-col min-h-0">
         {/* Guild picker (only when no guild is picked) — replaces the
