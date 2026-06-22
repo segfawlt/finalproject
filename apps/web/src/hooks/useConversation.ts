@@ -691,7 +691,15 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
         exitInFlight();
       }
     },
-    [guildId, conversationId, enterInFlight, exitInFlight, clearError, showError, connectPlanningSSE]
+    [
+      guildId,
+      conversationId,
+      enterInFlight,
+      exitInFlight,
+      clearError,
+      showError,
+      connectPlanningSSE,
+    ]
   );
 
   const revert = useCallback(

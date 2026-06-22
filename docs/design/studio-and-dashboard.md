@@ -1,139 +1,138 @@
 # Studio & Dashboard
 
-## Studio (Web Clone — Primary Interface)
+## Studio (Chat-Native Web Clone)
 
-A React-based Discord-like UI focused on server configuration (not messaging). Client-side SPA (Vite + React), no SSR needed.
+A React-based Discord-like UI focused on server configuration (not messaging).
+Client-side SPA (Vite + React), no SSR needed.
 
-There is only **one mode — Plan Mode.** The user types a prompt, the LLM builds the desired state, and the Discord clone renders it with visual diff highlighting (green = new, red = deleted). The user decides depth: click Approve immediately for quick execution, or iterate with more prompts and manual edits before approving.
+The Studio is built around a **chat-native** layout: a collapsible history
+sidebar on the left, a chat area in the middle, and a tabbed preview panel
+on the right. The user types a prompt, the LLM builds the desired state, and
+the Discord clone in the right panel updates live. The user decides depth:
+click Approve immediately for quick execution, or iterate with more
+prompts and manual edits before approving.
+
+### Layout (3-column)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Top header: guild name, back-to-picker, Templates / Settings │
+├──────────┬──────────────────────────┬─────────────────────────┤
+│ History  │  Chat conversation       │ Right panel (tabs):     │
+│ sidebar  │                          │ [Server][Desired][+...]  │
+│ (collapse│  Welcome OR messages     │                         │
+│ -ible)   │  + docked input          │  Closable tabs:         │
+│          │                          │  Channel detail, Roles, │
+│ [+ New   │  Inline action buttons   │  Members, Templates,    │
+│   chat]  │  on the assistant's      │  Drift                  │
+│          │  final message.          │                         │
+│ Today    │                          │  (overflow › if many)    │
+│ ── conv1 │                          │                         │
+└──────────┴──────────────────────────┴─────────────────────────┘
+```
+
+- The **history sidebar** (`ConversationSidebar`) lists past conversations
+  grouped by Today / Yesterday / Earlier, with a New Chat button at the top.
+- The **chat area** (`ChatArea`) renders the conversation as a stream of
+  bubbles: user prompt (right-aligned accent), assistant planning bubble
+  (with a collapsed planning log), ask_user bubble (with options + custom
+  input), completed bubble (summary + DesiredStateView + inline Approve /
+  Edit / Cancel actions), executing bubble (live step log), executed
+  bubble (Rollback / New plan), execute_failed bubble. A Revise input is
+  docked at the bottom when the plan is ready.
+- The **right panel** (`RightPanel`) is a VSCode-style tab system. The
+  Server tab is always present and shows the current Discord state. The
+  Desired tab appears when the active conversation has produced a desired
+  state. The "+" popover adds closable tabs (Roles, Members, Templates).
+  Clicking a channel in the Server tab opens a `channel:<id>` tab with the
+  channel detail (settings + permission overwrites table).
+
+### Welcome state
+
+When there's no active conversation, the chat area shows `WelcomeScreen`:
+curated suggestion cards (staff channels, gaming layout, foundational
+roles, channel permission fix, audit) plus a freeform textarea. Clicking a
+suggestion or sending custom text calls `createConversation(prompt)`.
 
 ### Plan Preview
 
-The Discord clone IS the plan preview. As the LLM calls tools, the desired state updates
-and the clone re-renders. User sees changes accumulate live. No separate preview panel needed.
+The right panel's Desired tab is the live preview. The Discord clone
+renders categories / channels / roles with visual diff highlighting
+against the current Discord state. The user can click into any channel
+to see its full settings + permission overwrites.
 
-During planning, the conversation UI shows:
+During planning, the chat shows:
 
-- **Thinking block** — collapsed `<details>` by default. LLM reasoning text shown when expanded.
-- **Tool call list** — live as tools are dispatched (tool name + params + result symbol)
-- **Answer text** — streamed after all tool calls complete (or shown at once)
+- **Planning bubble** with a left-border accent and a collapsed
+  `<details>` listing every tool call as it streams in. The bubble label
+  is "Planning…" while the LLM thinks, "Planned" after completion.
 
-### Template Sidebar
+### Inline actions (Cursor-style)
 
-A toggleable sidebar within the Studio shows the per-server template library:
+When the plan is ready, the assistant's "Plan ready" bubble carries
+inline action buttons at the bottom:
 
-- Browse/search templates by name, description, tags
-- Card preview for each template
-- **"Add to context"** button — only visible when a conversation is active
-  Injects the template summary into the system prompt as "Available ideas"
-- **"Merge Template"** button — sends a crafted merge prompt via `revise`
-- **"View in Studio"** — opens the template in a read-only Studio view
-- **"Fork & Edit"** — creates a copy, opens editable Studio with auto-save
+- **Approve** — executes the plan. Disabled when the server has changed
+  externally since planning started (drift lockout, see below).
+- **Edit** — enters the manual-edit mode (inline inputs on the desired
+  state rows).
+- **Cancel** — cancels the planning session.
 
-### View in Studio (Template Viewer)
+When execution finishes, the "Execution complete" bubble carries
+**Rollback** and **New plan**. The execute_failed bubble carries a
+**Start over** button.
 
-Read-only Studio view accessible from the template library, sidebar, or detail page:
+The docked Revise input at the bottom of the chat area is always present
+when the plan is ready. Sending a new prompt there continues the
+conversation with a new iteration.
 
-- Shows the template layout as a Discord clone (channels, categories, roles)
-- No editing — view only
-- **[Fork & Edit]** button → creates a new template entry, opens editable mode
-- **[Add to context]** button → adds to active conversation's system prompt
+### Iteration history popout
 
-### Fork & Edit (Template Editor)
+A small "History (N)" button in the chat toolbar opens
+`IterationHistoryModal` — a focused modal with a vertical timeline of
+every iteration (version, type badge, timestamp). Click an iteration to
+preview its DesiredState, Revert to make it current, or close the modal.
 
-When the user forks a template into an editable Studio:
+### Drift detection
 
-- A new template entry is created immediately: "Fork of {template name}"
-- Edits are auto-saved via the DesiredStateStore snapshot pattern (same as conversations)
-- **[Revert]** rewinds to the fork point (original template content)
-- **[Discard]** deletes the forked entry entirely
-- **[Save as]** allows renaming the forked template
-- No explicit save needed — closing the tab preserves work
+The studio subscribes to `/api/guilds/:guildId/drift/stream`. When the
+server changes externally (e.g. someone edits Discord directly), a
+`DriftIndicator` toast surfaces in the top-right with a "Re-fork" button
+and flips a per-guild `stale` flag in the store. While `stale` is true, the
+Approve button is disabled (with a tooltip) and the server enforces the
+same on its end (returns 409 on stale approve).
 
-### Manual Editing (Limited)
+### Manual edit mode
 
-Users can:
+When the user clicks Edit on the completed bubble, the DesiredStateView
+swaps read-only rows for inline inputs. Save posts to
+`/conversations/:id/edit-state` and re-fetches the iteration list (a new
+"manual_edit" iteration is appended). Cancel discards the working copy.
 
-- Rename items
-- Reorder channels/categories
-- Delete proposed changes
-- Edit role colors, hoist, mentionable
-- Toggle overwrites
+## Templates (partial)
 
-**Blocked:** Structural edits (moving a channel to a different category). These require a Revise prompt to maintain LLM intent coherence. Manual edits do NOT trigger automatic LLM revision.
-
-### Iteration History
-
-Each user prompt or manual edit creates an iteration snapshot — a versioned checkpoint of the desired state. Iterations are persisted to the `plan_iterations` table in the database, surviving server restarts. The current DesiredState displayed in Studio is the latest iteration for the active conversation. Reverting creates a new iteration that copies the old one's state — nothing is deleted. Git-like versioning within a conversation.
-
-#### Diff Tabs
-
-Iterations are compared via IDE-style diff tabs:
-
-- **Default view**: Single panel showing the current DesiredState
-- **History**: Accessible via dropdown or timeline sidebar
-- **Clicking an iteration** opens it as a diff tab next to the current state
-- Multiple tabs can be open simultaneously (compare any two iterations)
-- Each tab shows a green/red diff against the current state:
-  - Green = item added since that iteration
-  - Red = item removed since that iteration
-- Each tab has a **[Revert to this]** button
-- Tabs can be opened, rearranged, and closed like browser tabs
-
-### Approval
-
-- **[Approve]**: Triggers diff engine → validation → execution on Discord
-- **[Revise]**: Opens a prompt input for the next iteration
-- Single button. No mode toggle.
-
-### Execution View
-
-During execution, the clone shows real-time status:
-
-- Completed steps rendered in green
-- In-progress with spinner
-- Pending greyed out
-
-Progress tracked via SSE stream (`GET /api/plan/:id/stream`).
-
-### Rollback
-
-After execution, each plan has a [Rollback] button. Generates inverse plan from before-snapshot and executes.
-
-### What Studio Does NOT Need
-
-- Message rendering, voice audio, screen sharing, video calls
-- Emoji picker, sticker system, Nitro features, activity integration
-- It is a **configuration UI**, not a full Discord messaging experience
-
-### State Management
-
-Zustand for all UI state:
-
-- DesiredState (rendered in clone)
-- Iteration history
-- Active templates (template IDs currently in context for the conversation)
-- Panel sync (left/right panels)
-- Execution progress
-- Multi-select (for scoped revision)
-- Drag state
-
-Data fetching via manual `fetch` calls (~15 endpoints).
-
----
+The full template library lives at `/templates/:guildId` (separate route
+under `routes/Templates.tsx` + `routes/TemplateEditor.tsx`). The Studio
+shows a placeholder `TemplatesTab` in the right panel that links out to
+that page; the in-conversation `TemplatePanel` (in the chat toolbar) is
+the in-context template injection UI — browse, add to context, remove.
+The rich in-app browser is future work; the `View in Studio` and
+`Fork & Edit` flows from the original design are deferred.
 
 ## Dashboard (Supplementary)
 
 Reduced scope — plan history and basic management:
 
-- Plan history + rollback
-- Server rules management (CRUD)
+- Plan history + rollback (links back to the Studio for the active convo)
+- Server rules management (`RulesSection` — full CRUD)
 - Basic bot settings (intents, permissions, preview server)
 - Basic stats (plans run, success rate)
+- Templates link
 
 **Deferred (not Phase 1):**
 
 - Full admin management tool
 - Subscription/billing
 - Detailed audit logs
-- Template library management (Phase 1: JSON editor only)
+- Template library management (Phase 1: separate page only; in-app browser future)
 - User management

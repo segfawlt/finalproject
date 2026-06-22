@@ -48,9 +48,7 @@ export default function DriftIndicator({ event, onDismiss, onReFork }: DriftIndi
           <div className="text-shell-text text-xs font-semibold uppercase tracking-wider mb-0.5">
             {event.severity === "critical" ? "Server changed externally" : "Server updated"}
           </div>
-          <div className="text-shell-text text-sm leading-snug">
-            {event.summary}
-          </div>
+          <div className="text-shell-text text-sm leading-snug">{event.summary}</div>
           {armed && (
             <div className="text-shell-text-subtle text-[10px] mt-1">
               Detected {formatTime(event.detectedAt)}

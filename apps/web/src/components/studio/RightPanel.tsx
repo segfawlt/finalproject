@@ -3,12 +3,7 @@ import { Loader } from "lucide-react";
 import { useStudioStore, makeTab } from "../../stores/studioStore";
 import { apiFetch } from "../../lib/api";
 import type { UseConversationResult } from "../../hooks/useConversation";
-import type {
-  ChannelBase,
-  PermissionOverwrite,
-  Role,
-  ServerState,
-} from "../desired-state/types";
+import type { ChannelBase, PermissionOverwrite, Role, ServerState } from "../desired-state/types";
 import { CATEGORY_TYPE } from "../desired-state/types";
 import TabPanel, { type AddOption } from "./TabPanel";
 import ServerTab from "./ServerTab";
@@ -87,9 +82,8 @@ export default function RightPanel({ c, guildId }: RightPanelProps) {
     : null;
 
   const activeCategoryName = activeChannel
-    ? serverState?.channels.find(
-        (c) => c.id === activeChannel.parentId && c.type === CATEGORY_TYPE
-      )?.name
+    ? serverState?.channels.find((c) => c.id === activeChannel.parentId && c.type === CATEGORY_TYPE)
+        ?.name
     : undefined;
 
   return (
@@ -112,10 +106,7 @@ export default function RightPanel({ c, guildId }: RightPanelProps) {
           />
         )}
         {activeTab === "desired" && (
-          <DesiredTab
-            desiredState={c.desiredState}
-            currentState={c.currentState}
-          />
+          <DesiredTab desiredState={c.desiredState} currentState={c.currentState} />
         )}
         {activeTab === "roles" && <RolesTab guildId={guildId} />}
         {activeTab === "members" && <MembersTab guildId={guildId} />}
@@ -179,5 +170,12 @@ function ChannelDetailContent({
       </div>
     );
   }
-  return <ChannelDetail channel={channel} overwrites={overwrites} roles={roles} categoryName={categoryName} />;
+  return (
+    <ChannelDetail
+      channel={channel}
+      overwrites={overwrites}
+      roles={roles}
+      categoryName={categoryName}
+    />
+  );
 }

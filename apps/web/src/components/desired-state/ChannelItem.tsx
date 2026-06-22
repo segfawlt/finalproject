@@ -113,7 +113,9 @@ export default function ChannelItem({
     <li
       onClick={onClick}
       className={`px-3 py-2 bg-discord-bg-secondary border border-discord-divider rounded text-sm flex items-center gap-2 ${
-        onClick ? "cursor-pointer hover:border-discord-accent hover:bg-discord-channel-hover transition" : ""
+        onClick
+          ? "cursor-pointer hover:border-discord-accent hover:bg-discord-channel-hover transition"
+          : ""
       }`}
     >
       <Icon size={14} className="text-discord-text-muted shrink-0" />

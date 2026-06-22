@@ -75,7 +75,10 @@ describe("useStudioStore", () => {
     });
 
     it("closing the active tab with no next neighbor clears active", () => {
-      useStudioStore.setState({ openTabs: [makeTab("roles", { closable: true })], activeTab: "roles" });
+      useStudioStore.setState({
+        openTabs: [makeTab("roles", { closable: true })],
+        activeTab: "roles",
+      });
       useStudioStore.getState().closeTab("roles");
       expect(useStudioStore.getState().activeTab).toBeNull();
     });

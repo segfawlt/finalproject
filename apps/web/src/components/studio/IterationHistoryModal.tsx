@@ -31,9 +31,7 @@ export default function IterationHistoryModal({
 
   const sorted = [...iterations].sort((a, b) => b.version - a.version);
   const selectedRow =
-    selectedVersion === null
-      ? null
-      : (sorted.find((i) => i.version === selectedVersion) ?? null);
+    selectedVersion === null ? null : (sorted.find((i) => i.version === selectedVersion) ?? null);
 
   async function handleRevert(version: number) {
     if (reverting !== null) return;
@@ -64,9 +62,7 @@ export default function IterationHistoryModal({
           <div className="flex items-center gap-2">
             <History size={15} className="text-shell-text-muted" />
             <h2 className="text-shell-text font-semibold text-sm">Iteration history</h2>
-            <span className="text-shell-text-muted text-xs">
-              ({iterations.length})
-            </span>
+            <span className="text-shell-text-muted text-xs">({iterations.length})</span>
           </div>
           <button
             onClick={onClose}
@@ -98,9 +94,7 @@ export default function IterationHistoryModal({
                       }`}
                     >
                       <button
-                        onClick={() =>
-                          setSelectedVersion(isSelected ? null : iter.version)
-                        }
+                        onClick={() => setSelectedVersion(isSelected ? null : iter.version)}
                         className="flex items-center gap-2 flex-1 text-left min-w-0"
                       >
                         <span className="font-mono text-shell-text">v{iter.version}</span>

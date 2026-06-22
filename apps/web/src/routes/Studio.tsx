@@ -307,11 +307,7 @@ export default function Studio() {
           </>
         )}
       </div>
-      <DriftIndicator
-        event={drift.event}
-        onDismiss={drift.dismiss}
-        onReFork={() => c.reset()}
-      />
+      <DriftIndicator event={drift.event} onDismiss={drift.dismiss} onReFork={() => c.reset()} />
     </StudioShell>
   );
 }

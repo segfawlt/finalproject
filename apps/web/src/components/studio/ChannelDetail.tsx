@@ -87,9 +87,7 @@ export default function ChannelDetail({
           <div className="text-[10px] uppercase tracking-wider text-shell-text-muted font-semibold">
             {displayLabel} channel
           </div>
-          <h2 className="text-shell-text font-semibold text-sm truncate">
-            #{channel.name}
-          </h2>
+          <h2 className="text-shell-text font-semibold text-sm truncate">#{channel.name}</h2>
         </div>
       </header>
 
@@ -97,9 +95,7 @@ export default function ChannelDetail({
       <Section title="Settings">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
           <Row label="Type">{displayLabel}</Row>
-          {channel.parentId && categoryName && (
-            <Row label="Category">{categoryName}</Row>
-          )}
+          {channel.parentId && categoryName && <Row label="Category">{categoryName}</Row>}
           <Row label="Position">{channel.position}</Row>
           {channel.topic != null && channel.topic !== "" && (
             <Row label="Topic" wide>
@@ -120,9 +116,7 @@ export default function ChannelDetail({
             <Row label="Forum layout">{forumLayoutLabel(channel.defaultForumLayout)}</Row>
           )}
           {isForum && channel.defaultThreadRateLimitPerUser != null && (
-            <Row label="Thread slow mode">
-              {channel.defaultThreadRateLimitPerUser}s
-            </Row>
+            <Row label="Thread slow mode">{channel.defaultThreadRateLimitPerUser}s</Row>
           )}
           {isForum && channel.defaultSortOrder != null && (
             <Row label="Default sort order">
@@ -169,10 +163,7 @@ export default function ChannelDetail({
             </thead>
             <tbody>
               {channelOverwrites.map((o) => (
-                <tr
-                  key={`${o.channelId}-${o.roleId}`}
-                  className="border-t border-shell-border"
-                >
+                <tr key={`${o.channelId}-${o.roleId}`} className="border-t border-shell-border">
                   <td className="py-1.5 text-shell-text">
                     {o.roleId === "@everyone" || roleNameById[o.roleId] === "@everyone"
                       ? "@everyone"
@@ -216,9 +207,7 @@ function Row({
 }) {
   return (
     <div className={wide ? "col-span-2" : undefined}>
-      <dt className="text-shell-text-subtle text-[10px] uppercase tracking-wider">
-        {label}
-      </dt>
+      <dt className="text-shell-text-subtle text-[10px] uppercase tracking-wider">{label}</dt>
       <dd className="text-shell-text-muted mt-0.5">{children}</dd>
     </div>
   );

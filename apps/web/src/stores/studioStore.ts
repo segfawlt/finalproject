@@ -2,7 +2,14 @@ import { create } from "zustand";
 
 // ── Tab model ──────────────────────────────────────────────────────────────
 
-export type TabType = "server" | "desired" | "channel" | "roles" | "members" | "templates" | "drift";
+export type TabType =
+  | "server"
+  | "desired"
+  | "channel"
+  | "roles"
+  | "members"
+  | "templates"
+  | "drift";
 
 export interface Tab {
   /** Stable unique key. Format: type or `type:payload` (e.g. "channel:123"). */

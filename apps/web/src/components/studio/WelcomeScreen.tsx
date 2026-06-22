@@ -74,8 +74,8 @@ export default function WelcomeScreen({
           Configure {guildName}
         </h1>
         <p className="text-shell-text-muted text-sm leading-relaxed">
-          Pick a starting point, or describe what you want changed. The AI
-          will plan the changes, you approve, then they go live.
+          Pick a starting point, or describe what you want changed. The AI will plan the changes,
+          you approve, then they go live.
         </p>
       </div>
 
@@ -92,9 +92,7 @@ export default function WelcomeScreen({
               className="text-left p-4 bg-shell-surface border border-shell-border rounded-lg hover:border-shell-border-strong hover:bg-shell-surface2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors group"
             >
               <div className="text-shell-text font-medium text-sm mb-1">{p.title}</div>
-              <div className="text-shell-text-muted text-xs leading-relaxed">
-                {p.description}
-              </div>
+              <div className="text-shell-text-muted text-xs leading-relaxed">{p.description}</div>
             </button>
           ))}
         </div>

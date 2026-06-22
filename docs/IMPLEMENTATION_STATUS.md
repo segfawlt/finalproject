@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-06-21
+Last updated: 2026-06-22
 
 Source of truth for what is actually built in this codebase. When a design doc,
 issue doc, or comment disagrees with code, this file wins. Update after major
@@ -104,7 +104,7 @@ Legend: `done` (implemented & wired) · `partial` (code present, incomplete wiri
 ### `apps/web/src/` — Routes
 
 - `done` Login — `routes/Login.tsx` (Better Auth sign-in via Discord)
-- `done` Studio — `routes/Studio.tsx` (the Discord-like preview; SSE consumption; iteration history; live desired-state view; ProcedureSidebar; TemplatePanel; ActionBar; ExecutionStatus)
+- `done` Studio — `routes/Studio.tsx` (3-column chat-native layout: history sidebar, chat area, right tabbed preview; SSE consumption; iteration history; live desired-state view; TemplatePanel in-conversation)
 - `done` Templates list — `routes/Templates.tsx`
 - `done` Template editor — `routes/TemplateEditor.tsx`
 - `done` 404 — `routes/NotFound.tsx`
@@ -116,21 +116,46 @@ Legend: `done` (implemented & wired) · `partial` (code present, incomplete wiri
 - `done` AppHeader — `components/AppHeader.tsx`
 - `done` AppLayout — `components/AppLayout.tsx`
 - `done` EmptyState — `components/EmptyState.tsx`
-- `done` ActionBar — `components/ActionBar.tsx` (approve/cancel/revise actions)
-- `done` DesiredStateView — `components/DesiredStateView.tsx` (Discord-like preview of channels/categories/roles/members/tombstones)
-- `done` ExecutionStatus — `components/ExecutionStatus.tsx` (live step status)
-- `done` IterationHistory — `components/IterationHistory.tsx` (past iterations, revert button)
-  - `done` ProcedureSidebar — `components/ProcedureSidebar.tsx` (4-phase checklist, phase prompts, deprecation warnings)
-  - `done` RulesSection — `components/RulesSection.tsx` (Dashboard CRUD UI for server rules; add/edit/delete, used by Stage 2 LLM validation)
-- `done` TemplatePanel — `components/TemplatePanel.tsx` (attach/detach/merge UI in Studio)
-- `done` Desired-state primitives — `components/desired-state/` (CategoryList, ChannelList, RoleList, MemberList, TombstoneList, DiffBadge, diff utilities)
+- `done` DesiredStateView — `components/DesiredStateView.tsx` (Discord-like preview of channels/categories/roles/members/tombstones; used by DesiredTab and inline in the chat)
+- `done` RulesSection — `components/RulesSection.tsx` (Dashboard CRUD UI for server rules; add/edit/delete, used by Stage 2 LLM validation)
+- `done` TemplatePanel — `components/TemplatePanel.tsx` (attach/detach/merge UI in Studio; in-conversation template injection)
+- `done` Desired-state primitives — `components/desired-state/` (CategoryList, ChannelItem, ChannelList, RoleList, MemberList, TombstoneList, DiffBadge, diff utilities; ChannelList supports an optional onClick for tabbed drill-in)
 - `done` API client — `lib/api.ts`
 - `done` Auth client — `lib/auth.ts`
+- `done` SSE helper — `lib/sse.ts` (parseSseData used by every EventSource consumer)
+- `done` Date grouping — `lib/group-conversations.ts` (Today / Yesterday / Earlier bucketing for the history sidebar)
+
+### `apps/web/src/` — Studio (`components/studio/`)
+
+The redesigned Studio is composed of focused components. Routes wire them
+together; none of them fetch on their own unless noted.
+
+- `done` StudioShell — 3-column grid (header | sidebar | chat | rightPanel); columns collapse when their slot is empty
+- `done` StudioHeader — contextual header (back-to-picker, guild name, Templates / Settings shortcuts)
+- `done` ConversationSidebar — collapsible left column; New Chat button, conversation list grouped by date; selection synced from the store
+- `done` WelcomeScreen — curated suggestion cards + freeform textarea for the empty state
+- `done` ChatArea — message list + docked input. Bubble variants: user prompt, assistant planning (with collapsed log), ask_user, completed (summary + DesiredStateView + inline actions), executing (live step log), executed (rollback / new plan), execute_failed. Revise input is docked at the bottom
+- `done` RightPanel — owns the right column; current-state fetch is shared with the channel detail tab; renders the active tab content
+- `done` TabPanel — VSCode-style tab bar; persistent vs closable tabs; "+" popover for new closable tabs
+- `done` ServerTab — read-only view of the current Discord state; clickable channels open the channel detail tab
+- `done` DesiredTab — desired state from the active conversation; diff overlay against the current state
+- `done` ChannelDetail — type-conditional settings grid + tags + permission overwrites table
+- `done` RolesTab — server-wide role list
+- `done` MembersTab — server-wide member role assignments
+- `done` TemplatesTab — placeholder for the in-app template browser; links to /templates/:guildId for now
+- `done` IterationHistoryModal — popout modal with iteration timeline + revert; replaces the inline IterationHistory
+- `done` DriftIndicator — top-right toast when the server changes externally; auto-dismisses after 10s; "Re-fork" action
+
+### `apps/web/src/` — Hooks
+
+- `done` `useConversation` — owns the conversation lifecycle (planning SSE, execution SSE, approve/rollback/revise/revert, in-flight guard). Exposes `stale` from the store so the chat can gate Approve
+- `done` `useGuildState` — `useGuildName(guildId)` hook; resolves a guild id to its display name
+- `done` `useGuildDrift` — subscribes to /api/guilds/:guildId/drift/stream, flips a per-guild stale flag, exposes the latest DriftEvent for the toast
 
 ### `apps/web/src/` — Stores (Zustand)
 
 - `done` `useAuthStore` — `stores/authStore.ts`
-- `done` `useStudioStore` — `stores/studioStore.ts` (active conversation, desired state, plan steps, SSE events)
+- `done` `useStudioStore` — `stores/studioStore.ts` (tab state, conversation/phase, active templates, per-guild `staleByGuild` flag; dead `panelState`/`showProgress` removed during the redesign)
 - `done` `useDashboardStore` — `stores/dashboardStore.ts`
 
 ### Tests
@@ -161,8 +186,9 @@ Legend: `done` (implemented & wired) · `partial` (code present, incomplete wiri
 
 - `partial` **Dashboard page** — `apps/web/src/routes/Dashboard.tsx` now has plan history, templates link, and rules CRUD. Still placeholder: notification settings.
 - `partial` **Setup page** — `apps/web/src/routes/Setup.tsx` is mostly placeholder. Needs guided server configuration wizard.
+- `partial` **In-app template library** — TemplatesTab is a stub that links to /templates/:guildId. Rich in-app browser (browse, search, merge) is future work.
 - `partial` **`shared` package tests** — `packages/shared` has zero test files. AGENTS.md marks it priority 1. Pure logic, no mocks needed.
-- `partial` **React component tests** — `apps/web` has minimal component tests. AGENTS.md marks priority 4.
+- `partial` **React component tests** — `apps/web` has minimal component tests (one file: diff-utils). AGENTS.md marks priority 4. The new studio components are not yet covered.
 - `partial` **Hono route tests** — Thin orchestrators, lower priority per AGENTS.md, but still gap.
 
 ## Deferred (Phase 2+)
@@ -175,11 +201,12 @@ See `docs/issues/open-design-issues.md` for the full log.
 
 ## Recently resolved (since May 28, 2026)
 
+- `done` **Studio chat-native redesign** — replaced the 1180-line monolithic `Studio.tsx` with a focused 3-column layout (history sidebar, chat area, right tabbed preview). New shell tokens (`shell-*`, `agent-*`) on top of the kept `discord-*` tokens for the preview. Extracted `useConversation` (1180 → 494 lines in `Studio.tsx`, then further reduced). New components under `components/studio/`. `ProcedureSidebar`, `ActionBar`, `ExecutionStatus`, and the inline `IterationHistory` are deleted. Drift lockout + IterationHistoryModal + TabPanel are live.
 - `done` **lockPermissions** — full design + 8 files (types, channels, registry, store, fork, execute-context, diff-engine, validation). Per-channel skip for synced channels; `arraysEqualSorted` helper; validation Group D detects identical-overwrite un-synced channels.
 - `done` **Member role management** — 2 tools, `memberRoles` in active state, symmetric diffing, Phase 4 enforcement, `getInverseTool` for rollback, formatter summary.
-- `done` **Configuration procedure** — `ProcedureSidebar` + `phaseProgress` JSONB + deprecation warnings + per-phase scoped prompts.
+- `done` **Configuration procedure** — `ProcedureSidebar` + `phaseProgress` JSONB + deprecation warnings + per-phase scoped prompts. (Replaced by the new chat UX; the sidebar component is deleted, but the data column remains for now and is unused by the UI.)
 - `done` **LLM policy validation (Stage 2)** — `validateWithLLM` calls LLM with rules + plan summary, structured JSON response.
-- `done` **Drift detector** — periodic poll, persists `driftEvents`, `/api/guilds/:guildId/drift/stream` SSE.
+- `done` **Drift detector** — periodic poll, persists `driftEvents`, `/api/guilds/:guildId/drift/stream` SSE, client-side toast + Approve lockout.
 - `done` **Rate limiting** — sliding window, 100 req/min, applied to `/api/*`.
 - `done` **Env validation** — Zod schema, fail fast at boot.
 - `done` **Locks + snapshot cleanup** — periodic background jobs, stale recovery on boot.

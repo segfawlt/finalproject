@@ -1,11 +1,6 @@
 import { Loader } from "lucide-react";
 import { CATEGORY_TYPE, type ServerState, type ChannelBase } from "../desired-state/types";
-import {
-  CategoryList,
-  ChannelList,
-  RoleList,
-  MemberList,
-} from "../desired-state";
+import { CategoryList, ChannelList, RoleList, MemberList } from "../desired-state";
 
 interface ServerTabProps {
   /** Pre-fetched current Discord state. Required — RightPanel owns the fetch
@@ -78,11 +73,7 @@ export default function ServerTab({
       </Section>
 
       <Section title="Channels" count={channels.length}>
-        <ChannelList
-          channels={channels}
-          categoryNames={categoryNames}
-          onClick={onChannelClick}
-        />
+        <ChannelList channels={channels} categoryNames={categoryNames} onClick={onChannelClick} />
       </Section>
 
       <Section title="Roles" count={state.roles.length}>

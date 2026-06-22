@@ -1,15 +1,5 @@
 import { useState } from "react";
-import {
-  Check,
-  CircleAlert,
-  Loader,
-  Pencil,
-  RotateCcw,
-  Save,
-  Send,
-  Undo2,
-  X,
-} from "lucide-react";
+import { Check, CircleAlert, Loader, Pencil, RotateCcw, Save, Send, Undo2, X } from "lucide-react";
 import DesiredStateView from "../DesiredStateView";
 import type { DesiredState, ChannelBase, Role } from "../desired-state/types";
 import type { UseConversationResult, PlanningEvent, ExecEvent } from "../../hooks/useConversation";
@@ -83,7 +73,11 @@ export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
             <AssistantBubble
               accent="thinking"
               label={
-                c.phase === "planning" ? "Planning…" : c.phase === "ask_user" ? "Waiting for you" : "Planned"
+                c.phase === "planning"
+                  ? "Planning…"
+                  : c.phase === "ask_user"
+                    ? "Waiting for you"
+                    : "Planned"
               }
             >
               {c.planningEvents.length === 0 ? (
@@ -151,7 +145,9 @@ export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
                     <ActionButton
                       onClick={c.approve}
                       disabled={c.inFlight || c.stale}
-                      title={c.stale ? "Server changed since planning. Re-fork to update." : undefined}
+                      title={
+                        c.stale ? "Server changed since planning. Re-fork to update." : undefined
+                      }
                       primary
                       icon={<Check size={13} />}
                     >
@@ -168,7 +164,10 @@ export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
 
           {/* Executing */}
           {(c.phase === "executing" || (c.phase === "executed" && c.execEvents.length > 0)) && (
-            <AssistantBubble accent="editing" label={c.phase === "executing" ? "Executing…" : "Execution complete"}>
+            <AssistantBubble
+              accent="editing"
+              label={c.phase === "executing" ? "Executing…" : "Execution complete"}
+            >
               <ExecutionLog events={c.execEvents} />
               {c.phase === "executed" && (
                 <ActionRow>
@@ -196,9 +195,9 @@ export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
           )}
 
           {/* Generic error banner (for non-fatal errors during planning) */}
-          {c.error &&
-            c.phase !== "execute_failed" &&
-            c.phase !== "completed" && <ErrorBanner error={c.error} />}
+          {c.error && c.phase !== "execute_failed" && c.phase !== "completed" && (
+            <ErrorBanner error={c.error} />
+          )}
         </div>
       </div>
 
@@ -238,11 +237,7 @@ function WelcomeShell({
 }) {
   return (
     <div className="flex-1 overflow-y-auto">
-      <WelcomeScreen
-        guildName={guildName}
-        onPromptSelect={onPromptSelect}
-        disabled={disabled}
-      />
+      <WelcomeScreen guildName={guildName} onPromptSelect={onPromptSelect} disabled={disabled} />
     </div>
   );
 }
@@ -326,9 +321,7 @@ function AskUserBubble({ c }: { c: UseConversationResult }) {
           value={c.askUserCustom}
           onChange={(e) => c.setAskUserCustom(e.target.value)}
           placeholder={
-            data.options && data.options.length > 0
-              ? "Or type a custom answer…"
-              : "Your answer…"
+            data.options && data.options.length > 0 ? "Or type a custom answer…" : "Your answer…"
           }
           className="mt-2 w-full px-3 py-2 rounded-md bg-shell-surface2 text-shell-text text-sm border border-shell-border focus:border-shell-accent focus:outline-none"
         />
@@ -358,7 +351,9 @@ function PlanningLog({ events }: { events: PlanningEvent[] }) {
       <div className="mt-2 max-h-48 overflow-y-auto rounded-md bg-shell-surface2 border border-shell-border p-2 font-mono text-[11px] space-y-0.5">
         {events.map((ev, i) => (
           <div key={i} className="text-shell-text-muted">
-            {ev.type === "turn_started" && <span className="text-agent-thinking">→ turn started</span>}
+            {ev.type === "turn_started" && (
+              <span className="text-agent-thinking">→ turn started</span>
+            )}
             {ev.type === "tool_called" && <span>→ {ev.toolName ?? "tool"}</span>}
             {ev.type === "tool_result" && (
               <span className="text-shell-text-subtle">← {ev.toolName ?? "tool"} ok</span>

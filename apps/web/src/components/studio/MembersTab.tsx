@@ -55,9 +55,7 @@ export default function MembersTab({ guildId }: MembersTabProps) {
       <header>
         <h2 className="text-shell-text font-semibold text-sm">Members</h2>
         <p className="text-shell-text-muted text-xs">
-          {loading
-            ? "Loading…"
-            : `${members.length} assignment${members.length === 1 ? "" : "s"}`}
+          {loading ? "Loading…" : `${members.length} assignment${members.length === 1 ? "" : "s"}`}
         </p>
       </header>
       {loading ? (
