@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { parseSseData } from "../lib/sse";
 import type { DesiredState, ServerState } from "../components/desired-state";
-import type { IterationRow } from "../components/IterationHistory";
 
 // ── Phase + event types ───────────────────────────────────────────────────
 
@@ -14,6 +13,16 @@ export type StudioPhase =
   | "executing"
   | "executed"
   | "execute_failed";
+
+export type IterationType = "llm_generated" | "manual_edit" | "revert";
+
+export interface IterationRow {
+  id: string;
+  version: number;
+  type: IterationType;
+  desiredState: DesiredState;
+  createdAt: string;
+}
 
 export interface PlanningEvent {
   type: "turn_started" | "tool_called" | "tool_result";

@@ -13,7 +13,8 @@ import {
 import DesiredStateView from "../DesiredStateView";
 import type { DesiredState, ChannelBase, Role } from "../desired-state/types";
 import type { UseConversationResult, PlanningEvent, ExecEvent } from "../../hooks/useConversation";
-import IterationHistory from "../IterationHistory";
+import IterationHistoryModal from "./IterationHistoryModal";
+import { History } from "lucide-react";
 
 // ── Edit-mode prop bundle ─────────────────────────────────────────────────
 
@@ -41,6 +42,11 @@ interface ChatAreaProps {
 // ── ChatArea ──────────────────────────────────────────────────────────────
 
 export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const iterationsCount = c.iterations.length;
+  const currentVersion =
+    iterationsCount > 0 ? Math.max(...c.iterations.map((i) => i.version)) : null;
+
   // Empty state → welcome screen (handles prompt entry)
   if (!c.conversationId) {
     return (
@@ -54,6 +60,19 @@ export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
+      {/* Chat toolbar — small top bar with a History button. */}
+      {iterationsCount > 0 && (
+        <div className="flex items-center justify-end px-4 py-2 border-b border-shell-border bg-shell-surface/50">
+          <button
+            onClick={() => setHistoryOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs text-shell-text-muted hover:text-shell-text hover:bg-shell-surface2 transition-colors"
+          >
+            <History size={13} />
+            History ({iterationsCount})
+          </button>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto w-full p-6 space-y-4">
           {/* User prompt bubble */}
@@ -103,16 +122,13 @@ export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
                 </div>
               )}
               {!edit.editing && c.iterations.length > 0 && (
-                <IterationHistory
-                  iterations={c.iterations}
-                  currentVersion={
-                    c.iterations.length > 0
-                      ? Math.max(...c.iterations.map((i) => i.version))
-                      : null
-                  }
-                  canRevert
-                  onRevert={c.revert}
-                />
+                <button
+                  onClick={() => setHistoryOpen(true)}
+                  className="inline-flex items-center gap-1.5 text-xs text-shell-text-muted hover:text-shell-text transition-colors"
+                >
+                  <History size={13} />
+                  View iteration history
+                </button>
               )}
               <ActionRow>
                 {c.desiredState && !edit.editing && (
@@ -194,6 +210,14 @@ export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
           inFlight={c.inFlight}
         />
       )}
+
+      <IterationHistoryModal
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        iterations={c.iterations}
+        currentVersion={currentVersion}
+        onRevert={c.revert}
+      />
     </div>
   );
 }
