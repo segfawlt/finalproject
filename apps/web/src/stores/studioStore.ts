@@ -98,6 +98,11 @@ interface StudioState {
   activeTemplates: ActiveTemplate[];
   addTemplate: (template: ActiveTemplate) => void;
   removeTemplate: (templateId: string) => void;
+
+  // Drift (server changed externally). Per-guild so switching guilds
+  // doesn't carry a stale flag.
+  staleByGuild: Record<string, boolean>;
+  markStale: (guildId: string, stale: boolean) => void;
 }
 
 export const useStudioStore = create<StudioState>((set) => ({
@@ -176,4 +181,12 @@ export const useStudioStore = create<StudioState>((set) => ({
     set((state) => ({
       activeTemplates: state.activeTemplates.filter((t) => t.id !== templateId),
     })),
+
+  // Drift
+  staleByGuild: {},
+  markStale: (guildId, stale) =>
+    set((state) => {
+      if (!!state.staleByGuild[guildId] === stale) return state;
+      return { staleByGuild: { ...state.staleByGuild, [guildId]: stale } };
+    }),
 }));

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { parseSseData } from "../lib/sse";
+import { useStudioStore } from "../stores/studioStore";
 import type { DesiredState, ServerState } from "../components/desired-state";
 
 // ── Phase + event types ───────────────────────────────────────────────────
@@ -66,6 +67,10 @@ export interface UseConversationResult {
   // User-authored prompt (for the revise textarea and as the fallback
   // for createConversation when no initial prompt is supplied)
   prompt: string;
+
+  /** True when the server has changed since planning started.
+   *  Set by useGuildDrift; gates the Approve action. */
+  stale: boolean;
 
   // Planning data
   planningEvents: PlanningEvent[];
@@ -723,6 +728,8 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
     [guildId, conversationId, enterInFlight, exitInFlight, clearError, showError]
   );
 
+  const stale = useStudioStore((s) => !!s.staleByGuild[guildId ?? ""]);
+
   return {
     // Lifecycle
     phase,
@@ -731,6 +738,7 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
     error,
     inFlight,
     prompt,
+    stale,
     // Planning
     planningEvents,
     askUserData,

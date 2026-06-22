@@ -8,14 +8,17 @@ import StudioHeader from "../components/studio/StudioHeader";
 import ConversationSidebar from "../components/studio/ConversationSidebar";
 import ChatArea, { type ChatAreaEditProps } from "../components/studio/ChatArea";
 import RightPanel from "../components/studio/RightPanel";
+import DriftIndicator from "../components/studio/DriftIndicator";
 import { useGuildName } from "../hooks/useGuildName";
 import { useConversation } from "../hooks/useConversation";
+import { useGuildDrift } from "../hooks/useGuildDrift";
 import { apiFetch } from "../lib/api";
 
 export default function Studio() {
   const { guildId } = useParams<{ guildId: string }>();
   const guildName = useGuildName(guildId);
   const c = useConversation({ guildId });
+  const drift = useGuildDrift(guildId);
 
   // ── Guild picker (only when /studio is hit without a guildId) ──────────────
   const [availableGuilds, setAvailableGuilds] = useState<
@@ -304,6 +307,11 @@ export default function Studio() {
           </>
         )}
       </div>
+      <DriftIndicator
+        event={drift.event}
+        onDismiss={drift.dismiss}
+        onReFork={() => c.reset()}
+      />
     </StudioShell>
   );
 }

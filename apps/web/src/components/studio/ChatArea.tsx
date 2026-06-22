@@ -150,7 +150,8 @@ export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
                   <>
                     <ActionButton
                       onClick={c.approve}
-                      disabled={c.inFlight}
+                      disabled={c.inFlight || c.stale}
+                      title={c.stale ? "Server changed since planning. Re-fork to update." : undefined}
                       primary
                       icon={<Check size={13} />}
                     >
@@ -468,18 +469,21 @@ function ActionButton({
   disabled,
   primary,
   icon,
+  title,
   children,
 }: {
   onClick: () => void;
   disabled?: boolean;
   primary?: boolean;
   icon?: React.ReactNode;
+  title?: string;
   children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
         primary
           ? "bg-shell-accent text-shell-accent-fg hover:bg-shell-accent-hover"
