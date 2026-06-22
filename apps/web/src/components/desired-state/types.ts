@@ -8,6 +8,20 @@
  * type { ... } from "@repo/shared"` without changing the component APIs.
  */
 
+export interface ForumTag {
+  name: string;
+  moderated?: boolean;
+  emojiId?: string | null;
+  emojiName?: string | null;
+}
+
+export interface PermissionOverwrite {
+  channelId: string;
+  roleId: string;
+  allow: string[];
+  deny: string[];
+}
+
 export interface ChannelBase {
   id: string;
   name: string;
@@ -20,9 +34,11 @@ export interface ChannelBase {
   userLimit?: number;
   rateLimitPerUser?: number;
   lockPermissions?: boolean;
-  availableTags?: Array<{ name: string; moderated?: boolean }>;
+  availableTags?: ForumTag[];
+  defaultReactionEmoji?: { emojiId?: string | null; emojiName?: string | null } | null;
   defaultSortOrder?: number | null;
   defaultForumLayout?: number;
+  defaultThreadRateLimitPerUser?: number;
   flags?: number;
 }
 
@@ -54,7 +70,7 @@ export interface DesiredState {
   active: {
     channels: Record<string, ChannelBase>;
     roles: Record<string, Role>;
-    overwrites: Record<string, unknown>;
+    overwrites: Record<string, PermissionOverwrite>;
     memberRoles?: Record<string, MemberRoleAssignment>;
   };
   tombstones: Tombstone[];
@@ -73,7 +89,7 @@ export interface ServerState {
   memberCount: number;
   channels: ChannelBase[];
   roles: Role[];
-  overwrites: Array<{ id: string; channelId: string; [k: string]: unknown }>;
+  overwrites: PermissionOverwrite[];
   memberRoles?: MemberRoleAssignment[];
 }
 

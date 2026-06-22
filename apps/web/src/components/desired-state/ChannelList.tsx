@@ -15,6 +15,8 @@ interface ChannelListProps {
   onChange?: (id: string, next: ChannelBase) => void;
   onDelete?: (id: string) => void;
   onAdd?: () => void;
+  /** When provided, each read-only row is clickable and fires with the channel. */
+  onClick?: (channel: ChannelBase) => void;
 }
 
 export default function ChannelList({
@@ -26,6 +28,7 @@ export default function ChannelList({
   onChange,
   onDelete,
   onAdd,
+  onClick,
 }: ChannelListProps) {
   const sorted = useMemo(() => [...channels].sort((a, b) => a.position - b.position), [channels]);
   if (sorted.length === 0 && !editing) {
@@ -53,6 +56,7 @@ export default function ChannelList({
               editing={editing}
               onChange={onChange ? (next) => onChange(c.id, next) : undefined}
               onDelete={onDelete ? () => onDelete(c.id) : undefined}
+              onClick={onClick ? () => onClick(c) : undefined}
             />
           ))}
         </ul>

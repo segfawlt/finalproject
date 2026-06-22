@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
 import { Loader } from "lucide-react";
-import { apiFetch } from "../../lib/api";
-import { CATEGORY_TYPE, type ServerState } from "../desired-state/types";
+import { CATEGORY_TYPE, type ServerState, type ChannelBase } from "../desired-state/types";
 import {
   CategoryList,
   ChannelList,
@@ -10,46 +8,27 @@ import {
 } from "../desired-state";
 
 interface ServerTabProps {
-  guildId: string;
+  /** Pre-fetched current Discord state. Required — RightPanel owns the fetch
+   *  so the same data can be shared with the channel detail tab. */
+  state: ServerState | null;
+  loading?: boolean;
+  error?: string;
+  /** Called when the user clicks a channel — opens the channel detail tab. */
+  onChannelClick?: (channel: ChannelBase) => void;
 }
 
 /**
  * Read-only view of the current Discord state for the active guild.
  * Renders categories / channels / roles / members without diff badges
- * — this is "what your server looks like right now", as opposed to
- * the Desired tab which is "what we're about to change it to".
+ * — 'this is your server right now', as opposed to the Desired tab
+ * which is 'what we're about to change it to'.
  */
-export default function ServerTab({ guildId }: ServerTabProps) {
-  const [state, setState] = useState<ServerState | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!guildId) return;
-    let cancelled = false;
-    setLoading(true);
-    setError("");
-    apiFetch(`/api/guilds/${guildId}/state`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: ServerState | null) => {
-        if (cancelled) return;
-        if (data) {
-          setState(data);
-        } else {
-          setError("Failed to load server state.");
-        }
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [guildId]);
-
+export default function ServerTab({
+  state,
+  loading = false,
+  error = "",
+  onChannelClick,
+}: ServerTabProps) {
   if (loading) {
     return (
       <Panel>
@@ -99,7 +78,11 @@ export default function ServerTab({ guildId }: ServerTabProps) {
       </Section>
 
       <Section title="Channels" count={channels.length}>
-        <ChannelList channels={channels} categoryNames={categoryNames} />
+        <ChannelList
+          channels={channels}
+          categoryNames={categoryNames}
+          onClick={onChannelClick}
+        />
       </Section>
 
       <Section title="Roles" count={state.roles.length}>

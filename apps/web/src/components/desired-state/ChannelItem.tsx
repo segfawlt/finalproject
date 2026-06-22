@@ -16,6 +16,8 @@ interface ChannelItemProps {
   editing?: boolean;
   onChange?: (next: ChannelBase) => void;
   onDelete?: () => void;
+  /** When provided, the read-only row is clickable. */
+  onClick?: () => void;
 }
 
 function channelTypeIcon(type: number) {
@@ -52,6 +54,7 @@ export default function ChannelItem({
   editing,
   onChange,
   onDelete,
+  onClick,
 }: ChannelItemProps) {
   const Icon = channelTypeIcon(channel.type);
 
@@ -107,7 +110,12 @@ export default function ChannelItem({
   }
 
   return (
-    <li className="px-3 py-2 bg-discord-bg-secondary border border-discord-divider rounded text-sm flex items-center gap-2">
+    <li
+      onClick={onClick}
+      className={`px-3 py-2 bg-discord-bg-secondary border border-discord-divider rounded text-sm flex items-center gap-2 ${
+        onClick ? "cursor-pointer hover:border-discord-accent hover:bg-discord-channel-hover transition" : ""
+      }`}
+    >
       <Icon size={14} className="text-discord-text-muted shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 flex-wrap">
