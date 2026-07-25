@@ -25,6 +25,7 @@ AI-driven Discord server management platform. Administrators describe server con
 - Touch only what you must. Don't "improve" adjacent code, comments, or formatting.
 - Match existing style, even if you'd do it differently.
 - Remove imports/variables/functions that YOUR changes made unused. Don't delete pre-existing dead code unless asked.
+- Doc updates required by "Keep Docs In Sync" are part of the surgical change, not adjacent improvements.
 
 ### Goal-Driven Execution
 
@@ -358,6 +359,22 @@ Split test execution between the main agent and subagents based on feedback need
 
 The TDD feedback loop requires tight iteration — offloading the test runner adds
 latency and loses error detail that the main agent needs to diagnose failures.
+
+### Subagent Test Execution
+
+The `executor` subagent (configured in `opencode.json`) runs test/build/lint commands on behalf of the main agent. Its model is set in config and cannot be changed per-dispatch. The executor runs the command, reports pass/fail + exit code + error excerpt, and stops — it does not diagnose or fix. The main agent reads the report and decides next steps (attempt one fix, STOP, or continue). This matches the "Who Runs Tests" split above: the executor is the "Executor agent" row for binary pass/fail checks; the main agent retains TDD red/green diagnosis.
+
+### Subagent Model Configuration
+
+OpenCode subagent models are set once in `opencode.json` per subagent type and cannot be changed per-dispatch. The LLM cannot switch models dynamically. Assign models by role:
+
+| Subagent | Role | Model tier |
+|---|---|---|
+| `executor` | Run tests, builds, lint — report results, no diagnosis | Cheap, fast |
+| `explore` | Codebase search and focused analysis | Cheap, fast |
+| Main agent | Planning, judgment, TDD diagnosis, fixes | Capable |
+
+This is the OpenCode equivalent of the superpowers `subagent-driven-development` "Model Selection" guidance: cheap models for mechanical tasks, capable models for judgment. The `executor` config in this project uses `opencode-go/deepseek-v4-flash` for mechanical command execution.
 
 ## PR & Commit Conventions
 
