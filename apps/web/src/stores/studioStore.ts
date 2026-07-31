@@ -9,6 +9,7 @@ export type TabType =
   | "roles"
   | "members"
   | "templates"
+  | "settings"
   | "drift";
 
 export interface Tab {
@@ -44,6 +45,8 @@ function defaultTitle(type: TabType, channelId?: string): string {
       return "Members";
     case "templates":
       return "Templates";
+    case "settings":
+      return "Settings";
     case "drift":
       return "Drift";
   }

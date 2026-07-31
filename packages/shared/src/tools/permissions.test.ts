@@ -68,7 +68,7 @@ describe("getOverwriteBatchAssumptions", () => {
     expect(assumptions.every((a) => a.type === "exists")).toBe(true);
   });
 
-  it("adds warn_everyone_view for @everyone deny VIEW_CHANNEL", () => {
+  it("does not emit a blocking assumption for @everyone deny VIEW_CHANNEL", () => {
     const params = {
       overwrites: [
         { channel_id: "ch1", role_id: "@everyone", deny: ["VIEW_CHANNEL"] },
@@ -76,9 +76,7 @@ describe("getOverwriteBatchAssumptions", () => {
       ],
     };
     const assumptions = getOverwriteBatchAssumptions(params);
-    const warns = assumptions.filter((a) => a.type === "warn_everyone_view");
-    expect(warns).toHaveLength(1);
-    expect(warns[0].value).toBe("@everyone");
+    expect(assumptions.every((a) => a.type === "exists")).toBe(true);
   });
 });
 

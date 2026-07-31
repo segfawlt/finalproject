@@ -32,7 +32,6 @@ const createSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
   structure: z.record(z.unknown()),
-  questions: z.array(z.record(z.unknown())).optional().default([]),
   validationRules: z.array(z.record(z.unknown())).optional().default([]),
   category: z.string().optional(),
   tags: z.array(z.string()).optional().default([]),

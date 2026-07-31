@@ -35,7 +35,7 @@ AI-driven Discord server management platform. Administrators describe server con
 
 ### Keep Docs In Sync
 
-When you change code, update the affected docs in the same change. If a rule, command, env var, or file path in AGENTS.md no longer matches the code, fix the doc. Same for design docs under `docs/design/`. Don't expand doc scope — just keep it accurate. Line counts, file lists, and command tables go stale fast; treat them as living.
+When you change code, update the affected docs in the same change. If a rule, command, env var, or file path in this file no longer matches the code, fix the doc. Same for design docs under `docs/design/`. Don't expand doc scope — just keep it accurate. Line counts, file lists, and command tables go stale fast; treat them as living.
 
 **Specifically for `docs/IMPLEMENTATION_STATUS.md`:** when you add, remove, or significantly change a feature/route/file, update the matching entry in the same commit — add new files to the right subsection, move resolved gaps to "Recently resolved", and bump the "Last updated" date at the top. If a sweep is overdue, run a fresh inventory check before editing.
 
@@ -53,11 +53,19 @@ When you change code, update the affected docs in the same change. If a rule, co
 - Discovered a non-obvious workaround for a library, framework, or Discord.js quirk
 - Resolved a design decision with surprising rationale
 
-**Promotion:** the `compound` skill surfaces lessons referenced 3+ times in `docs/learnings/README.md` → "## Promote Candidates". Review weekly. If a lesson deserves a spot in this file as a project-wide rule, copy its core directive here. The agent never writes to AGENTS.md directly.
+**Promotion:** the `compound` skill surfaces lessons referenced 3+ times in `docs/learnings/README.md` → "## Promote Candidates". Review weekly. If a lesson deserves a spot in this file as a project-wide rule, copy its core directive here. The agent never writes to this file directly.
 
 **Hygiene:** run the `compound-refresh` skill monthly (or after major refactors) to detect stale references, duplicates, and obsolete docs.
 
 **Session-end check:** if this session produced a durable lesson and `compound` was not invoked during the work, invoke it before ending.
+
+### Report Writing (`docs/report/`)
+
+The user drafts the final project report chapter-by-chapter (see `docs/report/README.md` for order and scope). When asked to write or continue a chapter:
+
+- Write it directly from `docs/` and the code — no plan, no "here's what I'll cover" preamble first.
+- If the user names one chapter but a second is short/easy and clearly next, use judgment and draft both without asking.
+- Only pause before writing if you find a real conflict between docs and code (or between docs) that changes what the chapter should say. Otherwise just write.
 
 ## Tech Stack
 
@@ -83,7 +91,7 @@ packages/
 docs/             Design docs + issues (markdown)
 ```
 
-Key design documents live under [`docs/design/`](./docs/design/). Change management uses Superpowers skills.
+Key design documents live under [`docs/design/`](./docs/design/).
 
 ## Implementation Status
 
@@ -308,7 +316,7 @@ The codebase has a clean architecture: most planning code depends on the `Execut
 | `apps/server/src/planning/diff-engine.ts`                                                                | Full 3-phase diff algorithm, edge cases — **highest-value test target**        |
 | `apps/server/src/planning/validation.ts`                                                                 | Validation groups B–E (pure functions on PlanStep[]/DesiredState)              |
 | `apps/server/src/planning/event-bus.ts`                                                                  | Pub/sub subscribe/emit/unsubscribe                                             |
-| `apps/server/src/planning/execution-engine.ts`                                                           | resolveSymbols, isTransientError, isKnownError, computeBackoff, getInverseTool |
+| `apps/server/src/planning/execution-engine.ts`                                                           | resolveSymbols, isTransientError, isKnownError, computeBackoff, rollbackFull |
 | `apps/server/src/bot/cache.ts`                                                                           | Lookup helpers on a seeded Map                                                 |
 
 **MEDIUM — needs a test DB or simple mock:**
@@ -345,36 +353,9 @@ Only 5 files need Discord.js mocks. Everything else uses the `ExecuteContext` in
 - Discord.js must be fully mocked (external service)
 - Database tests should use PostgreSQL-compatible setup; do not swap to SQLite unless the schema and queries are explicitly designed for it.
 
-### Who Runs Tests
+### TDD Feedback Loop
 
-Split test execution between the main agent and subagents based on feedback needs:
-
-| When                               | Who            | Why                                          |
-| ---------------------------------- | -------------- | -------------------------------------------- |
-| TDD RED — watch test fail          | Main agent     | Needs actual error message + stack trace     |
-| TDD GREEN — confirm test passes    | Main agent     | Needs to see the green output directly       |
-| Pre-commit — verify all tests pass | Executor agent | Binary pass/fail, large output, no deep read |
-| TypeScript compilation check       | Executor agent | Large output, binary pass/fail               |
-| Lint check                         | Executor agent | Large output, binary pass/fail               |
-
-The TDD feedback loop requires tight iteration — offloading the test runner adds
-latency and loses error detail that the main agent needs to diagnose failures.
-
-### Subagent Test Execution
-
-The `executor` subagent (configured in `opencode.json`) runs test/build/lint commands on behalf of the main agent. Its model is set in config and cannot be changed per-dispatch. The executor runs the command, reports pass/fail + exit code + error excerpt, and stops — it does not diagnose or fix. The main agent reads the report and decides next steps (attempt one fix, STOP, or continue). This matches the "Who Runs Tests" split above: the executor is the "Executor agent" row for binary pass/fail checks; the main agent retains TDD red/green diagnosis.
-
-### Subagent Model Configuration
-
-OpenCode subagent models are set once in `opencode.json` per subagent type and cannot be changed per-dispatch. The LLM cannot switch models dynamically. Assign models by role:
-
-| Subagent | Role | Model tier |
-|---|---|---|
-| `executor` | Run tests, builds, lint — report results, no diagnosis | Cheap, fast |
-| `explore` | Codebase search and focused analysis | Cheap, fast |
-| Main agent | Planning, judgment, TDD diagnosis, fixes | Capable |
-
-This is the OpenCode equivalent of the superpowers `subagent-driven-development` "Model Selection" guidance: cheap models for mechanical tasks, capable models for judgment. The `executor` config in this project uses `opencode-go/deepseek-v4-flash` for mechanical command execution.
+For the TDD red/green loop, run tests yourself so you see the actual error message and stack trace (RED) and the green output directly (GREEN) — this is where tight iteration and diagnosis matter. For bulk pre-commit checks (full test suite, `pnpm typecheck`, `pnpm lint`) where the output is large and the signal is binary pass/fail, delegate to a subagent and act on the reported result.
 
 ## PR & Commit Conventions
 
@@ -386,5 +367,5 @@ This is the OpenCode equivalent of the superpowers `subagent-driven-development`
 
 - [ProjectDescription.md](./ProjectDescription.md) — Full project overview
 - [docs/design/](./docs/design/) — System design documents
-- Superpowers skills — Development workflows (brainstorming, TDD, debugging, etc.)
 - [docs/issues/open-design-issues.md](./docs/issues/open-design-issues.md) — Resolved decisions and open questions
+

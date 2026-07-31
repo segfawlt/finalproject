@@ -420,10 +420,11 @@ The server, in order (`routes/plans.ts: POST /:planId/execute`):
 4. **On transient error** (rate limit 429, server 500, network timeout):
    retry with exponential backoff + jitter, up to `MAX_RETRIES`.
 5. **On known/permanent error**: fail the step.
-6. **On failure, roll back**. The engine calls `getInverseTool` for every
-   already-completed step in reverse order and runs each inverse against
-   the same `ExecuteContext`. `create_channel` is undone by `delete_channel`;
-   `add_role_to_member` is undone by `remove_role_from_member`; etc.
+6. **On failure, roll back**. The engine calls `rollbackFull`, which reads fresh
+   Discord state, forks the `execution_before` snapshot into a DesiredState, runs
+   the diff engine to compute the reverse steps, and executes them against the
+   same `ExecuteContext`. Rollback is a whole-state reconciliation, not a per-step
+   inverse replay.
    Anything that ran gets reverted.
 
 For our example, the execution order is:
@@ -539,7 +540,7 @@ Source: `planning/drift-detector.ts`.
 │  │    tool.execute(params, ctx)  ← real Discord API   │        │
 │  │    emit step_started / step_completed SSE          │        │
 │  │    on transient error: retry + backoff             │        │
-│  │    on permanent error: getInverseTool → rollback   │        │
+│  │    on permanent error: rollbackFull → reverse diff │        │
 │  └────────────────────────────────────────────────────┘        │
 │                                                               │
 │  8. Fetch after state from Discord (REST)                     │
@@ -586,7 +587,7 @@ the execution engine.
 | **Stage 1 validation** | Structural impossibilities — bot can't edit a role above its own, can't delete unknown IDs, can't create two channels with the same name | `planning/validation.ts` Groups A–E |
 | **Stage 2 LLM policy check** | Plans that violate the server's own written rules (e.g. "never delete #welcome") | `validateWithLLM` against the `rules` table |
 | **Pre-execution assumption checks** | Parent missing, name collision at the moment of execution, hierarchy violations | `tools/evaluate-assumptions.ts` |
-| **Inverse-tool rollback** | If a step fails after earlier steps already ran, those earlier steps are undone automatically | `execution-engine.ts: getInverseTool` |
+| **Diff-based rollback** | If a step fails after earlier steps already ran, the whole plan is undone by diffing live state against the before-snapshot and executing the reverse | `execution-engine.ts: rollbackFull` |
 | **Snapshot + manual rollback** | Admin can undo any completed plan after the fact | `execution_before` / `execution_after` snapshots |
 | **Drift detector** | External edits (someone reconfiguring the server via the Discord app) are surfaced to the admin | `planning/drift-detector.ts` |
 | **5-minute execution timeout** | A stuck execution is aborted, lock is released, rollback runs | `routes/plans.ts` |

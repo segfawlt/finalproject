@@ -60,21 +60,21 @@ export default function ChannelItem({
 
   if (editing) {
     return (
-      <li className="px-3 py-2 bg-discord-bg-secondary border border-discord-divider rounded text-sm flex items-center gap-2">
-        <Icon size={14} className="text-discord-text-muted shrink-0" />
+      <li className="px-3 py-2 bg-shell-surface2 border border-shell-border rounded text-sm flex items-center gap-2">
+        <Icon size={14} className="text-shell-text-muted shrink-0" />
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <input
               aria-label="Channel name"
               value={channel.name}
               onChange={(e) => onChange?.({ ...channel, name: e.target.value })}
-              className="px-2 py-1 rounded bg-discord-bg-tertiary text-discord-text border border-discord-divider focus:border-discord-accent focus:outline-none text-sm min-w-0 flex-1"
+              className="px-2 py-1 rounded bg-shell-canvas text-shell-text border border-shell-border focus:border-shell-accent focus:outline-none text-sm min-w-0 flex-1"
             />
             <select
               aria-label="Channel type"
               value={channel.type}
               onChange={(e) => onChange?.({ ...channel, type: Number(e.target.value) })}
-              className="px-2 py-1 rounded bg-discord-bg-tertiary text-discord-text border border-discord-divider focus:border-discord-accent focus:outline-none text-xs"
+              className="px-2 py-1 rounded bg-shell-canvas text-shell-text border border-shell-border focus:border-shell-accent focus:outline-none text-xs"
             >
               {EDITABLE_CHANNEL_TYPES.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -82,14 +82,14 @@ export default function ChannelItem({
                 </option>
               ))}
             </select>
-            <label className="text-discord-text-muted text-xs flex items-center gap-1">
+            <label className="text-shell-text-muted text-xs flex items-center gap-1">
               pos
               <input
                 aria-label="Channel position"
                 type="number"
                 value={channel.position}
                 onChange={(e) => onChange?.({ ...channel, position: Number(e.target.value) || 0 })}
-                className="w-16 px-2 py-1 rounded bg-discord-bg-tertiary text-discord-text border border-discord-divider focus:border-discord-accent focus:outline-none text-xs"
+                className="w-16 px-2 py-1 rounded bg-shell-canvas text-shell-text border border-shell-border focus:border-shell-accent focus:outline-none text-xs"
               />
             </label>
             {onDelete && (
@@ -97,13 +97,13 @@ export default function ChannelItem({
                 type="button"
                 aria-label="Delete channel"
                 onClick={onDelete}
-                className="px-1.5 py-1 rounded text-discord-red hover:bg-discord-red/20 text-xs"
+                className="px-1.5 py-1 rounded text-error hover:bg-error/20 text-xs"
               >
                 ×
               </button>
             )}
           </div>
-          <div className="text-discord-text-muted text-xs">id: {channel.id}</div>
+          <div className="text-shell-text-muted text-xs">id: {channel.id}</div>
         </div>
       </li>
     );
@@ -112,26 +112,26 @@ export default function ChannelItem({
   return (
     <li
       onClick={onClick}
-      className={`px-3 py-2 bg-discord-bg-secondary border border-discord-divider rounded text-sm flex items-center gap-2 ${
+      className={`px-3 py-2 bg-shell-surface2 border border-shell-border rounded text-sm flex items-center gap-2 ${
         onClick
-          ? "cursor-pointer hover:border-discord-accent hover:bg-discord-channel-hover transition"
+          ? "cursor-pointer hover:border-shell-accent hover:bg-shell-surface2 transition"
           : ""
       }`}
     >
-      <Icon size={14} className="text-discord-text-muted shrink-0" />
+      <Icon size={14} className="text-shell-text-muted shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-discord-text font-medium">#{channel.name}</span>
-          <span className="text-discord-text-muted text-xs">{channelTypeLabel(channel.type)}</span>
-          <span className="text-discord-text-muted text-xs">pos {channel.position}</span>
-          {parentName && <span className="text-discord-text-muted text-xs">in {parentName}</span>}
-          {channel.nsfw && <span className="text-discord-red text-xs">NSFW</span>}
+          <span className="text-shell-text font-medium">#{channel.name}</span>
+          <span className="text-shell-text-muted text-xs">{channelTypeLabel(channel.type)}</span>
+          <span className="text-shell-text-muted text-xs">pos {channel.position}</span>
+          {parentName && <span className="text-shell-text-muted text-xs">in {parentName}</span>}
+          {channel.nsfw && <span className="text-error text-xs">NSFW</span>}
           {diffStatus && <DiffBadge status={diffStatus} />}
         </div>
         {channel.topic && (
-          <div className="text-discord-text-muted text-xs mt-1 truncate">{channel.topic}</div>
+          <div className="text-shell-text-muted text-xs mt-1 truncate">{channel.topic}</div>
         )}
-        <div className="text-discord-text-muted text-xs">id: {channel.id}</div>
+        <div className="text-shell-text-muted text-xs">id: {channel.id}</div>
       </div>
     </li>
   );

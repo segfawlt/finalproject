@@ -12,7 +12,7 @@ An AI-driven management platform that allows Discord Administrators to configure
 
 | Layer        | Technology               | Purpose                                               |
 | ------------ | ------------------------ | ----------------------------------------------------- |
-| Web App      | Vite + React (SPA)       | Studio (Discord Clone Config UI) + Dashboard          |
+| Web App      | Vite + React (SPA)       | Studio (Discord Clone Config UI) — sole hub           |
 | Routing      | React Router v7          | Client-side routing with nested layouts               |
 | State        | Zustand                  | Global UI state (Studio drag/drop, panels, execution) |
 | Styling      | Tailwind CSS             | Discord dark theme                                    |
@@ -20,7 +20,7 @@ An AI-driven management platform that allows Discord Administrators to configure
 | Real-time    | SSE via `hono/streaming` | Live execution status to frontend                     |
 | Orchestrator | OpenRouter (raw fetch)   | LLM-based planning via constrained tool-calling       |
 | Database     | PostgreSQL + Drizzle ORM | Plans, snapshots, rules, templates, users             |
-| Auth         | Better Auth              | Discord OAuth2, session management, multi-tenant      |
+| Auth         | Better Auth              | Discord OAuth2, session mgmt; per-guild `MANAGE_GUILD` |
 | Bot          | Discord.js v14           | Stateful Bot Worker (same process as Hono)            |
 | Tunnel       | Cloudflare Tunnel        | Secure internet exposure, no port forwarding          |
 
@@ -46,7 +46,7 @@ An AI-driven management platform that allows Discord Administrators to configure
 
 ```
 ├── apps/
-│   ├── web/          # Vite + React SPA (Studio + Dashboard)
+│   ├── web/          # Vite + React SPA (Studio — sole hub)
 │   ├── docs/         # Astro SSG (Landing + Documentation, deferred)
 │   └── server/       # Hono API + Discord.js Bot (monolith)
 ├── packages/

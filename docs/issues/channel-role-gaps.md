@@ -77,9 +77,6 @@ user ID. Symmetric diffing (no tombstones). Member ops run in Phase 4 (People)
 of the planning model. Full tool chain: Zod schemas → plan() → execute() →
 ExecuteContext → Discord.js implementation.
 
-Remaining work on member management: configuration procedure (#24), which replaces
-the original guided setup flow with a passive sidebar checklist.
-
 **Scope (implemented):** Add/remove role from member. Nickname, kick, ban,
 timeout deferred.
 

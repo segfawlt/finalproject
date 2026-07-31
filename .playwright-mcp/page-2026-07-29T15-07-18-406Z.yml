@@ -1,0 +1,257 @@
+- generic [ref=e5]:
+  - banner [ref=e6]:
+    - generic [ref=e7]:
+      - link "Discord Platform home" [ref=e8] [cursor=pointer]:
+        - /url: /studio
+        - generic [ref=e13]: Discord Platform
+      - navigation [ref=e14]:
+        - link "Studio" [ref=e15] [cursor=pointer]:
+          - /url: /studio
+      - generic [ref=e21]:
+        - generic [ref=e22]:
+          - generic [ref=e23]: NI
+          - generic [ref=e24]: nizk
+        - button "Sign out" [ref=e26] [cursor=pointer]
+  - generic [ref=e32]:
+    - generic [ref=e33]:
+      - link "Pick a server" [ref=e34] [cursor=pointer]:
+        - /url: /studio
+      - generic [ref=e38]:
+        - generic [ref=e39]: /
+        - generic [ref=e40]: nizk's server
+      - generic [ref=e41]:
+        - link "Templates" [ref=e42] [cursor=pointer]:
+          - /url: /templates/1517217533168582838
+        - link "Settings" [ref=e46] [cursor=pointer]:
+          - /url: /dashboard/1517217533168582838
+    - generic [ref=e50]:
+      - complementary [ref=e51]:
+        - generic [ref=e52]:
+          - generic [ref=e53]:
+            - generic [ref=e54]: History
+            - button "Collapse conversation history" [ref=e55] [cursor=pointer]
+          - button "New Chat" [ref=e60] [cursor=pointer]
+          - generic [ref=e63]:
+            - generic [ref=e132]:
+              - generic [ref=e133]: Today
+              - list [ref=e134]:
+                - listitem [ref=e135]:
+                  - 'button "Set up a private staff category with #staff-chat and #mod-logs channels, and create a Moderator role that can manage messages and channels in that category. completed" [ref=e136] [cursor=pointer]':
+                    - generic [ref=e137]: "Set up a private staff category with #staff-chat and #mod-logs channels, and create a Moderator role that can manage messages and channels in that category."
+                    - generic [ref=e138]: completed
+            - generic [ref=e140]:
+              - generic [ref=e141]: Earlier
+              - list [ref=e142]:
+                - listitem [ref=e143]:
+                  - button "I want a staff channel. expired" [ref=e144] [cursor=pointer]:
+                    - generic [ref=e145]: I want a staff channel.
+                    - generic [ref=e146]: expired
+                - listitem [ref=e148]:
+                  - button "I want a staff channel. expired" [ref=e149] [cursor=pointer]:
+                    - generic [ref=e150]: I want a staff channel.
+                    - generic [ref=e151]: expired
+                - listitem [ref=e153]:
+                  - button "I want a channel for exchanging commands stale" [ref=e154] [cursor=pointer]:
+                    - generic [ref=e155]: I want a channel for exchanging commands
+                    - generic [ref=e156]: stale
+                - listitem [ref=e158]:
+                  - button "only create a new text channel called \"command\" stale" [ref=e159] [cursor=pointer]:
+                    - generic [ref=e160]: only create a new text channel called "command"
+                    - generic [ref=e161]: stale
+                - listitem [ref=e163]:
+                  - button "create a text channel called \"command\" stale" [ref=e164] [cursor=pointer]:
+                    - generic [ref=e165]: create a text channel called "command"
+                    - generic [ref=e166]: stale
+                - listitem [ref=e168]:
+                  - button "Create a text channel called \"command\" stale" [ref=e169] [cursor=pointer]:
+                    - generic [ref=e170]: Create a text channel called "command"
+                    - generic [ref=e171]: stale
+                - listitem [ref=e173]:
+                  - button "I want to create a channel called \"command\", text channel stale" [ref=e174] [cursor=pointer]:
+                    - generic [ref=e175]: I want to create a channel called "command", text channel
+                    - generic [ref=e176]: stale
+                - listitem [ref=e178]:
+                  - button "Creating a command channel under text category named \"command\". its a text channel stale" [ref=e179] [cursor=pointer]:
+                    - generic [ref=e180]: Creating a command channel under text category named "command". its a text channel
+                    - generic [ref=e181]: stale
+                - listitem [ref=e183]:
+                  - button "Create a text channel called \"command\" for command purpose stale" [ref=e184] [cursor=pointer]:
+                    - generic [ref=e185]: Create a text channel called "command" for command purpose
+                    - generic [ref=e186]: stale
+                - listitem [ref=e188]:
+                  - button "I want to create a new command channel named \"command\" stale" [ref=e189] [cursor=pointer]:
+                    - generic [ref=e190]: I want to create a new command channel named "command"
+                    - generic [ref=e191]: stale
+                - listitem [ref=e193]:
+                  - button "I want to create a new command channel called \"command\" stale" [ref=e194] [cursor=pointer]:
+                    - generic [ref=e195]: I want to create a new command channel called "command"
+                    - generic [ref=e196]: stale
+                - listitem [ref=e198]:
+                  - button "Create a command channel called \"command\" stale" [ref=e199] [cursor=pointer]:
+                    - generic [ref=e200]: Create a command channel called "command"
+                    - generic [ref=e201]: stale
+                - listitem [ref=e203]:
+                  - button "Make a channel called \"command\" under the text channel section stale" [ref=e204] [cursor=pointer]:
+                    - generic [ref=e205]: Make a channel called "command" under the text channel section
+                    - generic [ref=e206]: stale
+                - listitem [ref=e208]:
+                  - 'button "I want a new command channel called #command stale" [ref=e209] [cursor=pointer]':
+                    - generic [ref=e210]: "I want a new command channel called #command"
+                    - generic [ref=e211]: stale
+                - listitem [ref=e213]:
+                  - 'button "I want a new command channel called #command stale" [ref=e214] [cursor=pointer]':
+                    - generic [ref=e215]: "I want a new command channel called #command"
+                    - generic [ref=e216]: stale
+                - listitem [ref=e218]:
+                  - button "I want to create a command channel stale" [ref=e219] [cursor=pointer]:
+                    - generic [ref=e220]: I want to create a command channel
+                    - generic [ref=e221]: stale
+                - listitem [ref=e223]:
+                  - button "I want a command channel stale" [ref=e224] [cursor=pointer]:
+                    - generic [ref=e225]: I want a command channel
+                    - generic [ref=e226]: stale
+                - listitem [ref=e228]:
+                  - button "I want a command channel stale" [ref=e229] [cursor=pointer]:
+                    - generic [ref=e230]: I want a command channel
+                    - generic [ref=e231]: stale
+                - listitem [ref=e233]:
+                  - button "I want a new channel for commands. stale" [ref=e234] [cursor=pointer]:
+                    - generic [ref=e235]: I want a new channel for commands.
+                    - generic [ref=e236]: stale
+      - main [ref=e74]:
+        - generic [ref=e77]:
+          - generic [ref=e78]:
+            - generic [ref=e79]: Welcome
+            - heading "Configure 1517217533168582838" [level=1] [ref=e84]
+            - paragraph [ref=e85]: Pick a starting point, or describe what you want changed. The AI will plan the changes, you approve, then they go live.
+          - generic [ref=e86]:
+            - generic [ref=e87]: Suggestions
+            - generic [ref=e88]:
+              - button "Set up staff channels Private staff space with a moderator role" [ref=e89] [cursor=pointer]:
+                - generic [ref=e90]: Set up staff channels
+                - generic [ref=e91]: Private staff space with a moderator role
+              - button "Gaming community layout Categories and channels for a gaming server" [ref=e92] [cursor=pointer]:
+                - generic [ref=e93]: Gaming community layout
+                - generic [ref=e94]: Categories and channels for a gaming server
+              - button "Foundational roles Base roles with sensible permissions" [ref=e95] [cursor=pointer]:
+                - generic [ref=e96]: Foundational roles
+                - generic [ref=e97]: Base roles with sensible permissions
+              - button "Channel permission fix Configure overwrites for a specific channel" [ref=e98] [cursor=pointer]:
+                - generic [ref=e99]: Channel permission fix
+                - generic [ref=e100]: Configure overwrites for a specific channel
+              - button "Audit and cleanup Review existing channels and suggest cleanup" [ref=e101] [cursor=pointer]:
+                - generic [ref=e102]: Audit and cleanup
+                - generic [ref=e103]: Review existing channels and suggest cleanup
+          - generic [ref=e104]:
+            - generic [ref=e105]: Or describe what you want
+            - textbox "e.g., Create a staff channel and a moderator role..." [ref=e106]
+            - button "Create & Plan" [disabled] [ref=e107]
+      - complementary [ref=e110]:
+        - generic [ref=e111]:
+          - tablist [ref=e112]:
+            - tab "Server" [selected] [ref=e113] [cursor=pointer]
+            - tab "Desired" [ref=e115] [cursor=pointer]
+            - button "Open new tab" [ref=e118] [cursor=pointer]
+          - generic [ref=e121]:
+            - generic [ref=e238]:
+              - heading "LLM Testing Server" [level=2] [ref=e239]
+              - paragraph [ref=e240]: 2 members · current Discord state
+            - generic [ref=e241]:
+              - heading "Categories (2)" [level=3] [ref=e242]:
+                - text: Categories
+                - generic [ref=e243]: (2)
+              - list [ref=e245]:
+                - listitem [ref=e246]:
+                  - generic [ref=e249]:
+                    - generic [ref=e250]:
+                      - generic [ref=e251]: Text Channels
+                      - generic [ref=e252]: pos 0
+                    - generic [ref=e253]: "id: 1517217533789470740"
+                - listitem [ref=e254]:
+                  - generic [ref=e257]:
+                    - generic [ref=e258]:
+                      - generic [ref=e259]: Voice Channels
+                      - generic [ref=e260]: pos 1
+                    - generic [ref=e261]: "id: 1517217534301048914"
+            - generic [ref=e262]:
+              - heading "Channels (6)" [level=3] [ref=e263]:
+                - text: Channels
+                - generic [ref=e264]: (6)
+              - list [ref=e266]:
+                - listitem [ref=e267] [cursor=pointer]:
+                  - generic [ref=e271]:
+                    - generic [ref=e272]:
+                      - generic [ref=e273]: "#general"
+                      - generic [ref=e274]: text
+                      - generic [ref=e275]: pos 0
+                      - generic [ref=e276]: in Text Channels
+                    - generic [ref=e277]: "id: 1517217534301048912"
+                - listitem [ref=e278] [cursor=pointer]:
+                  - generic [ref=e283]:
+                    - generic [ref=e284]:
+                      - generic [ref=e285]: "#Lobby"
+                      - generic [ref=e286]: voice
+                      - generic [ref=e287]: pos 0
+                      - generic [ref=e288]: in Voice Channels
+                    - generic [ref=e289]: "id: 1517217534301048915"
+                - listitem [ref=e290] [cursor=pointer]:
+                  - generic [ref=e294]:
+                    - generic [ref=e295]:
+                      - generic [ref=e296]: "#clips-and-highlights"
+                      - generic [ref=e297]: text
+                      - generic [ref=e298]: pos 1
+                      - generic [ref=e299]: in Text Channels
+                    - generic [ref=e300]: "id: 1517217534301048913"
+                - listitem [ref=e301] [cursor=pointer]:
+                  - generic [ref=e306]:
+                    - generic [ref=e307]:
+                      - generic [ref=e308]: "#Gaming"
+                      - generic [ref=e309]: voice
+                      - generic [ref=e310]: pos 1
+                      - generic [ref=e311]: in Voice Channels
+                    - generic [ref=e312]: "id: 1517217534301048916"
+                - listitem [ref=e313] [cursor=pointer]:
+                  - generic [ref=e317]:
+                    - generic [ref=e318]:
+                      - generic [ref=e319]: "#command"
+                      - generic [ref=e320]: text
+                      - generic [ref=e321]: pos 2
+                      - generic [ref=e322]: in Text Channels
+                    - generic [ref=e323]: "id: 1517422629638766724"
+                - listitem [ref=e324] [cursor=pointer]:
+                  - generic [ref=e328]:
+                    - generic [ref=e329]:
+                      - generic [ref=e330]: "#command-exchange"
+                      - generic [ref=e331]: text
+                      - generic [ref=e332]: pos 3
+                      - generic [ref=e333]: in Text Channels
+                    - generic [ref=e334]: "id: 1517425453185368137"
+            - generic [ref=e335]:
+              - heading "Roles (3)" [level=3] [ref=e336]:
+                - text: Roles
+                - generic [ref=e337]: (3)
+              - list [ref=e339]:
+                - listitem [ref=e340]:
+                  - generic [ref=e343]:
+                    - generic [ref=e344]:
+                      - generic [ref=e345]: LLMBot
+                      - generic [ref=e346]: pos 2
+                      - generic [ref=e347]: —
+                    - generic [ref=e348]: "perms: ADMINISTRATOR"
+                    - generic [ref=e349]: "id: 1517217749531627575"
+                - listitem [ref=e350]:
+                  - generic [ref=e353]:
+                    - generic [ref=e354]:
+                      - generic [ref=e355]: Member
+                      - generic [ref=e356]: pos 1
+                      - generic [ref=e357]: —
+                    - generic [ref=e358]: "perms: KICK_MEMBERS, VIEW_CHANNEL"
+                    - generic [ref=e359]: "id: 1517425588745277722"
+                - listitem [ref=e360]:
+                  - generic [ref=e363]:
+                    - generic [ref=e364]:
+                      - generic [ref=e365]: "@everyone"
+                      - generic [ref=e366]: pos 0
+                      - generic [ref=e367]: —
+                    - generic [ref=e368]: "perms: CREATE_INSTANT_INVITE, ADD_REACTIONS, STREAM, VIEW_CHANNEL, SEND_MESSAGES, EMBED_LINKS, ATTACH_FILES, READ_MESSAGE_HISTORY, MENTION_EVERYONE, USE_EXTERNAL_EMOJIS, CONNECT, SPEAK, CHANGE_NICKNAME, USE_APPLICATION_COMMANDS, REQUEST_TO_SPEAK, CREATE_PUBLIC_THREADS, CREATE_PRIVATE_THREADS, USE_EXTERNAL_STICKERS, SEND_MESSAGES_IN_THREADS, USE_EMBEDDED_ACTIVITIES"
+                    - generic [ref=e369]: "id: 1517217533168582838"

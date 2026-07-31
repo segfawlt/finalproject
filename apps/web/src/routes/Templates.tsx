@@ -45,34 +45,34 @@ export default function Templates() {
     <div className="max-w-3xl mx-auto p-6 sm:p-8 space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="text-xs text-discord-text-muted uppercase tracking-wide font-semibold">
+          <div className="text-xs text-shell-text-muted uppercase tracking-wide font-semibold">
             Templates
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-discord-text mt-1">Library</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-shell-text mt-1">Library</h1>
         </div>
         <Link
-          to={`/dashboard/${guildId ?? ""}`}
-          className="inline-flex items-center gap-2 px-3 py-2 bg-discord-bg-secondary border border-discord-divider hover:bg-discord-channel-hover hover:border-discord-text-subtle/30 text-discord-text-muted hover:text-discord-text rounded text-sm transition-colors"
+          to={`/studio/${guildId ?? ""}`}
+          className="inline-flex items-center gap-2 px-3 py-2 bg-shell-surface2 border border-shell-border hover:bg-shell-surface2 hover:border-shell-border-strong text-shell-text-muted hover:text-shell-text rounded text-sm transition-colors"
         >
-          Back
+          Back to Studio
         </Link>
       </div>
 
       <div className="relative">
         <Search
           size={14}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-discord-text-muted"
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-shell-text-muted"
         />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search templates…"
-          className="w-full pl-9 pr-3 py-2 rounded-md bg-discord-bg-secondary text-discord-text text-sm border border-discord-divider focus:border-discord-accent focus:outline-none focus:ring-1 focus:ring-discord-accent/30 transition-colors"
+          className="w-full pl-9 pr-3 py-2 rounded-md bg-shell-surface2 text-shell-text text-sm border border-shell-border focus:border-shell-accent focus:outline-none focus:ring-1 focus:ring-shell-accent/30 transition-colors"
         />
       </div>
 
       {loading ? (
-        <div className="text-discord-text-muted text-sm">Loading…</div>
+        <div className="text-shell-text-muted text-sm">Loading…</div>
       ) : filtered.length === 0 ? (
         templates.length === 0 ? (
           <EmptyState
@@ -81,7 +81,7 @@ export default function Templates() {
             description="Templates can be created from conversation plans. Finish a plan in the Studio to seed your library."
           />
         ) : (
-          <div className="text-center text-discord-text-muted text-sm py-8">
+          <div className="text-center text-shell-text-muted text-sm py-8">
             No templates match your search.
           </div>
         )
@@ -91,28 +91,28 @@ export default function Templates() {
             <li key={t.id}>
               <Link
                 to={`/templates/${guildId ?? ""}/${t.id}`}
-                className="group flex items-start gap-3 px-4 py-3 bg-discord-bg-secondary border border-discord-divider rounded-lg hover:border-discord-text-subtle/30 hover:bg-discord-channel-hover hover:shadow-lg hover:shadow-black/20 transition-all"
+                className="group flex items-start gap-3 px-4 py-3 bg-shell-surface2 border border-shell-border rounded-lg hover:border-shell-border-strong hover:bg-shell-surface2 hover:shadow-lg hover:shadow-black/20 transition-all"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-discord-text font-medium truncate">{t.name}</span>
+                    <span className="text-shell-text font-medium truncate">{t.name}</span>
                     {t.isOfficial && (
-                      <span className="px-1.5 py-0.5 bg-blue-900/50 text-blue-300 rounded text-[10px] uppercase">
+                      <span className="px-1.5 py-0.5 bg-shell-surface3 text-shell-text-muted rounded text-[10px] uppercase">
                         official
                       </span>
                     )}
-                    <span className="text-discord-text-muted text-xs">v{t.version}</span>
+                    <span className="text-shell-text-muted text-xs">v{t.version}</span>
                   </div>
-                  <div className="text-discord-text-muted text-xs mt-1 line-clamp-2">
+                  <div className="text-shell-text-muted text-xs mt-1 line-clamp-2">
                     {t.description}
                   </div>
                   {t.category && (
-                    <div className="text-discord-text-muted text-[10px] mt-1">{t.category}</div>
+                    <div className="text-shell-text-muted text-[10px] mt-1">{t.category}</div>
                   )}
                 </div>
                 <ChevronRight
                   size={16}
-                  className="text-discord-text-muted shrink-0 mt-1 group-hover:text-discord-text group-hover:translate-x-0.5 transition-all"
+                  className="text-shell-text-muted shrink-0 mt-1 group-hover:text-shell-text group-hover:translate-x-0.5 transition-all"
                 />
               </Link>
             </li>

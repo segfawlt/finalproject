@@ -92,7 +92,7 @@ export default function DesiredStateView({
 
   if (!desiredState) {
     return (
-      <div className="text-discord-text-muted text-sm italic p-4 border border-dashed border-discord-divider rounded">
+      <div className="text-shell-text-muted text-sm italic p-4 border border-dashed border-shell-border rounded">
         No desired state yet. Submit a prompt to start planning.
       </div>
     );
@@ -120,13 +120,13 @@ export default function DesiredStateView({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-discord-text font-semibold mb-2 text-sm uppercase tracking-wide">
+        <h2 className="text-shell-text font-semibold mb-2 text-sm uppercase tracking-wide">
           {desiredState.guildName}{" "}
-          <span className="text-discord-text-muted font-normal normal-case">
+          <span className="text-shell-text-muted font-normal normal-case">
             v{desiredState.version}
           </span>
           {editing && (
-            <span className="ml-2 text-discord-yellow text-xs uppercase tracking-wide">
+            <span className="ml-2 text-warning text-xs uppercase tracking-wide">
               editing
             </span>
           )}
@@ -189,13 +189,13 @@ export default function DesiredStateView({
         >
           {removedCategories.length > 0 && (
             <div className="mb-3">
-              <div className="text-xs text-discord-text-muted mb-1">Categories</div>
+              <div className="text-xs text-shell-text-muted mb-1">Categories</div>
               <CategoryList categories={removedCategories} defaultDiffStatus="removed" />
             </div>
           )}
           {removedChannels.length > 0 && (
             <div className="mb-3">
-              <div className="text-xs text-discord-text-muted mb-1">Channels</div>
+              <div className="text-xs text-shell-text-muted mb-1">Channels</div>
               <ChannelList
                 channels={removedChannels}
                 categoryNames={categoryNames}
@@ -205,13 +205,13 @@ export default function DesiredStateView({
           )}
           {removedRoles.length > 0 && (
             <div className="mb-3">
-              <div className="text-xs text-discord-text-muted mb-1">Roles</div>
+              <div className="text-xs text-shell-text-muted mb-1">Roles</div>
               <RoleList roles={removedRoles} defaultDiffStatus="removed" />
             </div>
           )}
           {removedMembers.length > 0 && (
             <div>
-              <div className="text-xs text-discord-text-muted mb-1">Members</div>
+              <div className="text-xs text-shell-text-muted mb-1">Members</div>
               <MemberList
                 assignments={removedMembers}
                 roleNames={roleNames}
@@ -255,10 +255,10 @@ function Section({
     <section>
       <h3
         className={`text-xs uppercase tracking-wide font-semibold mb-2 ${
-          tone === "danger" ? "text-discord-red" : "text-discord-text-muted"
+          tone === "danger" ? "text-error" : "text-shell-text-muted"
         }`}
       >
-        {title} <span className="text-discord-text-muted/60">({count})</span>
+        {title} <span className="text-shell-text-muted/60">({count})</span>
       </h3>
       {children}
     </section>

@@ -99,21 +99,6 @@ function evaluateOne(assumption: Assumption, state: ServerState): AssumptionResu
       return { passed: true, message: `Position check for ${resourceType} skipped` };
     }
 
-    case "bot_position": {
-      // Phase 1: skip — ServerState does not track bot role position
-      return { passed: true, message: "Bot position check skipped (Phase 1)" };
-    }
-
-    case "warn_everyone_view": {
-      // value is the role_id being targeted. Block when it is the @everyone role,
-      // identified either by the literal string Discord.js exposes or by the
-      // guild ID (which is the @everyone role's actual ID in Discord).
-      const isEveryone = value === "@everyone" || value === state.guildId;
-      return isEveryone
-        ? { passed: false, message: `Denying VIEW_CHANNEL to @everyone on channel` }
-        : { passed: true, message: "Not denying VIEW_CHANNEL to @everyone" };
-    }
-
     case "member_exists": {
       const found = state.memberRoles?.find((mr) => mr.memberId === value);
       return found

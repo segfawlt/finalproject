@@ -168,6 +168,108 @@ describe("diffEngine — member roles", () => {
   });
 });
 
+describe("diffEngine — role permissions", () => {
+  it("does not edit a role when its permission set is unchanged", () => {
+    const role = {
+      id: "role-1",
+      name: "Bot",
+      position: 2,
+      permissions: ["ADMINISTRATOR", "MANAGE_CHANNELS"],
+      color: 0,
+      hoist: false,
+      mentionable: false,
+    };
+    const real = makeServerState({ roles: [role] });
+    const desired = makeDesiredState({
+      active: {
+        channels: {},
+        roles: {
+          "role-1": {
+            ...role,
+            permissions: ["MANAGE_CHANNELS", "ADMINISTRATOR"],
+          },
+        },
+        overwrites: {},
+        memberRoles: {},
+      },
+    });
+
+    const result = diffEngine(real, desired);
+
+    expect(result.steps.filter((step) => step.toolName === "edit_role")).toHaveLength(0);
+  });
+});
+
+describe("diffEngine — external deletions", () => {
+  it("reports a missing active channel without throwing", () => {
+    const real = makeServerState();
+    const desired = makeDesiredState({
+      active: {
+        channels: {
+          "channel-1": {
+            id: "channel-1",
+            name: "general",
+            type: 0,
+            parentId: null,
+            position: 0,
+          },
+        },
+        roles: {},
+        overwrites: {},
+        memberRoles: {},
+      },
+    });
+
+    const result = diffEngine(real, desired);
+
+    expect(result.conflicts).toEqual([
+      {
+        kind: "missing_resource",
+        resourceType: "channel",
+        resourceId: "channel-1",
+        resourceName: "general",
+        message: 'Channel "general" no longer exists.',
+      },
+    ]);
+    expect(result.steps).toEqual([]);
+  });
+
+  it("reports a missing active role without throwing", () => {
+    const real = makeServerState();
+    const desired = makeDesiredState({
+      active: {
+        channels: {},
+        roles: {
+          "role-1": {
+            id: "role-1",
+            name: "Moderator",
+            position: 1,
+            permissions: [],
+            color: 0,
+            hoist: false,
+            mentionable: false,
+          },
+        },
+        overwrites: {},
+        memberRoles: {},
+      },
+    });
+
+    const result = diffEngine(real, desired);
+
+    expect(result.conflicts).toEqual([
+      {
+        kind: "missing_resource",
+        resourceType: "role",
+        resourceId: "role-1",
+        resourceName: "Moderator",
+        message: 'Role "Moderator" no longer exists.',
+      },
+    ]);
+    expect(result.steps).toEqual([]);
+  });
+});
+
 describe("diffEngine — lockPermissions", () => {
   function makeChannel(overrides: Partial<ChannelBase> = {}): ChannelBase {
     return {

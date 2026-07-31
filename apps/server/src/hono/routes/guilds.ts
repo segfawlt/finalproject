@@ -15,14 +15,6 @@ const guildsApp = new Hono<{ Variables: AppVariables }>();
 const updateGuildSchema = z.object({
   serverType: z.string().nullable().optional(),
   settings: z.record(z.unknown()).optional(),
-  phaseProgress: z
-    .object({
-      foundation: z.boolean(),
-      layout: z.boolean(),
-      access: z.boolean(),
-      people: z.boolean(),
-    })
-    .optional(),
 });
 
 guildsApp.get("/", async (c) => {
@@ -112,7 +104,6 @@ guildsApp.patch("/:guildId", zValidator("json", updateGuildSchema), async (c) =>
   };
   if (body.serverType !== undefined) data.serverType = body.serverType;
   if (body.settings !== undefined) data.settings = body.settings;
-  if (body.phaseProgress !== undefined) data.phaseProgress = body.phaseProgress;
 
   const [existing] = await db.select().from(guilds).where(eq(guilds.id, guildId));
 

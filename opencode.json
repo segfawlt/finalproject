@@ -4,6 +4,19 @@
   "plugin": [
     "superpowers@git+https://github.com/obra/superpowers.git"
   ],
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": [
+        "pnpm",
+        "dlx",
+        "@playwright/mcp",
+        "--executable-path",
+        "/usr/sbin/chromium"
+      ],
+      "enabled": true
+    }
+  },
   "agent": {
     "explore": {
       "description": "Semantic codebase exploration",
@@ -13,7 +26,7 @@
     },
     "executor": {
       "description": "Default execution subagent for bash commands, tests, builds, and validation",
-      "model": "opencode-go/deepseek-v4-flash",
+      "model": "opencode/deepseek-v4-flash-free",
       "mode": "subagent",
       "hidden": true,
       "permission": { "edit": "deny", "task": "deny" },

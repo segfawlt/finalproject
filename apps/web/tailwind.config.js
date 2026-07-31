@@ -17,6 +17,7 @@ export default {
           text: "#ededee",
           "text-muted": "#a0a0a8",
           "text-subtle": "#6e6e76",
+          "text-link": "#7aa2f7",
           accent: "#ededee",
           "accent-fg": "#0a0a0b",
           "accent-hover": "#d4d4d8",

@@ -1,0 +1,279 @@
+- generic [ref=e5]:
+  - banner [ref=e6]:
+    - generic [ref=e7]:
+      - link "Discord Platform home" [ref=e8] [cursor=pointer]:
+        - /url: /studio
+        - generic [ref=e13]: Discord Platform
+      - navigation [ref=e14]:
+        - link "Studio" [ref=e15] [cursor=pointer]:
+          - /url: /studio
+      - generic [ref=e21]:
+        - generic [ref=e22]:
+          - generic [ref=e23]: NI
+          - generic [ref=e24]: nizk
+        - button "Sign out" [ref=e26] [cursor=pointer]
+  - generic [ref=e32]:
+    - generic [ref=e33]:
+      - link "Pick a server" [ref=e34] [cursor=pointer]:
+        - /url: /studio
+      - generic [ref=e38]:
+        - generic [ref=e39]: /
+        - generic [ref=e40]: nizk's server
+      - generic [ref=e41]:
+        - link "Templates" [ref=e42] [cursor=pointer]:
+          - /url: /templates/1517217533168582838
+        - link "Settings" [ref=e46] [cursor=pointer]:
+          - /url: /dashboard/1517217533168582838
+    - generic [ref=e50]:
+      - complementary [ref=e51]:
+        - generic [ref=e52]:
+          - generic [ref=e53]:
+            - generic [ref=e54]: History
+            - button "Collapse conversation history" [ref=e55] [cursor=pointer]
+          - button "New Chat" [ref=e60] [cursor=pointer]
+          - generic [ref=e63]:
+            - generic [ref=e132]:
+              - generic [ref=e133]: Today
+              - list [ref=e134]:
+                - listitem [ref=e135]:
+                  - button "Create one temporary text channel named evidence-retry for the execution demo. stale" [ref=e136] [cursor=pointer]:
+                    - generic [ref=e137]: Create one temporary text channel named evidence-retry for the execution demo.
+                    - generic [ref=e138]: stale
+                - listitem [ref=e140]:
+                  - button "Create one temporary text channel named evidence-execution for the execution demo. stale" [ref=e141] [cursor=pointer]:
+                    - generic [ref=e142]: Create one temporary text channel named evidence-execution for the execution demo.
+                    - generic [ref=e143]: stale
+                - listitem [ref=e145]:
+                  - 'button "Set up a private staff category with #staff-chat and #mod-logs channels, and create a Moderator role that can manage messages and channels in that category. stale" [ref=e146] [cursor=pointer]':
+                    - generic [ref=e147]: "Set up a private staff category with #staff-chat and #mod-logs channels, and create a Moderator role that can manage messages and channels in that category."
+                    - generic [ref=e148]: stale
+            - generic [ref=e150]:
+              - generic [ref=e151]: Earlier
+              - list [ref=e152]:
+                - listitem [ref=e153]:
+                  - button "I want a staff channel. stale" [ref=e154] [cursor=pointer]:
+                    - generic [ref=e155]: I want a staff channel.
+                    - generic [ref=e156]: stale
+                - listitem [ref=e158]:
+                  - button "I want a staff channel. stale" [ref=e159] [cursor=pointer]:
+                    - generic [ref=e160]: I want a staff channel.
+                    - generic [ref=e161]: stale
+                - listitem [ref=e163]:
+                  - button "I want a channel for exchanging commands stale" [ref=e164] [cursor=pointer]:
+                    - generic [ref=e165]: I want a channel for exchanging commands
+                    - generic [ref=e166]: stale
+                - listitem [ref=e168]:
+                  - button "only create a new text channel called \"command\" stale" [ref=e169] [cursor=pointer]:
+                    - generic [ref=e170]: only create a new text channel called "command"
+                    - generic [ref=e171]: stale
+                - listitem [ref=e173]:
+                  - button "create a text channel called \"command\" stale" [ref=e174] [cursor=pointer]:
+                    - generic [ref=e175]: create a text channel called "command"
+                    - generic [ref=e176]: stale
+                - listitem [ref=e178]:
+                  - button "Create a text channel called \"command\" stale" [ref=e179] [cursor=pointer]:
+                    - generic [ref=e180]: Create a text channel called "command"
+                    - generic [ref=e181]: stale
+                - listitem [ref=e183]:
+                  - button "I want to create a channel called \"command\", text channel stale" [ref=e184] [cursor=pointer]:
+                    - generic [ref=e185]: I want to create a channel called "command", text channel
+                    - generic [ref=e186]: stale
+                - listitem [ref=e188]:
+                  - button "Creating a command channel under text category named \"command\". its a text channel stale" [ref=e189] [cursor=pointer]:
+                    - generic [ref=e190]: Creating a command channel under text category named "command". its a text channel
+                    - generic [ref=e191]: stale
+                - listitem [ref=e193]:
+                  - button "Create a text channel called \"command\" for command purpose stale" [ref=e194] [cursor=pointer]:
+                    - generic [ref=e195]: Create a text channel called "command" for command purpose
+                    - generic [ref=e196]: stale
+                - listitem [ref=e198]:
+                  - button "I want to create a new command channel named \"command\" stale" [ref=e199] [cursor=pointer]:
+                    - generic [ref=e200]: I want to create a new command channel named "command"
+                    - generic [ref=e201]: stale
+                - listitem [ref=e203]:
+                  - button "I want to create a new command channel called \"command\" stale" [ref=e204] [cursor=pointer]:
+                    - generic [ref=e205]: I want to create a new command channel called "command"
+                    - generic [ref=e206]: stale
+                - listitem [ref=e208]:
+                  - button "Create a command channel called \"command\" stale" [ref=e209] [cursor=pointer]:
+                    - generic [ref=e210]: Create a command channel called "command"
+                    - generic [ref=e211]: stale
+                - listitem [ref=e213]:
+                  - button "Make a channel called \"command\" under the text channel section stale" [ref=e214] [cursor=pointer]:
+                    - generic [ref=e215]: Make a channel called "command" under the text channel section
+                    - generic [ref=e216]: stale
+                - listitem [ref=e218]:
+                  - 'button "I want a new command channel called #command stale" [ref=e219] [cursor=pointer]':
+                    - generic [ref=e220]: "I want a new command channel called #command"
+                    - generic [ref=e221]: stale
+                - listitem [ref=e223]:
+                  - 'button "I want a new command channel called #command stale" [ref=e224] [cursor=pointer]':
+                    - generic [ref=e225]: "I want a new command channel called #command"
+                    - generic [ref=e226]: stale
+                - listitem [ref=e228]:
+                  - button "I want to create a command channel stale" [ref=e229] [cursor=pointer]:
+                    - generic [ref=e230]: I want to create a command channel
+                    - generic [ref=e231]: stale
+                - listitem [ref=e233]:
+                  - button "I want a command channel stale" [ref=e234] [cursor=pointer]:
+                    - generic [ref=e235]: I want a command channel
+                    - generic [ref=e236]: stale
+                - listitem [ref=e238]:
+                  - button "I want a command channel stale" [ref=e239] [cursor=pointer]:
+                    - generic [ref=e240]: I want a command channel
+                    - generic [ref=e241]: stale
+                - listitem [ref=e243]:
+                  - button "I want a new channel for commands. stale" [ref=e244] [cursor=pointer]:
+                    - generic [ref=e245]: I want a new channel for commands.
+                    - generic [ref=e246]: stale
+      - main [ref=e74]:
+        - generic [ref=e75]:
+          - button "Templates (0)" [ref=e404] [cursor=pointer]
+          - generic [ref=e407]:
+            - button "History (2)" [ref=e426] [cursor=pointer]
+            - generic [ref=e409]:
+              - generic [ref=e410]: Create one temporary text channel named evidence-fixed-execution for the execution demo.
+              - generic [ref=e413]:
+                - generic [ref=e414]: Planned
+                - group [ref=e431]:
+                  - generic "3 planning events" [ref=e432] [cursor=pointer]
+              - generic [ref=e635]:
+                - generic [ref=e636]: Execution complete
+                - group [ref=e647]:
+                  - generic "2 step events" [ref=e648] [cursor=pointer]
+                  - list [ref=e649]:
+                    - listitem [ref=e650]:
+                      - generic [ref=e651]: ●
+                      - generic [ref=e652]: Step started
+                    - listitem [ref=e653]:
+                      - generic [ref=e654]: ✓
+                      - generic [ref=e655]: Step completed
+                - generic [ref=e656]:
+                  - button "Rollback" [active] [ref=e657] [cursor=pointer]
+                  - button "New plan" [ref=e661] [cursor=pointer]
+              - generic [ref=e665]: Rolled back 0 steps successfully.
+      - complementary [ref=e110]:
+        - generic [ref=e111]:
+          - tablist [ref=e112]:
+            - tab "Server" [selected] [ref=e113] [cursor=pointer]
+            - tab "Desired" [ref=e115] [cursor=pointer]
+            - button "Open new tab" [ref=e118] [cursor=pointer]
+          - generic [ref=e121]:
+            - generic [ref=e248]:
+              - heading "LLM Testing Server" [level=2] [ref=e249]
+              - paragraph [ref=e250]: 2 members · current Discord state
+            - generic [ref=e251]:
+              - heading "Categories (2)" [level=3] [ref=e252]:
+                - text: Categories
+                - generic [ref=e253]: (2)
+              - list [ref=e255]:
+                - listitem [ref=e256]:
+                  - generic [ref=e259]:
+                    - generic [ref=e260]:
+                      - generic [ref=e261]: Text Channels
+                      - generic [ref=e262]: pos 0
+                    - generic [ref=e263]: "id: 1517217533789470740"
+                - listitem [ref=e264]:
+                  - generic [ref=e267]:
+                    - generic [ref=e268]:
+                      - generic [ref=e269]: Voice Channels
+                      - generic [ref=e270]: pos 1
+                    - generic [ref=e271]: "id: 1517217534301048914"
+            - generic [ref=e272]:
+              - heading "Channels (8)" [level=3] [ref=e273]:
+                - text: Channels
+                - generic [ref=e274]: (8)
+              - list [ref=e276]:
+                - listitem [ref=e277] [cursor=pointer]:
+                  - generic [ref=e281]:
+                    - generic [ref=e282]:
+                      - generic [ref=e283]: "#general"
+                      - generic [ref=e284]: text
+                      - generic [ref=e285]: pos 0
+                      - generic [ref=e286]: in Text Channels
+                    - generic [ref=e287]: "id: 1517217534301048912"
+                - listitem [ref=e288] [cursor=pointer]:
+                  - generic [ref=e293]:
+                    - generic [ref=e294]:
+                      - generic [ref=e295]: "#Lobby"
+                      - generic [ref=e296]: voice
+                      - generic [ref=e297]: pos 0
+                      - generic [ref=e298]: in Voice Channels
+                    - generic [ref=e299]: "id: 1517217534301048915"
+                - listitem [ref=e300] [cursor=pointer]:
+                  - generic [ref=e304]:
+                    - generic [ref=e305]:
+                      - generic [ref=e306]: "#clips-and-highlights"
+                      - generic [ref=e307]: text
+                      - generic [ref=e308]: pos 1
+                      - generic [ref=e309]: in Text Channels
+                    - generic [ref=e310]: "id: 1517217534301048913"
+                - listitem [ref=e311] [cursor=pointer]:
+                  - generic [ref=e316]:
+                    - generic [ref=e317]:
+                      - generic [ref=e318]: "#Gaming"
+                      - generic [ref=e319]: voice
+                      - generic [ref=e320]: pos 1
+                      - generic [ref=e321]: in Voice Channels
+                    - generic [ref=e322]: "id: 1517217534301048916"
+                - listitem [ref=e323] [cursor=pointer]:
+                  - generic [ref=e327]:
+                    - generic [ref=e328]:
+                      - generic [ref=e329]: "#command"
+                      - generic [ref=e330]: text
+                      - generic [ref=e331]: pos 2
+                      - generic [ref=e332]: in Text Channels
+                    - generic [ref=e333]: "id: 1517422629638766724"
+                - listitem [ref=e334] [cursor=pointer]:
+                  - generic [ref=e338]:
+                    - generic [ref=e339]:
+                      - generic [ref=e340]: "#command-exchange"
+                      - generic [ref=e341]: text
+                      - generic [ref=e342]: pos 3
+                      - generic [ref=e343]: in Text Channels
+                    - generic [ref=e344]: "id: 1517425453185368137"
+                - listitem [ref=e345] [cursor=pointer]:
+                  - generic [ref=e349]:
+                    - generic [ref=e350]:
+                      - generic [ref=e351]: "#evidence-execution"
+                      - generic [ref=e352]: text
+                      - generic [ref=e353]: pos 4
+                      - generic [ref=e354]: in Text Channels
+                    - generic [ref=e355]: "id: 1532042449449386155"
+                - listitem [ref=e356] [cursor=pointer]:
+                  - generic [ref=e360]:
+                    - generic [ref=e361]:
+                      - generic [ref=e362]: "#evidence-retry"
+                      - generic [ref=e363]: text
+                      - generic [ref=e364]: pos 5
+                      - generic [ref=e365]: in Text Channels
+                    - generic [ref=e366]: "id: 1532045164913103049"
+            - generic [ref=e367]:
+              - heading "Roles (3)" [level=3] [ref=e368]:
+                - text: Roles
+                - generic [ref=e369]: (3)
+              - list [ref=e371]:
+                - listitem [ref=e372]:
+                  - generic [ref=e375]:
+                    - generic [ref=e376]:
+                      - generic [ref=e377]: LLMBot
+                      - generic [ref=e378]: pos 2
+                      - generic [ref=e379]: —
+                    - generic [ref=e380]: "perms: ADMINISTRATOR, MANAGE_CHANNELS"
+                    - generic [ref=e381]: "id: 1517217749531627575"
+                - listitem [ref=e382]:
+                  - generic [ref=e385]:
+                    - generic [ref=e386]:
+                      - generic [ref=e387]: Member
+                      - generic [ref=e388]: pos 1
+                      - generic [ref=e389]: —
+                    - generic [ref=e390]: "perms: KICK_MEMBERS, VIEW_CHANNEL"
+                    - generic [ref=e391]: "id: 1517425588745277722"
+                - listitem [ref=e392]:
+                  - generic [ref=e395]:
+                    - generic [ref=e396]:
+                      - generic [ref=e397]: "@everyone"
+                      - generic [ref=e398]: pos 0
+                      - generic [ref=e399]: —
+                    - generic [ref=e400]: "perms: CREATE_INSTANT_INVITE, ADD_REACTIONS, STREAM, VIEW_CHANNEL, SEND_MESSAGES, EMBED_LINKS, ATTACH_FILES, READ_MESSAGE_HISTORY, MENTION_EVERYONE, USE_EXTERNAL_EMOJIS, CONNECT, SPEAK, CHANGE_NICKNAME, USE_APPLICATION_COMMANDS, REQUEST_TO_SPEAK, CREATE_PUBLIC_THREADS, CREATE_PRIVATE_THREADS, USE_EXTERNAL_STICKERS, SEND_MESSAGES_IN_THREADS, USE_EMBEDDED_ACTIVITIES"
+                    - generic [ref=e401]: "id: 1517217533168582838"

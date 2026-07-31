@@ -354,124 +354,18 @@ When the user says "give alice the @Mod role":
 4. LLM calls `add_role_to_member(user_123456789, mod_role_id)`
 5. If "alice" is not found: LLM uses `ask_user` to clarify the member's name
 
-## Configuration Procedure (Recommended Workflow)
+## Configuration Procedure (DROPPED)
 
-A passive sidebar checklist that recommends the 4-phase order. The system does not
-block or nag — it offers structure, not enforcement. The user can follow the
-procedure, skip phases, or type their own prompts at any time.
+This section originally described a passive Studio sidebar checklist that
+recommended the 4-phase configuration order (Foundation → Layout → Access →
+People), backed by a `phaseProgress` JSONB column on `guilds` and a set of
+per-phase scoped prompts. **It was never shipped and has been removed from
+scope.** The `ProcedureSidebar` UI was deleted in the chat-native Studio
+redesign, and the `phaseProgress` column + its guilds PATCH handler were removed
+(migration `0010_flashy_salo.sql`). `guidedSetupCompleted` never existed in code.
 
-### Database
-
-Replace the original `guided_setup_completed` boolean with per-phase progress tracking
-on the `guilds` table in `packages/db/src/schema.ts`:
-
-```typescript
-phaseProgress: jsonb("phase_progress").default({
-  foundation: false,
-  layout: false,
-  access: false,
-  people: false,
-}),
-```
-
-Also add `guidedSetupCompleted` to the guild PATCH schema in
-`apps/server/src/hono/routes/guilds.ts`. The existing Zod schema only accepts
-`serverType` and `settings` — add both fields explicitly:
-
-```typescript
-const updateGuildSchema = z.object({
-  serverType: z.string().nullable().optional(),
-  settings: z.record(z.unknown()).optional(),
-  guidedSetupCompleted: z.boolean().optional(),
-  phaseProgress: z
-    .object({
-      foundation: z.boolean(),
-      layout: z.boolean(),
-      access: z.boolean(),
-      people: z.boolean(),
-    })
-    .optional(),
-});
-```
-
-### Studio Sidebar
-
-Always visible during active configuration. Never disappears — it's reference material,
-not a one-time tour.
-
-```
-┌─────────────────────────────────┐
-│ 📐 Recommended order            │
-│                                 │
-│ ✅ Foundation    (3 roles)       │
-│ ✅ Layout        (2 cat, 6 ch)   │
-│ ▶ Access Control [Use prompt →] │
-│ ○ People        [Use prompt →]  │
-│                                 │
-│ ─────────────────────────────── │
-│ Or type your own prompt below.  │
-└─────────────────────────────────┘
-```
-
-Each incomplete phase has a **[Use prompt →]** button. Clicking it starts a **new
-conversation** with a predefined scoped prompt (see below). The user can also
-click any completed phase to review what was built.
-
-If the user reverts to an earlier phase (e.g., modifies Foundation after Layout
-is complete), the sidebar shows a depreciation warning:
-
-```
-⚠️ Since "Layout" completed, 1 category was modified.
-   2 channels in that category may be affected.
-   [Review Layout →]
-```
-
-Phase transitions are not blocked. The warning is informational only.
-
-### Per-Phase Prompts
-
-Each phase uses a **predefined, well-tested prompt** crafted by the system, not
-the LLM. The prompt is assembled from actual server state and scoped to forbid
-touching other phases.
-
-| Phase          | Prompt                                                                                                                                                                                                                         |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Foundation     | `Define roles only. Set names, colors, base permissions, position. Do NOT create categories, channels, or set overwrites.`                                                                                                     |
-| Layout         | `Create categories and channels within the Foundation roles established. Set types, positions, parents, forum tags. Do NOT modify roles or set permission overwrites.`                                                         |
-| Access Control | `Set permission overwrites on categories and channels. Default: lock_permissions: true — permissions go on categories. Only un-sync channels that genuinely need different access. Do NOT create or modify channels or roles.` |
-| People         | `Assign members to existing roles. Do NOT create roles or modify permissions or channels.`                                                                                                                                     |
-
-Each prompt includes a summary of what was built in previous phases (role list,
-channel tree) so the LLM has the full picture without needing conversation history.
-
-### Prompt Preview Card
-
-Before sending, the Studio shows the suggested prompt in an editable card:
-
-```
-┌──────────────────────────────────────┐
-│ Phase 3 — Access Control             │
-│                                      │
-│ ┌──────────────────────────────────┐ │
-│ │ Set permission overwrites on     │ │
-│ │ categories and channels. Default:│ │
-│ │ lock_permissions: true —         │ │
-│ │ permissions go on categories...  │ │
-│ └──────────────────────────────────┘ │
-│                                      │
-│ [Approve & Send]  [Edit first]       │
-└──────────────────────────────────────┘
-```
-
-The user can edit the prompt text before sending, or just approve and send.
-
-### Phase Exit
-
-The procedure is passive — no explicit "exit" action needed. If the user types
-their own prompt instead of using a suggested one, the sidebar remains but no
-longer highlights a current phase. Progress tracking continues (phases that
-execute are marked complete) but there is no active enforcement. The sidebar
-simply becomes a reference checklist.
+The phase discipline the procedure aimed for now lives entirely in the planner's
+system prompt (Phase 1–4 guidance), not in a UI checklist.
 
 ## Post-Execution Warnings — "Fix This" Pattern
 
@@ -537,14 +431,6 @@ Each warning has a [Fix This] button.
 | 13  | `apps/server/src/planning/validation.ts`            | Member existence, bot hierarchy, duplicate checks                                   |
 | 14  | `apps/server/src/planning/planning-session.ts`      | Phased planning system prompt + member summary injection                            |
 | 15  | `apps/server/src/bot/index.ts`                      | Fetch guild members on startup + gateway event updates                              |
-
-### Configuration Procedure (to implement)
-
-| #   | File                                    | Change                                                      |
-| --- | --------------------------------------- | ----------------------------------------------------------- |
-| 16  | `packages/db/src/schema.ts`             | `phaseProgress` JSONB column on guilds table                |
-| 17  | `apps/server/src/hono/routes/guilds.ts` | Add `guidedSetupCompleted`, `phaseProgress` to PATCH schema |
-| 18  | `apps/web/src/...`                      | Procedure sidebar component + prompt preview card           |
 
 ### lockPermissions (to implement — see next section)
 
@@ -821,9 +707,7 @@ PR 1: Member Roles (15 files) — DONE
   → Adds Phase 4 to the planning model
   → Adds add/remove_role_from_member tools
 
-PR 2: Configuration Procedure (3 files)
-  → Adds phase_progress to guilds table + PATCH schema
-  → Adds procedure sidebar component in Studio
+PR 2: Configuration Procedure — DROPPED (never shipped; phaseProgress removed in migration 0010)
 
 PR 3: lockPermissions (8 files)
   → Adds lockPermissions to ChannelBase, fork heuristic, channel schemas

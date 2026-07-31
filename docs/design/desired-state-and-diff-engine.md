@@ -38,9 +38,10 @@ DesiredState {
   guildName: string
 
   active: {                    // items that should exist after execution
-    channels: Record<string, Channel>
+    channels: Record<string, Channel>       // categories live here too (type 4)
     roles: Record<string, Role>
     overwrites: Record<string, Overwrite>
+    memberRoles?: Record<string, MemberRoleAssignment>  // per-member role sets
   }
 
   tombstones: [                // items explicitly deleted during planning
@@ -59,7 +60,7 @@ DesiredState {
 
 ### Key invariants
 
-1. **Every deletion creates a tombstone** (channels and roles only). When the LLM calls `delete_channel`, the item moves from `active` to `tombstones`. It is never silently removed.
+1. **Every deletion creates a tombstone** (channels, categories, and roles). When the LLM calls `delete_channel`, the item moves from `active` to `tombstones`. It is never silently removed. Categories live in the `channels` map (`type: 4`); deleting one records a tombstone with `resourceType: "category"`.
 
 2. **Overwrites use symmetric diffing** — no tombstones. Overwrites are simple composite-key entries with no hierarchy or audit-trail value. The diff engine scans real-state overwrites absent from desired state and emits `remove_overwrite` steps. `removeOverwrite` deletes from active directly; the diff engine handles the Discord side.
 
@@ -69,7 +70,7 @@ DesiredState {
 
 5. **No item appears in `active` without either a Discord ID or a symbol.** This gives the diff engine a clear discriminator.
 
-### Why tombstones? (channels and roles)
+### Why tombstones? (channels, categories, roles)
 
 Without tombstones, the diff engine must SCAN real state for items missing from desired state — inferring deletions from absence. This is fragile:
 
@@ -95,7 +96,7 @@ Overwrites are structurally simpler than channels/roles:
 - Keyed by composite `channelId:roleId` — deterministic identity
 - The approval UI doesn't show overwrites in the deletions/creations comparison
 
-Symmetric diffing (scan real for absent → delete) is simpler, faster, and doesn't require a tombstone mechanism for a resource type that gains nothing from it. The invariant "every deletion creates a tombstone" applies to channels and roles only.
+Symmetric diffing (scan real for absent → delete) is simpler, faster, and doesn't require a tombstone mechanism for a resource type that gains nothing from it. The invariant "every deletion creates a tombstone" applies to channels, categories, and roles — not overwrites and not member roles (member role removals are also diffed symmetrically; see below).
 
 ---
 
@@ -220,6 +221,9 @@ diff(realState, desiredState):
       └─ Has symbol ($ch_N, $role_N) → NEW
           → create_* step (params contain symbol)
 
+      Note: an existing category that only changed position still emits
+      edit_category (not move_channel). move_channel is for real channels only.
+
     For each overwrite in desiredState.active.overwrites:
       ┌─ Contains symbol → NEW overwrite → set_overwrite step
       │   (depends on the symbols it references)
@@ -230,11 +234,21 @@ diff(realState, desiredState):
           If not found in realState → set_overwrite (create new)
           If match → skip
 
+      Skip rule: if the overwrite's channel is an existing channel with
+      lockPermissions === true, skip its set_overwrite steps entirely —
+      the parent category's overwrites propagate to synced children.
+
     For each real overwrite NOT in desiredState.active.overwrites:
       → remove_overwrite step (symmetric diffing — absence = deletion)
 
+    For each member in desiredState.active.memberRoles:
+      Symmetric diff the member's role set against real state:
+      → add_role_to_member step for each role gained
+      → remove_role_from_member step for each role lost
+      (role refs may be symbols — resolved during execution)
+
     For each tombstone in desiredState.tombstones:
-      → delete_* step (uses tombstone.discordId)
+      → delete_* step (uses tombstone.discordId; delete_category for categories)
 
   PHASE 2: TOPOLOGICAL SORT
 
@@ -243,20 +257,26 @@ diff(realState, desiredState):
       set_overwrite(ch: $ch_0, ...)   → depends on steps creating $ch_0 and referenced role
       delete_category(id)             → all children must be dealt with first
 
-    Default order:
-      1. create_category         (parents first)
-      2. create_channel
-      3. create_role
-      4. edit_category            (renames, repositions)
-      5. edit_channel
-      6. edit_role
-      7. move_channel             (change parent)
-      8. move_role                (change position)
-      9. set_overwrite            (depends on channel + role)
-      10. remove_overwrite
-      11. delete_channel          (children before parent category)
-      12. delete_role
-      13. delete_category         (last — all children handled)
+    Default order (TOOL_ORDER, defined in diff-engine.ts):
+      1.  create_category        (parents first)
+      2.  create_channel
+      3.  create_role
+      4.  edit_category           (renames, repositions)
+      5.  edit_channel
+      6.  edit_role
+      7.  move_channel            (change parent)
+      8.  move_role               (change position)
+      9.  add_role_to_member      (after role creation, before overwrites)
+      10. remove_role_from_member
+      11. set_overwrite           (depends on channel + role)
+      12. remove_overwrite
+      13. delete_channel          (children before parent category)
+      14. delete_role
+      15. delete_category         (last — all children handled)
+
+    Post-sort: resolveDanglingSymbols name-matches any symbol-like
+    reference that points at a pre-existing resource (not created in this
+    plan) back to its real Discord ID before execution.
 
   PHASE 3: OPTIMIZE
 
@@ -284,7 +304,7 @@ diff(realState, desiredState):
 
 | Case                                                        | Handling                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Item in active with Discord ID, but missing from real state | Validation error — someone deleted it externally. Block plan.                                                                                                                                                                                                                                                                                                                                                                                         |
+| Item in active with Discord ID, but missing from real state | Structured `missing_resource` conflict. Block execution; user may start AI re-planning from fresh state.                                                                                                                                                                                                                                                                                                                                              |
 | Item missing from active, no tombstone                      | Validation error — bug or data corruption. Block plan.                                                                                                                                                                                                                                                                                                                                                                                                |
 | Two active items claim same position                        | Assign sequential positions in execution order                                                                                                                                                                                                                                                                                                                                                                                                        |
 | External changes during long planning session               | Pre-execution validation re-checks assumptions against fresh Discord state and compares the original fork point against current real state. If items touched by the plan were externally modified, the conflict blocks execution. The user must re-plan from fresh state: the DesiredState is re-forked, the LLM receives the conflict summary + fresh state + conversation history, and adapts the plan in-place (same conversation, new iteration). |

@@ -13,6 +13,7 @@ vi.mock("../bot/cache", () => ({
     get: vi.fn(() => ({
       roles: new Map([
         ["role_low", { position: 1 }],
+        ["role_equal", { position: 5 }],
         ["role_high", { position: 10 }],
       ]),
     })),
@@ -79,6 +80,31 @@ describe("validatePlan bot hierarchy", () => {
       (i) => i.group === "A. Permission" && i.message.includes("below a role")
     );
     expect(blocker).toBeUndefined();
+  });
+
+  it("blocks when target role is at the bot's position", async () => {
+    const steps: PlanStep[] = [
+      {
+        index: 0,
+        toolName: "edit_role",
+        params: { id: "role_equal", name: "New Name" },
+        status: "pending",
+      },
+    ];
+
+    const result = await validatePlan({
+      steps,
+      symbolTable: emptySymbolTable,
+      desiredState: emptyDesiredState,
+      guildId: "g1",
+      status: "draft",
+    });
+
+    const blocker = result.issues.find(
+      (i) => i.group === "A. Permission" && i.message.includes("below a role")
+    );
+    expect(blocker).toBeDefined();
+    expect(blocker?.severity).toBe("block");
   });
 
   it("ignores symbol-based roles (new roles) in hierarchy check", async () => {
@@ -202,6 +228,34 @@ describe("validatePlan member tools", () => {
         i.message.includes("above")
     );
     expect(blocker).toBeUndefined();
+  });
+
+  it("blocks add_role_to_member when role is at bot position", async () => {
+    const steps: PlanStep[] = [
+      {
+        index: 0,
+        toolName: "add_role_to_member",
+        params: { member_id: "user-1", role_id: "role_equal" },
+        status: "pending",
+      },
+    ];
+
+    const result = await validatePlan({
+      steps,
+      symbolTable: emptySymbolTable,
+      desiredState: emptyDesiredState,
+      guildId: "g1",
+      status: "draft",
+    });
+
+    const blocker = result.issues.find(
+      (i) =>
+        i.group === "A. Permission" &&
+        i.message.includes("cannot assign") &&
+        i.message.includes("above")
+    );
+    expect(blocker).toBeDefined();
+    expect(blocker?.severity).toBe("block");
   });
 });
 
@@ -345,5 +399,190 @@ describe("validateOverwriteConsolidation", () => {
       (i) => i.group === "D. Safety" && i.message.includes("identical permissions")
     );
     expect(warning).toBeUndefined();
+  });
+});
+
+describe("validatePlan symbol type matching", () => {
+  const emptyDesiredState: DesiredState = {
+    guildId: "g1",
+    guildName: "Test",
+    active: { channels: {}, roles: {}, overwrites: {} },
+    tombstones: [],
+    symbolCounter: 0,
+    version: 1,
+  };
+
+  it("blocks when a channel symbol is passed where a role is expected", async () => {
+    const symbolTable: SymbolTable = {
+      $ch_0: { symbol: "$ch_0", type: "channel", definingStepIndex: 0 },
+    };
+    const steps: PlanStep[] = [
+      {
+        index: 0,
+        toolName: "create_channel",
+        params: { symbol: "$ch_0", name: "general" },
+        status: "pending",
+      },
+      {
+        index: 1,
+        toolName: "add_role_to_member",
+        params: { member_id: "m1", role_id: "$ch_0" },
+        status: "pending",
+      },
+    ];
+
+    const result = await validatePlan({
+      steps,
+      symbolTable,
+      desiredState: emptyDesiredState,
+      guildId: "g1",
+      status: "draft",
+    });
+
+    const blocker = result.issues.find(
+      (i) => i.group === "B. Dependency" && i.message.includes("expects a role")
+    );
+    expect(blocker).toBeDefined();
+    expect(blocker?.severity).toBe("block");
+  });
+
+  it("blocks when a role symbol is passed as parent_id", async () => {
+    const symbolTable: SymbolTable = {
+      $role_0: { symbol: "$role_0", type: "role", definingStepIndex: 0 },
+    };
+    const steps: PlanStep[] = [
+      {
+        index: 0,
+        toolName: "create_role",
+        params: { symbol: "$role_0", name: "Mods" },
+        status: "pending",
+      },
+      {
+        index: 1,
+        toolName: "create_channel",
+        params: { name: "chat", parent_id: "$role_0" },
+        status: "pending",
+      },
+    ];
+
+    const result = await validatePlan({
+      steps,
+      symbolTable,
+      desiredState: emptyDesiredState,
+      guildId: "g1",
+      status: "draft",
+    });
+
+    const blocker = result.issues.find(
+      (i) => i.group === "B. Dependency" && i.message.includes("expects a channel")
+    );
+    expect(blocker).toBeDefined();
+  });
+
+  it("passes when symbol types match their param expectations", async () => {
+    const symbolTable: SymbolTable = {
+      $cat_0: { symbol: "$cat_0", type: "channel", definingStepIndex: 0 },
+      $role_0: { symbol: "$role_0", type: "role", definingStepIndex: 1 },
+    };
+    const steps: PlanStep[] = [
+      {
+        index: 0,
+        toolName: "create_category",
+        params: { symbol: "$cat_0", name: "Text" },
+        status: "pending",
+      },
+      {
+        index: 1,
+        toolName: "create_role",
+        params: { symbol: "$role_0", name: "Mods" },
+        status: "pending",
+      },
+      {
+        index: 2,
+        toolName: "create_channel",
+        params: { name: "chat", parent_id: "$cat_0" },
+        status: "pending",
+      },
+      {
+        index: 3,
+        toolName: "add_role_to_member",
+        params: { member_id: "m1", role_id: "$role_0" },
+        status: "pending",
+      },
+    ];
+
+    const result = await validatePlan({
+      steps,
+      symbolTable,
+      desiredState: emptyDesiredState,
+      guildId: "g1",
+      status: "draft",
+    });
+
+    const typeMismatch = result.issues.find(
+      (i) => i.group === "B. Dependency" && i.message.includes("expects a")
+    );
+    expect(typeMismatch).toBeUndefined();
+  });
+});
+
+describe("validatePlan bitrate constraint", () => {
+  const emptyDesiredState: DesiredState = {
+    guildId: "g1",
+    guildName: "Test",
+    active: { channels: {}, roles: {}, overwrites: {} },
+    tombstones: [],
+    symbolCounter: 0,
+    version: 1,
+  };
+  const emptySymbolTable: SymbolTable = {};
+
+  it("blocks bitrate on a text channel", async () => {
+    const steps: PlanStep[] = [
+      {
+        index: 0,
+        toolName: "create_channel",
+        params: { name: "general", type: 0, bitrate: 64000 },
+        status: "pending",
+      },
+    ];
+
+    const result = await validatePlan({
+      steps,
+      symbolTable: emptySymbolTable,
+      desiredState: emptyDesiredState,
+      guildId: "g1",
+      status: "draft",
+    });
+
+    const blocker = result.issues.find(
+      (i) => i.group === "C. Resource" && i.message.includes("Bitrate can only be set")
+    );
+    expect(blocker).toBeDefined();
+    expect(blocker?.severity).toBe("block");
+  });
+
+  it("allows bitrate on a voice channel", async () => {
+    const steps: PlanStep[] = [
+      {
+        index: 0,
+        toolName: "create_channel",
+        params: { name: "Voice", type: 2, bitrate: 64000 },
+        status: "pending",
+      },
+    ];
+
+    const result = await validatePlan({
+      steps,
+      symbolTable: emptySymbolTable,
+      desiredState: emptyDesiredState,
+      guildId: "g1",
+      status: "draft",
+    });
+
+    const blocker = result.issues.find(
+      (i) => i.group === "C. Resource" && i.message.includes("Bitrate can only be set")
+    );
+    expect(blocker).toBeUndefined();
   });
 });

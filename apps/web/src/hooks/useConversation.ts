@@ -63,6 +63,7 @@ export interface UseConversationResult {
   planId: string | null;
   error: string;
   inFlight: boolean;
+  canAIRepair: boolean;
 
   // User-authored prompt (for the revise textarea and as the fallback
   // for createConversation when no initial prompt is supplied)
@@ -100,11 +101,13 @@ export interface UseConversationResult {
 
   // Actions
   createConversation: (initialPrompt?: string) => Promise<void>;
+  beginPlanning: (convId: string) => void;
   submitAskUser: () => Promise<void>;
   loadConversation: (convId: string) => Promise<void>;
   reset: () => void;
   cancelPlanning: () => Promise<void>;
   approve: () => Promise<void>;
+  replanWithAI: () => Promise<void>;
   rollback: () => Promise<void>;
   revise: (newPrompt: string) => Promise<void>;
   revert: (version: number) => Promise<void>;
@@ -138,6 +141,7 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
   const [showTemplatePanel, setShowTemplatePanel] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [inFlight, setInFlight] = useState(false);
+  const [canAIRepair, setCanAIRepair] = useState(false);
 
   // Refs
   const planningEsRef = useRef<EventSource | null>(null);
@@ -419,6 +423,27 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
     [guildId, prompt, enterInFlight, exitInFlight, clearError, showError, connectPlanningSSE]
   );
 
+  // Attach to a planning session the server already started (e.g. a template
+  // merge). Resets planning state and opens the SSE stream, same as the tail
+  // of createConversation but without POSTing a new conversation.
+  const beginPlanning = useCallback(
+    (convId: string) => {
+      clearError();
+      setPlanningEvents([]);
+      setAskUserData(null);
+      setAskUserSelected([]);
+      setAskUserCustom("");
+      setSummary("");
+      setDesiredState(null);
+      setIterations([]);
+      setCurrentState(null);
+      setConversationId(convId);
+      setPhase("planning");
+      connectPlanningSSE(convId);
+    },
+    [clearError, connectPlanningSSE]
+  );
+
   const submitAskUser = useCallback(async () => {
     if (!conversationId) return;
     if (enterInFlight()) return;
@@ -538,6 +563,7 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
     setIterations([]);
     setCurrentState(null);
     setError("");
+    setCanAIRepair(false);
     setShowTemplatePanel(false);
     setActiveTemplates([]);
     setPhase("input");
@@ -573,6 +599,7 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
             conflicts?: string[];
             blockers?: { message: string }[];
             warnings?: { message: string }[];
+            canAIRepair?: boolean;
           };
           const details = [
             ...(data.conflicts ?? []),
@@ -582,6 +609,7 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
           execEsRef.current?.close();
           execEsRef.current = null;
           setPhase("execute_failed");
+          setCanAIRepair(data.canAIRepair === true);
           return;
         }
 
@@ -629,6 +657,37 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
       exitInFlight();
     }
   }, [guildId, conversationId, enterInFlight, exitInFlight, clearError, showError, executePlan]);
+
+  const replanWithAI = useCallback(async () => {
+    if (!planId || !conversationId) return;
+    if (enterInFlight()) return;
+    try {
+      clearError();
+      const res = await apiFetch(`/api/guilds/${guildId}/plans/${planId}/replan`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = (await res.json()) as { error: string };
+        showError(data.error || "Failed to start AI re-plan");
+        return;
+      }
+      setCanAIRepair(false);
+      beginPlanning(conversationId);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : String(err));
+    } finally {
+      exitInFlight();
+    }
+  }, [
+    guildId,
+    planId,
+    conversationId,
+    enterInFlight,
+    exitInFlight,
+    clearError,
+    showError,
+    beginPlanning,
+  ]);
 
   const rollback = useCallback(async () => {
     if (!planId) return;
@@ -745,6 +804,7 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
     planId,
     error,
     inFlight,
+    canAIRepair,
     prompt,
     stale,
     // Planning
@@ -770,11 +830,13 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
     setError: setErrorExplicit,
     // Actions
     createConversation,
+    beginPlanning,
     submitAskUser,
     loadConversation,
     reset,
     cancelPlanning,
     approve,
+    replanWithAI,
     rollback,
     revise,
     revert,

@@ -32,7 +32,7 @@ export default function CategoryList({
         <button
           type="button"
           onClick={onAdd}
-          className="w-full flex items-center justify-center gap-1 px-3 py-1.5 border border-dashed border-discord-divider rounded text-xs text-discord-text-muted hover:text-discord-text hover:border-discord-accent transition"
+          className="w-full flex items-center justify-center gap-1 px-3 py-1.5 border border-dashed border-shell-border rounded text-xs text-shell-text-muted hover:text-shell-text hover:border-shell-accent transition"
         >
           <Plus size={12} /> Add category
         </button>

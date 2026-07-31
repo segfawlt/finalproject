@@ -47,13 +47,12 @@ The planning loop is a state machine, not a simple while-loop. It can pause (ask
 
 ### Termination
 
-Implicit: the LLM stops calling tools.
-Safety check: zero accepted steps → failure, retry once.
-Max iteration cap prevents runaway loops.
+Implicit: the LLM stops calling tools (finishes a turn with no tool calls).
+Max iteration cap prevents runaway loops: `maxTurns = 20` in `planning-session.ts`; on exhaustion the loop force-completes with the summary "Planning reached maximum number of turns."
 
 ### ask_user
 
-The only **ImmediateTool** — executes during the planning loop (pauses, asks the human, returns the answer as a tool result). All 13 other tools are **DeferredTools** — modify desired state during planning, executed on Discord only after user approval.
+The only **ImmediateTool** — executes during the planning loop (pauses, asks the human, returns the answer as a tool result). The other 16 tools are **DeferredTools** — they modify desired state during planning and are executed on Discord only after user approval. Of those 16, 15 are `planning_and_execution` tools (each has an `execute()`); `batch_set_overwrite` is `planning_only` — it expands into individual `set_overwrite` steps at plan time and is never dispatched during execution.
 
 Supports: multiple choice, multi-select, custom text input.
 
@@ -154,23 +153,14 @@ before permissions are set.
 See [member-role-management.md](./member-role-management.md) for the full member
 role and lockPermissions designs.
 
-### Configuration Procedure (Recommended Workflow)
-
-A passive sidebar checklist in the Studio recommends the 4-phase order. Each
-phase has a predefined scoped prompt the user can send with one click. The
-system tracks progress via `phaseProgress` JSONB on the guilds table. Phases
-can be skipped, revisited, or ignored entirely — the sidebar is a recommendation,
-not a requirement.
-
-See [member-role-management.md](./member-role-management.md#configuration-procedure-recommended-workflow) for the full design.
-
 ### DesiredStateStore (Middleware Layer)
 
 All mutation flows through the store. No plan() function touches DesiredState directly.
 
 ```
 DesiredStateStore {
-  fork(serverState) → DesiredState    // create initial state from real Discord state
+  static fork(serverState) → DesiredStateStore  // build a store from real Discord state
+  getState() → DesiredState           // read current in-memory state
   addChannel(params) → symbol         // create new item with auto-generated symbol
   addCategory(params) → symbol
   addRole(params) → symbol
@@ -190,7 +180,7 @@ DesiredStateStore {
 }
 ```
 
-The store validates before mutating. All checks live once in the store, not duplicated across 14 tools:
+The store validates before mutating. All checks live once in the store, not duplicated across the tools:
 
 | Operation                      | Store-Level Checks                                                 |
 | ------------------------------ | ------------------------------------------------------------------ |
@@ -339,7 +329,7 @@ symbols (members use Discord IDs), but role params may contain symbols
 | 500/502/503/timeout             | Retry step up to 3 times, exponential backoff (1s→2s→4s, ±25% jitter)                          |
 | 403/404/400 (known)             | Diagnose via hardcoded fix map in `diagnoseError()`, fail step, rollback                       |
 | Unknown errors                  | Fail step, full rollback, offer re-plan with fresh state — **never ask the LLM for diagnosis** |
-| Permanent failure after retries | Roll back ALL completed steps via tracked IDs from completedSteps. No partial state left.      |
+| Permanent failure after retries | Full rollback via `rollbackFull()` — diff current Discord state against the before-snapshot and execute the reverse diff. No partial state left. |
 
 ### How Tool Results Feed the LLM
 
@@ -362,10 +352,10 @@ subsequent calls (e.g., `set_overwrite(channel_id: "$ch_3", ...)`).
 
 ### Undo / Rollback
 
-- Undo is **system-level**: generates inverse steps using tracked Discord IDs from `completedSteps` instead of re-reading stale guild cache
-- Completed steps track all created Discord IDs, so rollback can delete them directly without re-diffing
-- Rollback recreates structure (channels/categories/roles) even if content (messages) lost
-- No "planning undo" — use Revise or Studio editing instead
+- Undo is **system-level** and **diff-based**, not per-step inversion. `rollbackFull()` (`execution-engine.ts`) reads fresh Discord state, forks the before-snapshot into a DesiredState, runs the diff engine (`diffEngine(currentState, desiredBefore)`), and executes the resulting reverse steps as a normal plan.
+- `completedSteps` is tracked during execution for reporting, but rollback does not walk it — it recomputes the delta from live state, so external changes since execution are handled uniformly.
+- Rollback recreates structure (channels/categories/roles) even if content (messages) is lost — best-effort structural rollback.
+- No "planning undo" — use Revise or Studio editing instead.
 
 ---
 

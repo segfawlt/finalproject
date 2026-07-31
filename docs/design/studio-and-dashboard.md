@@ -109,30 +109,38 @@ swaps read-only rows for inline inputs. Save posts to
 `/conversations/:id/edit-state` and re-fetches the iteration list (a new
 "manual_edit" iteration is appended). Cancel discards the working copy.
 
-## Templates (partial)
+## Templates
 
-The full template library lives at `/templates/:guildId` (separate route
-under `routes/Templates.tsx` + `routes/TemplateEditor.tsx`). The Studio
-shows a placeholder `TemplatesTab` in the right panel that links out to
-that page; the in-conversation `TemplatePanel` (in the chat toolbar) is
-the in-context template injection UI — browse, add to context, remove.
-The rich in-app browser is future work; the `View in Studio` and
-`Fork & Edit` flows from the original design are deferred.
+Templates are browsable in three places, all backed by the same API:
 
-## Dashboard (Supplementary)
+- **`TemplatesTab`** — a real in-panel browser in the Studio right panel
+  (closable tab). Lists templates with search, channel/role counts, and a
+  Merge button that injects the template's structure into the current
+  desired state. Save-as-template from a completed plan lives here too
+  (`SaveTemplateModal`).
+- **`TemplatePanel`** — the in-conversation toolbar UI for in-context
+  template injection: browse, add to context, remove.
+- **`/templates/:guildId`** (`routes/Templates.tsx`) + editor
+  (`routes/TemplateEditor.tsx`) — the standalone library page, with an
+  editable template structure in the editor (Fork & Edit, Save).
 
-Reduced scope — plan history and basic management:
+## Settings
 
-- Plan history + rollback (links back to the Studio for the active convo)
-- Server rules management (`RulesSection` — full CRUD)
+Server settings live in the Studio right panel via `SettingsTab` (closable
+tab), not a separate Dashboard:
+
+- Server rules management (per-guild CRUD via `/api/guilds/:guildId/rules`)
 - Basic bot settings (intents, permissions, preview server)
-- Basic stats (plans run, success rate)
-- Templates link
+
+Plan history + rollback is reachable from the chat's iteration history.
 
 **Deferred (not Phase 1):**
 
 - Full admin management tool
 - Subscription/billing
 - Detailed audit logs
-- Template library management (Phase 1: separate page only; in-app browser future)
 - User management
+
+> The standalone `Dashboard.tsx` and `Setup.tsx` pages were retired during
+> the Studio consolidation — the files remain on disk (stashed, unrouted)
+> and `/dashboard` + `/setup` redirect to `/studio`.

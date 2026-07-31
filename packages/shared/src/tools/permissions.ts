@@ -86,7 +86,7 @@ export async function executeOverwriteRemove(
 // ── getAssumptions() functions ───────────────────────────────────────────────
 
 export function getOverwriteSetAssumptions(params: SetOverwriteParams): Assumption[] {
-  const assumptions: Assumption[] = [
+  return [
     {
       type: "exists",
       value: params.channel_id,
@@ -102,16 +102,6 @@ export function getOverwriteSetAssumptions(params: SetOverwriteParams): Assumpti
       status: "pending",
     },
   ];
-  if (params.deny?.includes("VIEW_CHANNEL")) {
-    assumptions.push({
-      type: "warn_everyone_view",
-      value: params.role_id,
-      resourceType: "channel",
-      checked: false,
-      status: "pending",
-    });
-  }
-  return assumptions;
 }
 
 export function getOverwriteRemoveAssumptions(params: RemoveOverwriteParams): Assumption[] {
@@ -150,15 +140,6 @@ export function getOverwriteBatchAssumptions(params: BatchSetOverwriteParams): A
       checked: false,
       status: "pending",
     });
-    if (ow.deny?.includes("VIEW_CHANNEL")) {
-      assumptions.push({
-        type: "warn_everyone_view",
-        value: ow.role_id,
-        resourceType: "channel",
-        checked: false,
-        status: "pending",
-      });
-    }
   }
   return assumptions;
 }

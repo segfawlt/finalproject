@@ -1,0 +1,12 @@
+- generic [ref=f1e6]:
+  - generic [ref=f1e7]:
+    - generic [ref=f1e14]: Discord Platform
+    - heading "Design your server in plain language." [level=1] [ref=f1e15]
+    - paragraph [ref=f1e16]: AI plans, previews, and executes your Discord server configuration — channels, roles, and permissions — through a review-first workflow.
+  - generic [ref=f1e17]:
+    - button "Sign in with Discord" [ref=f1e18] [cursor=pointer]
+    - generic [ref=f1e21]:
+      - generic [ref=f1e22]: Plan-first
+      - generic [ref=f1e28]: Review
+      - generic [ref=f1e33]: Execute
+    - paragraph [ref=f1e37]: By continuing, you authorize this app to manage servers you administer.

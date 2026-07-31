@@ -18,7 +18,7 @@ export interface AskUserResult {
 // ── plan() function ────────────────────────────────────────────────────────
 
 export function planAskUser(_params: AskUserParams, _store: DesiredStateStore): PlanResult {
-  // ask_user is an ImmediateTool — it does not modify DesiredState.
+  // ask_user is a planning-time interaction tool — it does not modify DesiredState.
   // The planning loop handles it separately (pauses, gets user input).
   return { planned: true };
 }

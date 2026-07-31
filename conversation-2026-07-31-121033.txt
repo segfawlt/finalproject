@@ -1,0 +1,3 @@
+ ▐▛███▜▌   Claude Code v2.1.220
+▝▜█████▛▘  Opus 4.8 (1M context) · API Usage Billing
+  ▘▘ ▝▝    ~/Projects/FinalTestProject

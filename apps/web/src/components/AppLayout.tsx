@@ -3,7 +3,7 @@ import AppHeader from "./AppHeader";
 
 export default function AppLayout() {
   return (
-    <div className="min-h-screen flex flex-col bg-discord-bg">
+    <div className="min-h-screen flex flex-col bg-shell-canvas">
       <AppHeader />
       <div className="flex-1 flex flex-col min-h-0">
         <Outlet />

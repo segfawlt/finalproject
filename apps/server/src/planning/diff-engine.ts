@@ -10,12 +10,14 @@ import type {
 } from "@repo/shared";
 import { channelTypeNumberToString } from "@repo/shared";
 import { logger } from "../utils/logger";
+import type { RepairConflict } from "./repair-context";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface DiffResult {
   steps: PlanStep[];
   symbolTable: SymbolTable;
+  conflicts: RepairConflict[];
 }
 
 interface RawStep {
@@ -55,7 +57,8 @@ function isSymbol(key: string): boolean {
 
 function generateChannelSteps(
   desired: Record<string, ChannelBase>,
-  real: ChannelBase[]
+  real: ChannelBase[],
+  conflicts: RepairConflict[]
 ): RawStep[] {
   const steps: RawStep[] = [];
   const realById = new Map(real.map((c) => [c.id, c]));
@@ -86,11 +89,14 @@ function generateChannelSteps(
       // EXISTING channel — match by Discord ID
       const realCh = realById.get(key);
       if (!realCh) {
-        // External deletion — validation should catch this before diff is called.
-        // Throw here so the caller knows something is wrong.
-        throw new Error(
-          `Channel ${key} (${ch.name}) exists in DesiredState but was deleted externally`
-        );
+        conflicts.push({
+          kind: "missing_resource",
+          resourceType: ch.type === 4 ? "category" : "channel",
+          resourceId: key,
+          resourceName: ch.name,
+          message: `${ch.type === 4 ? "Category" : "Channel"} "${ch.name}" no longer exists.`,
+        });
+        continue;
       }
 
       const editDiff: Record<string, unknown> = { id: key };
@@ -132,7 +138,11 @@ function generateChannelSteps(
   return steps;
 }
 
-function generateRoleSteps(desired: Record<string, Role>, real: Role[]): RawStep[] {
+function generateRoleSteps(
+  desired: Record<string, Role>,
+  real: Role[],
+  conflicts: RepairConflict[]
+): RawStep[] {
   const steps: RawStep[] = [];
   const realById = new Map(real.map((r) => [r.id, r]));
 
@@ -158,16 +168,23 @@ function generateRoleSteps(desired: Record<string, Role>, real: Role[]): RawStep
       // EXISTING role
       const realRole = realById.get(key);
       if (!realRole) {
-        throw new Error(
-          `Role ${key} (${role.name}) exists in DesiredState but was deleted externally`
-        );
+        conflicts.push({
+          kind: "missing_resource",
+          resourceType: "role",
+          resourceId: key,
+          resourceName: role.name,
+          message: `Role "${role.name}" no longer exists.`,
+        });
+        continue;
       }
 
       const editDiff: Record<string, unknown> = { id: key };
       const moveDiff: Record<string, unknown> = { id: key };
 
       if (role.name !== realRole.name) editDiff.name = role.name;
-      if (role.permissions !== realRole.permissions) editDiff.permissions = role.permissions;
+      if (!arraysEqualSorted(role.permissions, realRole.permissions)) {
+        editDiff.permissions = role.permissions;
+      }
       if (role.color !== realRole.color) editDiff.color = role.color;
       if (role.hoist !== realRole.hoist) editDiff.hoist = role.hoist;
       if (role.mentionable !== realRole.mentionable) editDiff.mentionable = role.mentionable;
@@ -240,6 +257,13 @@ function arraysEqual<T>(a: T[], b: T[]): boolean {
     if (a[i] !== b[i]) return false;
   }
   return true;
+}
+
+function arraysEqualSorted(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((value, index) => value === sortedB[index]);
 }
 
 function generateOverwriteSteps(
@@ -586,14 +610,16 @@ function removeNoOps(steps: RawStep[]): RawStep[] {
  *   Phase 2: Topological sort
  *   Phase 3: Optimize (merge edits, remove no-ops)
  *
- * Throws if an existing item in DesiredState is missing from real state
- * (external deletion detected — caller should run validation first).
+ * Reports missing existing resources as structured conflicts. Callers must
+ * block execution whenever `conflicts` is non-empty.
  */
 export function diffEngine(realState: ServerState, desiredState: DesiredState): DiffResult {
+  const conflicts: RepairConflict[] = [];
+
   // Phase 1: Generate raw steps
   const rawSteps: RawStep[] = [
-    ...generateChannelSteps(desiredState.active.channels, realState.channels),
-    ...generateRoleSteps(desiredState.active.roles, realState.roles),
+    ...generateChannelSteps(desiredState.active.channels, realState.channels, conflicts),
+    ...generateRoleSteps(desiredState.active.roles, realState.roles, conflicts),
     ...generateMemberRoleSteps(desiredState.active.memberRoles ?? {}, realState.memberRoles ?? []),
     ...generateOverwriteSteps(
       desiredState.active.overwrites,
@@ -664,10 +690,11 @@ export function diffEngine(realState: ServerState, desiredState: DesiredState): 
     {
       stepCount: steps.length,
       symbolCount: Object.keys(symbolTable).length,
+      conflictCount: conflicts.length,
       byTool,
     },
     "[diff-engine] computed"
   );
 
-  return { steps, symbolTable };
+  return { steps, symbolTable, conflicts };
 }

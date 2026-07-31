@@ -16,4 +16,3 @@ dist/
 session-*.md
 .grepai/
 .worktrees/
-docs/api/

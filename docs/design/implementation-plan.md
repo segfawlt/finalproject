@@ -7,11 +7,10 @@ Status: Spec complete, ready for implementation. Last updated: 2026-05-28.
 ```
 1. Part A — Fix buildSystemPrompt()          (1 file, ~40 lines changed)
 2. Part B — lockPermissions                  (8 files, all additive)
-3. Part C — Configuration Procedure          (3 files, 2 new components)
 ```
 
-Part A first because the system prompt controls LLM behavior — Parts B and C
-depend on the LLM understanding the correct phase model and permission strategy.
+Part A first because the system prompt controls LLM behavior — Part B
+depends on the LLM understanding the correct phase model and permission strategy.
 
 ---
 
@@ -340,186 +339,6 @@ Wire into `validatePlan()`:
 
 ---
 
-## Part C: Configuration Procedure — Studio Sidebar
-
-### C1. `packages/db/src/schema.ts`
-
-Add to `guilds` table (after `currentPlanId` on line 37):
-
-```ts
-phaseProgress: jsonb("phase_progress")
-  .notNull()
-  .default({
-    foundation: false,
-    layout: false,
-    access: false,
-    people: false,
-  }),
-```
-
-Generate and apply migration:
-
-```bash
-pnpm db:generate
-pnpm db:migrate
-```
-
-### C2. `apps/server/src/hono/routes/guilds.ts`
-
-Update `updateGuildSchema` (line 14):
-
-```ts
-const updateGuildSchema = z.object({
-  serverType: z.string().nullable().optional(),
-  settings: z.record(z.unknown()).optional(),
-  guidedSetupCompleted: z.boolean().optional(),
-  phaseProgress: z
-    .object({
-      foundation: z.boolean(),
-      layout: z.boolean(),
-      access: z.boolean(),
-      people: z.boolean(),
-    })
-    .optional(),
-});
-```
-
-Update the `data` construction in the PATCH handler (after line 109):
-
-```ts
-if (body.guidedSetupCompleted !== undefined) {
-  data.guidedSetupCompleted = body.guidedSetupCompleted;
-}
-if (body.phaseProgress !== undefined) {
-  data.phaseProgress = body.phaseProgress;
-}
-```
-
-### C3. Studio Sidebar Component
-
-**File:** `apps/web/src/components/ProcedureSidebar.tsx` (new)
-
-**Component contract:**
-
-```
-Props:
-  phaseProgress: { foundation: boolean, layout: boolean, access: boolean, people: boolean }
-  onSelectPhase: (phase: string) => void
-  selectedPhase: string | null
-```
-
-**Renders:**
-
-```
-┌─────────────────────────────────┐
-│ 📐 Recommended order            │
-│                                 │
-│ ✅ Foundation    (3 roles)       │
-│ ✅ Layout        (2 cat, 6 ch)   │
-│ ▶ Access Control [Use prompt →] │
-│ ○ People        [Use prompt →]  │
-│                                 │
-│ ─────────────────────────────── │
-│ Or type your own prompt below.  │
-└─────────────────────────────────┘
-```
-
-**Behavior:**
-
-- Each phase row shows a checkmark if `phaseProgress[phase]` is true, empty circle if false
-- Clicking a phase highlights it and shows `[Use prompt →]` button
-- `[Use prompt →]` sends the predefined scoped prompt via a new conversation
-- Selecting an earlier phase after later phases are complete shows a warning dialog:
-  _"You've already completed Access Control and People. Going back to Foundation may affect resources created since. Continue anyway?"_ — [Continue] [Cancel]
-- No explicit "exit procedure" action — user just types their own prompt
-- Sidebar is a persistent panel, always visible when in Studio
-
-**Per-phase prompt constants (crafted by the system, editable by user):**
-
-```ts
-const PHASE_PROMPTS: Record<string, string> = {
-  foundation:
-    "Define roles only. Set names, colors, base permissions, position. " +
-    "Do NOT create categories, channels, or set permission overwrites.",
-
-  layout:
-    "Create categories and channel structure. Set types, positions, parents, " +
-    "forum tags. Default lock_permissions: true on channels under categories. " +
-    "Do NOT modify roles or set permission overwrites.",
-
-  access:
-    "Set permission overwrites on categories and channels. " +
-    "Default: lock_permissions: true. Permissions go on categories. " +
-    "Only un-sync channels that genuinely need different access. " +
-    "Do NOT create new channels or modify roles.",
-
-  people:
-    "Assign members to existing roles. " + "Do NOT create roles or modify permissions or channels.",
-};
-```
-
-**Prompt preview card** (sub-component):
-
-```
-┌──────────────────────────────────────┐
-│ Phase 3 — Access Control             │
-│                                      │
-│ ┌──────────────────────────────────┐ │
-│ │ [editable textarea with prompt]  │ │
-│ └──────────────────────────────────┘ │
-│                                      │
-│ [Approve & Send]                     │
-└──────────────────────────────────────┘
-```
-
-Clicking `[Approve & Send]` creates a new conversation via
-`POST /api/guilds/:guildId/conversations` with the edited prompt as `userPrompt`.
-The conversation's metadata optionally stores `{ phase: "access" }` so the
-sidebar can auto-mark the phase on execution.
-
-### Phase Progress Update Logic
-
-When a plan executes that was started from a `[Use prompt →]` button, the
-sidebar PATCHes the guild with the updated `phaseProgress`. Implementation
-options:
-
-**A. Frontend-driven:** The Studio component that handles the conversation
-stream detects `plan_completed`, checks if the conversation was phase-started,
-and PATCHes `phaseProgress`.
-
-**B. Backend-driven:** The plan execution endpoint (`plans.ts`) checks
-conversation metadata for `phase` and updates `phaseProgress` on successful
-execution.
-
-Option B is preferred — single source of truth, no race conditions.
-
-### Depreciation Warning Logic
-
-When the user selects a phase N and any phase > N has `phaseProgress: true`:
-
-```ts
-function getDeprecationWarning(selected: string, progress: PhaseProgress): string | null {
-  const order = ["foundation", "layout", "access", "people"];
-  const idx = order.indexOf(selected);
-  const later = order.slice(idx + 1).filter((p) => progress[p]);
-  if (later.length === 0) return null;
-
-  const names = {
-    foundation: "Foundation",
-    layout: "Layout",
-    access: "Access Control",
-    people: "People",
-  };
-  const laterNames = later.map((p) => names[p]).join(" and ");
-  return (
-    `You've already completed ${laterNames}. ` +
-    `Going back to ${names[selected]} may affect resources created since.`
-  );
-}
-```
-
----
-
 ## Verification Commands
 
 After each part:
@@ -528,13 +347,6 @@ After each part:
 pnpm tsc --noEmit -p apps/server/tsconfig.json
 pnpm tsc --noEmit -p apps/web/tsconfig.json
 pnpm lint
-```
-
-After Part C migration:
-
-```bash
-pnpm db:generate
-pnpm db:migrate
 ```
 
 ---
@@ -553,8 +365,5 @@ pnpm db:migrate
 | 8   | `apps/server/src/bot/execute-context.ts`           | Pass lockPermissions to Discord.js methods                                                   | B    |
 | 9   | `apps/server/src/planning/diff-engine.ts`          | `arraysEqualSorted`, skip overwrites for synced channels, emit lockPermissions in edit steps | B    |
 | 10  | `apps/server/src/planning/validation.ts`           | Group D: overwrite consolidation detection                                                   | B    |
-| 11  | `packages/db/src/schema.ts`                        | `phaseProgress` JSONB column on guilds                                                       | C    |
-| 12  | `apps/server/src/hono/routes/guilds.ts`            | Add `phaseProgress` to PATCH schema                                                          | C    |
-| 13  | `apps/web/src/components/ProcedureSidebar.tsx`     | **NEW** — sidebar component                                                                  | C    |
 
-**Total: 13 files (1 delete-only, 11 additive touches, 1 new file)**
+**Total: 10 files (all additive touches)**

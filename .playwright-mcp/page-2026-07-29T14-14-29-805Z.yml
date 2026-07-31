@@ -1,0 +1,69 @@
+- generic [ref=f8e3]:
+  - banner [ref=f8e4]:
+    - generic [ref=f8e5]:
+      - link "Discord Platform home" [ref=f8e6] [cursor=pointer]:
+        - /url: /studio
+        - generic [ref=f8e11]: Discord Platform
+      - navigation [ref=f8e12]:
+        - link "Studio" [ref=f8e13] [cursor=pointer]:
+          - /url: /studio
+      - generic [ref=f8e19]:
+        - generic [ref=f8e20]:
+          - generic [ref=f8e21]: NI
+          - generic [ref=f8e22]: nizk
+        - button "Sign out" [ref=f8e24] [cursor=pointer]
+  - generic [ref=f8e30]:
+    - generic [ref=f8e31]:
+      - link "Pick a server" [ref=f8e32] [cursor=pointer]:
+        - /url: /studio
+      - generic [ref=f8e36]:
+        - generic [ref=f8e37]: /
+        - generic [ref=f8e38]: "1517217533168582838"
+      - generic [ref=f8e39]:
+        - link "Templates" [ref=f8e40] [cursor=pointer]:
+          - /url: /templates/1517217533168582838
+        - link "Settings" [ref=f8e44] [cursor=pointer]:
+          - /url: /dashboard/1517217533168582838
+    - generic [ref=f8e48]:
+      - complementary [ref=f8e49]:
+        - generic [ref=f8e50]:
+          - generic [ref=f8e51]:
+            - generic [ref=f8e52]: History
+            - button "Collapse conversation history" [ref=f8e53] [cursor=pointer]
+          - button "New Chat" [ref=f8e58] [cursor=pointer]
+          - generic [ref=f8e61]: Loading…
+      - main [ref=f8e68]:
+        - generic [ref=f8e71]:
+          - generic [ref=f8e72]:
+            - generic [ref=f8e73]: Welcome
+            - heading "Configure 1517217533168582838" [level=1] [ref=f8e78]
+            - paragraph [ref=f8e79]: Pick a starting point, or describe what you want changed. The AI will plan the changes, you approve, then they go live.
+          - generic [ref=f8e80]:
+            - generic [ref=f8e81]: Suggestions
+            - generic [ref=f8e82]:
+              - button "Set up staff channels Private staff space with a moderator role" [ref=f8e83] [cursor=pointer]:
+                - generic [ref=f8e84]: Set up staff channels
+                - generic [ref=f8e85]: Private staff space with a moderator role
+              - button "Gaming community layout Categories and channels for a gaming server" [ref=f8e86] [cursor=pointer]:
+                - generic [ref=f8e87]: Gaming community layout
+                - generic [ref=f8e88]: Categories and channels for a gaming server
+              - button "Foundational roles Base roles with sensible permissions" [ref=f8e89] [cursor=pointer]:
+                - generic [ref=f8e90]: Foundational roles
+                - generic [ref=f8e91]: Base roles with sensible permissions
+              - button "Channel permission fix Configure overwrites for a specific channel" [ref=f8e92] [cursor=pointer]:
+                - generic [ref=f8e93]: Channel permission fix
+                - generic [ref=f8e94]: Configure overwrites for a specific channel
+              - button "Audit and cleanup Review existing channels and suggest cleanup" [ref=f8e95] [cursor=pointer]:
+                - generic [ref=f8e96]: Audit and cleanup
+                - generic [ref=f8e97]: Review existing channels and suggest cleanup
+          - generic [ref=f8e98]:
+            - generic [ref=f8e99]: Or describe what you want
+            - textbox "e.g., Create a staff channel and a moderator role..." [ref=f8e100]
+            - button "Create & Plan" [disabled] [ref=f8e101]
+      - complementary [ref=f8e104]:
+        - generic [ref=f8e105]:
+          - tablist [ref=f8e106]:
+            - tab "Server" [selected] [ref=f8e107] [cursor=pointer]
+            - tab "Desired" [ref=f8e109] [cursor=pointer]
+            - button "Open new tab" [ref=f8e112] [cursor=pointer]
+          - generic [ref=f8e114]: Loading server state…

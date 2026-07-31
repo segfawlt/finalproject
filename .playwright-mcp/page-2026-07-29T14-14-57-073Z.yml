@@ -1,0 +1,155 @@
+- generic [ref=f8e3]:
+  - banner [ref=f8e4]:
+    - generic [ref=f8e5]:
+      - link "Discord Platform home" [ref=f8e6] [cursor=pointer]:
+        - /url: /studio
+        - generic [ref=f8e11]: Discord Platform
+      - navigation [ref=f8e12]:
+        - link "Studio" [ref=f8e13] [cursor=pointer]:
+          - /url: /studio
+      - generic [ref=f8e19]:
+        - generic [ref=f8e20]:
+          - generic [ref=f8e21]: NI
+          - generic [ref=f8e22]: nizk
+        - button "Sign out" [ref=f8e24] [cursor=pointer]
+  - generic [ref=f8e30]:
+    - generic [ref=f8e31]:
+      - link "Pick a server" [ref=f8e32] [cursor=pointer]:
+        - /url: /studio
+      - generic [ref=f8e36]:
+        - generic [ref=f8e37]: /
+        - generic [ref=f8e38]: nizk's server
+      - generic [ref=f8e39]:
+        - link "Templates" [ref=f8e40] [cursor=pointer]:
+          - /url: /templates/1517217533168582838
+        - link "Settings" [ref=f8e44] [cursor=pointer]:
+          - /url: /dashboard/1517217533168582838
+    - generic [ref=f8e48]:
+      - complementary [ref=f8e49]:
+        - generic [ref=f8e50]:
+          - generic [ref=f8e51]:
+            - generic [ref=f8e52]: History
+            - button "Collapse conversation history" [ref=f8e53] [cursor=pointer]
+          - button "New Chat" [ref=f8e58] [cursor=pointer]
+          - generic [ref=f8e61]:
+            - generic [ref=f8e122]:
+              - generic [ref=f8e123]: Today
+              - list [ref=f8e124]:
+                - listitem [ref=f8e125]:
+                  - 'button "Set up a private staff category with #staff-chat and #mod-logs channels, and create a Moderator role that can manage messages and channels in that category. completed" [ref=f8e126] [cursor=pointer]':
+                    - generic [ref=f8e127]: "Set up a private staff category with #staff-chat and #mod-logs channels, and create a Moderator role that can manage messages and channels in that category."
+                    - generic [ref=f8e128]: completed
+            - generic [ref=f8e130]:
+              - generic [ref=f8e131]: Earlier
+              - list [ref=f8e132]:
+                - listitem [ref=f8e133]:
+                  - button "I want a staff channel. expired" [ref=f8e134] [cursor=pointer]:
+                    - generic [ref=f8e135]: I want a staff channel.
+                    - generic [ref=f8e136]: expired
+                - listitem [ref=f8e138]:
+                  - button "I want a staff channel. expired" [ref=f8e139] [cursor=pointer]:
+                    - generic [ref=f8e140]: I want a staff channel.
+                    - generic [ref=f8e141]: expired
+                - listitem [ref=f8e143]:
+                  - button "I want a channel for exchanging commands stale" [ref=f8e144] [cursor=pointer]:
+                    - generic [ref=f8e145]: I want a channel for exchanging commands
+                    - generic [ref=f8e146]: stale
+                - listitem [ref=f8e148]:
+                  - button "only create a new text channel called \"command\" stale" [ref=f8e149] [cursor=pointer]:
+                    - generic [ref=f8e150]: only create a new text channel called "command"
+                    - generic [ref=f8e151]: stale
+                - listitem [ref=f8e153]:
+                  - button "create a text channel called \"command\" stale" [ref=f8e154] [cursor=pointer]:
+                    - generic [ref=f8e155]: create a text channel called "command"
+                    - generic [ref=f8e156]: stale
+                - listitem [ref=f8e158]:
+                  - button "Create a text channel called \"command\" stale" [ref=f8e159] [cursor=pointer]:
+                    - generic [ref=f8e160]: Create a text channel called "command"
+                    - generic [ref=f8e161]: stale
+                - listitem [ref=f8e163]:
+                  - button "I want to create a channel called \"command\", text channel stale" [ref=f8e164] [cursor=pointer]:
+                    - generic [ref=f8e165]: I want to create a channel called "command", text channel
+                    - generic [ref=f8e166]: stale
+                - listitem [ref=f8e168]:
+                  - button "Creating a command channel under text category named \"command\". its a text channel stale" [ref=f8e169] [cursor=pointer]:
+                    - generic [ref=f8e170]: Creating a command channel under text category named "command". its a text channel
+                    - generic [ref=f8e171]: stale
+                - listitem [ref=f8e173]:
+                  - button "Create a text channel called \"command\" for command purpose stale" [ref=f8e174] [cursor=pointer]:
+                    - generic [ref=f8e175]: Create a text channel called "command" for command purpose
+                    - generic [ref=f8e176]: stale
+                - listitem [ref=f8e178]:
+                  - button "I want to create a new command channel named \"command\" stale" [ref=f8e179] [cursor=pointer]:
+                    - generic [ref=f8e180]: I want to create a new command channel named "command"
+                    - generic [ref=f8e181]: stale
+                - listitem [ref=f8e183]:
+                  - button "I want to create a new command channel called \"command\" stale" [ref=f8e184] [cursor=pointer]:
+                    - generic [ref=f8e185]: I want to create a new command channel called "command"
+                    - generic [ref=f8e186]: stale
+                - listitem [ref=f8e188]:
+                  - button "Create a command channel called \"command\" stale" [ref=f8e189] [cursor=pointer]:
+                    - generic [ref=f8e190]: Create a command channel called "command"
+                    - generic [ref=f8e191]: stale
+                - listitem [ref=f8e193]:
+                  - button "Make a channel called \"command\" under the text channel section stale" [ref=f8e194] [cursor=pointer]:
+                    - generic [ref=f8e195]: Make a channel called "command" under the text channel section
+                    - generic [ref=f8e196]: stale
+                - listitem [ref=f8e198]:
+                  - 'button "I want a new command channel called #command stale" [ref=f8e199] [cursor=pointer]':
+                    - generic [ref=f8e200]: "I want a new command channel called #command"
+                    - generic [ref=f8e201]: stale
+                - listitem [ref=f8e203]:
+                  - 'button "I want a new command channel called #command stale" [ref=f8e204] [cursor=pointer]':
+                    - generic [ref=f8e205]: "I want a new command channel called #command"
+                    - generic [ref=f8e206]: stale
+                - listitem [ref=f8e208]:
+                  - button "I want to create a command channel stale" [ref=f8e209] [cursor=pointer]:
+                    - generic [ref=f8e210]: I want to create a command channel
+                    - generic [ref=f8e211]: stale
+                - listitem [ref=f8e213]:
+                  - button "I want a command channel stale" [ref=f8e214] [cursor=pointer]:
+                    - generic [ref=f8e215]: I want a command channel
+                    - generic [ref=f8e216]: stale
+                - listitem [ref=f8e218]:
+                  - button "I want a command channel stale" [ref=f8e219] [cursor=pointer]:
+                    - generic [ref=f8e220]: I want a command channel
+                    - generic [ref=f8e221]: stale
+                - listitem [ref=f8e223]:
+                  - button "I want a new channel for commands. stale" [ref=f8e224] [cursor=pointer]:
+                    - generic [ref=f8e225]: I want a new channel for commands.
+                    - generic [ref=f8e226]: stale
+      - main [ref=f8e68]:
+        - generic [ref=f8e71]:
+          - generic [ref=f8e72]:
+            - generic [ref=f8e73]: Welcome
+            - heading "Configure nizk's server" [level=1] [ref=f8e228]
+            - paragraph [ref=f8e79]: Pick a starting point, or describe what you want changed. The AI will plan the changes, you approve, then they go live.
+          - generic [ref=f8e80]:
+            - generic [ref=f8e81]: Suggestions
+            - generic [ref=f8e82]:
+              - button "Set up staff channels Private staff space with a moderator role" [ref=f8e83] [cursor=pointer]:
+                - generic [ref=f8e84]: Set up staff channels
+                - generic [ref=f8e85]: Private staff space with a moderator role
+              - button "Gaming community layout Categories and channels for a gaming server" [ref=f8e86] [cursor=pointer]:
+                - generic [ref=f8e87]: Gaming community layout
+                - generic [ref=f8e88]: Categories and channels for a gaming server
+              - button "Foundational roles Base roles with sensible permissions" [ref=f8e89] [cursor=pointer]:
+                - generic [ref=f8e90]: Foundational roles
+                - generic [ref=f8e91]: Base roles with sensible permissions
+              - button "Channel permission fix Configure overwrites for a specific channel" [ref=f8e92] [cursor=pointer]:
+                - generic [ref=f8e93]: Channel permission fix
+                - generic [ref=f8e94]: Configure overwrites for a specific channel
+              - button "Audit and cleanup Review existing channels and suggest cleanup" [ref=f8e95] [cursor=pointer]:
+                - generic [ref=f8e96]: Audit and cleanup
+                - generic [ref=f8e97]: Review existing channels and suggest cleanup
+          - generic [ref=f8e98]:
+            - generic [ref=f8e99]: Or describe what you want
+            - textbox "e.g., Create a staff channel and a moderator role..." [ref=f8e100]
+            - button "Create & Plan" [disabled] [ref=f8e101]
+      - complementary [ref=f8e104]:
+        - generic [ref=f8e105]:
+          - tablist [ref=f8e106]:
+            - tab "Server" [ref=f8e107] [cursor=pointer]
+            - tab "Desired" [selected] [ref=f8e109] [cursor=pointer]
+            - button "Open new tab" [ref=f8e112] [cursor=pointer]
+          - generic [ref=f8e114]: No plan yet. Send a prompt in the chat to start planning.

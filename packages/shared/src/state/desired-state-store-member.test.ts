@@ -10,7 +10,7 @@ describe("DesiredStateStore.addMemberRole", () => {
     store.addMemberRole("user-1", roleSymbol);
 
     const state = store.getState();
-    expect(state.active.memberRoles!!["user-1"]).toEqual({
+    expect(state.active.memberRoles!["user-1"]).toEqual({
       memberId: "user-1",
       roleIds: [roleSymbol],
     });

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Library } from "lucide-react";
-import type { ChannelBase, DesiredState, Role } from "../components/desired-state";
+import { Bot, Library } from "lucide-react";
 import TemplatePanel from "../components/TemplatePanel";
 import StudioShell from "../components/studio/StudioShell";
 import StudioHeader from "../components/studio/StudioHeader";
@@ -11,6 +10,7 @@ import RightPanel from "../components/studio/RightPanel";
 import DriftIndicator from "../components/studio/DriftIndicator";
 import { useGuildName } from "../hooks/useGuildName";
 import { useConversation } from "../hooks/useConversation";
+import { useDesiredStateEdit } from "../hooks/useDesiredStateEdit";
 import { useGuildDrift } from "../hooks/useGuildDrift";
 import { apiFetch } from "../lib/api";
 
@@ -25,6 +25,7 @@ export default function Studio() {
     Array<{ id: string; name: string; icon: string | null; memberCount: number }>
   >([]);
   const [guildsLoading, setGuildsLoading] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (guildId) return;
@@ -38,39 +39,37 @@ export default function Studio() {
       )
       .catch(() => setAvailableGuilds([]))
       .finally(() => setGuildsLoading(false));
+    // Fetch the bot invite URL so the picker can offer it when no guild is
+    // operable yet (replaces the old /setup wizard's invite step).
+    apiFetch("/api/bot/invite")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { url?: string } | null) => setInviteUrl(data?.url ?? null))
+      .catch(() => setInviteUrl(null));
   }, [guildId]);
 
   // ── Manual edit mode (working copy of desired state) ──────────────────────
-  const [editing, setEditing] = useState(false);
-  const [editableState, setEditableState] = useState<DesiredState | null>(null);
+  const edit = useDesiredStateEdit();
 
   function enterEditMode() {
     if (!c.desiredState) return;
-    setEditableState(structuredClone(c.desiredState));
-    setEditing(true);
-  }
-
-  function cancelEdit() {
-    setEditing(false);
-    setEditableState(null);
+    edit.beginEdit(c.desiredState);
   }
 
   async function saveEdit() {
-    if (!c.conversationId || !guildId || !editableState) return;
+    if (!c.conversationId || !guildId || !edit.editableState) return;
     if (c.inFlight) return;
     c.clearError();
     try {
       const res = await apiFetch(
         `/api/guilds/${guildId}/conversations/${c.conversationId}/edit-state`,
-        { method: "POST", body: { desiredState: editableState } }
+        { method: "POST", body: { desiredState: edit.editableState } }
       );
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         c.setError(data.error || "Failed to save edit");
         return;
       }
-      setEditing(false);
-      setEditableState(null);
+      edit.finishEdit();
       // Refresh the conversation so the manual_edit iteration shows up.
       if (c.conversationId) await c.loadConversation(c.conversationId);
     } catch (err) {
@@ -78,152 +77,20 @@ export default function Studio() {
     }
   }
 
-  // Helpers that splice changes into the working-copy DesiredState. Items are
-  // keyed by their id (real Discord id or `$ch_$N` symbol), so the parent map
-  // is rebuilt with the touched entry replaced in place.
-  function patchChannel(id: string, next: ChannelBase) {
-    setEditableState((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        active: { ...prev.active, channels: { ...prev.active.channels, [id]: next } },
-      };
-    });
-  }
-  function patchRole(id: string, next: Role) {
-    setEditableState((prev) => {
-      if (!prev) return prev;
-      return { ...prev, active: { ...prev.active, roles: { ...prev.active.roles, [id]: next } } };
-    });
-  }
-  function deleteChannel(id: string) {
-    setEditableState((prev) => {
-      if (!prev) return prev;
-      const existing = prev.active.channels[id];
-      if (!existing) return prev;
-      const { [id]: _removed, ...rest } = prev.active.channels;
-      return {
-        ...prev,
-        active: { ...prev.active, channels: rest },
-        tombstones: [
-          ...prev.tombstones,
-          {
-            discordId: existing.id,
-            resourceType: existing.type === 4 ? ("category" as const) : ("channel" as const),
-            name: existing.name,
-            deletedInVersion: prev.version,
-          },
-        ],
-      };
-    });
-  }
-  function deleteRole(id: string) {
-    setEditableState((prev) => {
-      if (!prev) return prev;
-      const existing = prev.active.roles[id];
-      if (!existing) return prev;
-      const { [id]: _removed, ...rest } = prev.active.roles;
-      return {
-        ...prev,
-        active: { ...prev.active, roles: rest },
-        tombstones: [
-          ...prev.tombstones,
-          {
-            discordId: existing.id,
-            resourceType: "role" as const,
-            name: existing.name,
-            deletedInVersion: prev.version,
-          },
-        ],
-      };
-    });
-  }
-  function addChannel() {
-    setEditableState((prev) => {
-      if (!prev) return prev;
-      const id = `$${"ch"}_${prev.symbolCounter}`;
-      return {
-        ...prev,
-        symbolCounter: prev.symbolCounter + 1,
-        active: {
-          ...prev.active,
-          channels: {
-            ...prev.active.channels,
-            [id]: {
-              id,
-              name: "new-channel",
-              type: 0,
-              parentId: null,
-              position: Object.values(prev.active.channels).length,
-            },
-          },
-        },
-      };
-    });
-  }
-  function addCategory() {
-    setEditableState((prev) => {
-      if (!prev) return prev;
-      const id = `$${"cat"}_${prev.symbolCounter}`;
-      return {
-        ...prev,
-        symbolCounter: prev.symbolCounter + 1,
-        active: {
-          ...prev.active,
-          channels: {
-            ...prev.active.channels,
-            [id]: {
-              id,
-              name: "new-category",
-              type: 4,
-              parentId: null,
-              position: Object.values(prev.active.channels).length,
-            },
-          },
-        },
-      };
-    });
-  }
-  function addRole() {
-    setEditableState((prev) => {
-      if (!prev) return prev;
-      const id = `$${"role"}_${prev.symbolCounter}`;
-      return {
-        ...prev,
-        symbolCounter: prev.symbolCounter + 1,
-        active: {
-          ...prev.active,
-          roles: {
-            ...prev.active.roles,
-            [id]: {
-              id,
-              name: "new-role",
-              position: Object.values(prev.active.roles).length,
-              permissions: [],
-              color: 0,
-              hoist: false,
-              mentionable: false,
-            },
-          },
-        },
-      };
-    });
-  }
-
   // ── Render ─────────────────────────────────────────────────────────────────
   const editProps: ChatAreaEditProps = {
-    editing,
-    editableState,
-    patchChannel,
-    deleteChannel,
-    addChannel,
-    addCategory,
-    patchRole,
-    deleteRole,
-    addRole,
+    editing: edit.editing,
+    editableState: edit.editableState,
+    patchChannel: edit.patchChannel,
+    deleteChannel: edit.deleteChannel,
+    addChannel: edit.addChannel,
+    addCategory: edit.addCategory,
+    patchRole: edit.patchRole,
+    deleteRole: edit.deleteRole,
+    addRole: edit.addRole,
     enterEditMode,
     saveEdit,
-    cancelEdit,
+    cancelEdit: edit.cancelEdit,
   };
 
   return (
@@ -253,8 +120,28 @@ export default function Studio() {
               {guildsLoading ? (
                 <div className="text-sm text-shell-text-muted">Loading guilds…</div>
               ) : availableGuilds.length === 0 ? (
-                <div className="text-sm text-shell-text-muted">
-                  No guilds available. Make sure the bot is invited to a guild you admin.
+                <div className="rounded-lg border border-shell-border bg-shell-surface p-5 space-y-3">
+                  <div className="flex items-center gap-2 text-shell-text font-medium">
+                    <Bot size={16} />
+                    No guilds ready yet
+                  </div>
+                  <p className="text-sm text-shell-text-muted">
+                    Invite the planning bot to a Discord server you administer. It needs
+                    Administrator permission to create and manage channels, roles, and members.
+                    Once it&apos;s in, refresh this page and your server will show up here.
+                  </p>
+                  {inviteUrl ? (
+                    <a
+                      href={inviteUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-shell-accent text-shell-accent-fg hover:bg-shell-accent-hover text-sm font-medium transition-colors"
+                    >
+                      <Bot size={14} /> Invite the bot
+                    </a>
+                  ) : (
+                    <div className="text-sm text-shell-text-subtle">Loading invite link…</div>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -303,7 +190,7 @@ export default function Studio() {
               />
             )}
 
-            <ChatArea c={c} guildName={guildName || guildId} edit={editProps} />
+            <ChatArea c={c} guildId={guildId} guildName={guildName || guildId} edit={editProps} />
           </>
         )}
       </div>

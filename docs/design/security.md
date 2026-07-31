@@ -9,17 +9,22 @@ The bot MUST have ADMINISTRATOR in every guild it operates in.
 - All API operations rejected with clear error
 - Studio shows banner: "Bot needs Administrator permission"
 - ADMINISTRATOR bypasses all channel overwrites → bot can never be locked out
-- @everyone VIEW_CHANNEL denial becomes a WARNING (not block)
+- Because the bot holds ADMINISTRATOR, denying @everyone VIEW_CHANNEL cannot lock
+  the bot out, so it is allowed without a block or warning
 
 ## Authentication
 
 - Better Auth with Discord OAuth2 provider (self-hosted, open source, type-safe)
 - Hono middleware validates session on every request
 - Session stored as HTTP-only cookie on app domain
-- User must have `MANAGE_GUILD` permission in Discord to access guild dashboard
-- User roles: `super_admin`, `admin`, `user`
-- Multi-tenant via Better Auth organizations feature
-- Subscription tiers: `free`, `pro`, `enterprise` (feature flags, deferred)
+- Authorization is per-guild: every guild-scoped route checks
+  `userHasManageGuild(userId, guildId)` (Discord `MANAGE_GUILD` permission,
+  verified live against the Discord API). There is no app-level role system.
+- No RBAC roles (`super_admin`/`admin`/`user`) and no Better Auth organizations /
+  multi-tenancy — access is derived entirely from Discord guild permissions.
+- A `subscriptionTier` column exists on the user table (defaults to `"free"` and
+  is surfaced in the session), but nothing reads it — there are no tier gates,
+  feature flags, or `pro`/`enterprise` code paths. Tiered features are unbuilt.
 
 ## Guild-Level Concurrent Plan Locking
 

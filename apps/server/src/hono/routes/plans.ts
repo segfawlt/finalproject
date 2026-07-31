@@ -17,6 +17,9 @@ import { validatePlan } from "../../planning/validation";
 import { emitPlanEvent } from "../../planning/event-bus";
 import { emitConversationEvent } from "../../planning/planning-event-bus";
 import { getSessionsByGuild, removeSession } from "../../planning/session-manager";
+import { setSession } from "../../planning/session-manager";
+import { PlanningSession, type LLMMessage } from "../../planning/planning-session";
+import { buildRepairPrompt, type RepairConflict } from "../../planning/repair-context";
 import { DiscordExecuteContext } from "../../bot/execute-context";
 import { botClient } from "../../bot/client";
 import { guildCache } from "../../bot/cache";
@@ -26,6 +29,11 @@ import type { ServerState, PlanData, DesiredState } from "@repo/shared";
 import { hashServerState, getTool, evaluateAssumptions, fork } from "@repo/shared";
 
 const plansApp = new Hono<{ Variables: AppVariables }>();
+
+// Retention window for execution snapshots. cleanupExpiredSnapshots() runs
+// daily and deletes rows past this point; without expires_at set, nothing
+// is ever collected.
+const SNAPSHOT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 const executionAbortControllers = new Map<string, AbortController>();
 
@@ -46,6 +54,16 @@ function buildServerState(guildId: string): ServerState {
         }))
       : [],
   };
+}
+
+function buildConflictDetails(
+  diffConflicts: RepairConflict[],
+  assumptionMessages: string[]
+): RepairConflict[] {
+  return [
+    ...diffConflicts,
+    ...assumptionMessages.map((message) => ({ kind: "failed_assumption" as const, message })),
+  ];
 }
 
 const listQuerySchema = z.object({
@@ -198,7 +216,9 @@ plansApp.post("/:planId/execute", async (c) => {
       if (conv.forkStateHash !== currentHash) {
         return c.json(
           {
-            error: "Server state has changed since planning. Start a new conversation.",
+            error: "Server state has changed since planning. Re-plan with AI to adapt the plan.",
+            conflicts: ["Server state changed externally since planning began."],
+            canAIRepair: true,
           },
           409
         );
@@ -233,6 +253,17 @@ plansApp.post("/:planId/execute", async (c) => {
     return c.json({ error: "Plan has no desiredState and no conversation to resolve from" }, 400);
   }
   const diffResult = diffEngine(serverState, desiredState);
+
+  if (diffResult.conflicts.length > 0) {
+    return c.json(
+      {
+        error: "Plan references resources that no longer exist. Re-plan with AI to adapt it.",
+        conflicts: diffResult.conflicts.map((conflict) => conflict.message),
+        canAIRepair: Boolean(plan.conversationId),
+      },
+      409
+    );
+  }
 
   // 5. Pre-execution assumption checks
   const allAssumptions = diffResult.steps
@@ -336,6 +367,7 @@ plansApp.post("/:planId/execute", async (c) => {
       guildId,
       planId,
       data: serverState as unknown as Record<string, unknown>,
+      expiresAt: new Date(Date.now() + SNAPSHOT_RETENTION_MS),
     });
 
     // 6. Execute
@@ -375,6 +407,7 @@ plansApp.post("/:planId/execute", async (c) => {
       guildId,
       planId,
       data: afterState as unknown as Record<string, unknown>,
+      expiresAt: new Date(Date.now() + SNAPSHOT_RETENTION_MS),
     });
 
     // 8. Update plan status
@@ -462,6 +495,136 @@ plansApp.post("/:planId/execute", async (c) => {
   }
 });
 
+// ── Re-plan stale plan with fresh Discord state ────────────────────────────
+
+plansApp.post("/:planId/replan", async (c) => {
+  const user = requireUser(c);
+  const guildId = c.req.param("guildId")!;
+  const planId = c.req.param("planId")!;
+
+  const operable = checkGuildOperable(guildId);
+  if (!operable.ok) return c.json({ error: operable.error }, operable.status);
+
+  if (!(await userHasManageGuild(user.id, guildId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const [plan] = await db.select().from(plans).where(eq(plans.id, planId));
+  if (!plan || plan.guildId !== guildId) return c.json({ error: "Plan not found" }, 404);
+  if (!plan.conversationId) {
+    return c.json({ error: "This plan has no conversation context for AI repair" }, 409);
+  }
+  if (plan.status !== "draft" && plan.status !== "approved") {
+    return c.json({ error: "Only unexecuted plans can be re-planned" }, 400);
+  }
+
+  const [conversation] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, plan.conversationId));
+  if (!conversation || conversation.guildId !== guildId) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+
+  const planData = plan.planData as unknown as PlanData;
+  if (!planData.desiredState) {
+    return c.json({ error: "Plan has no desired state to repair" }, 400);
+  }
+
+  const currentState = buildServerState(guildId);
+  const diffResult = diffEngine(currentState, planData.desiredState);
+  const assumptions = diffResult.steps.flatMap((step) => {
+    const tool = getTool(step.toolName);
+    return tool.getAssumptions ? tool.getAssumptions(step.params) : [];
+  });
+  const failedAssumptions = evaluateAssumptions(assumptions, currentState)
+    .filter((result) => !result.passed)
+    .map((result) => result.message);
+  const conflicts = buildConflictDetails(diffResult.conflicts, failedAssumptions);
+  const currentHash = hashServerState(currentState as unknown as Record<string, unknown>);
+
+  if (conflicts.length === 0 && conversation.forkStateHash !== currentHash) {
+    conflicts.push({
+      kind: "server_state_changed",
+      message: "Server state changed externally since planning began.",
+    });
+  }
+
+  const [latestIteration] = await db
+    .select()
+    .from(planIterations)
+    .where(eq(planIterations.conversationId, conversation.id))
+    .orderBy(desc(planIterations.version))
+    .limit(1);
+  const repairPrompt = buildRepairPrompt({
+    currentState,
+    previousDesiredState: planData.desiredState,
+    conflicts,
+  });
+
+  const session = new PlanningSession({
+    guildId,
+    conversationId: conversation.id,
+    userPrompt: conversation.userPrompt,
+    serverState: currentState,
+    forkStateHash: currentHash,
+    messages: conversation.messages as unknown as LLMMessage[],
+    repairPrompt,
+    emit: async (event) => {
+      emitConversationEvent(conversation.id, event);
+      if (event.type === "ask_user") {
+        await db
+          .update(conversations)
+          .set({ status: "waiting_for_user", updatedAt: new Date() })
+          .where(eq(conversations.id, conversation.id));
+      }
+      if (event.type === "completed") {
+        await db
+          .update(conversations)
+          .set({ status: "completed", updatedAt: new Date() })
+          .where(eq(conversations.id, conversation.id));
+      }
+      if (event.type === "error") {
+        removeSession(conversation.id);
+        await db
+          .update(conversations)
+          .set({ status: "error", updatedAt: new Date() })
+          .where(eq(conversations.id, conversation.id));
+      }
+    },
+    onTurnComplete: async (repairSession) => {
+      const version = repairSession.store.getState().version;
+      await db.insert(planIterations).values({
+        conversationId: conversation.id,
+        version,
+        type: "llm_generated",
+        desiredState: repairSession.store.snapshot() as unknown as Record<string, unknown>,
+      });
+      repairSession.store.getState().version += 1;
+      await db
+        .update(conversations)
+        .set({
+          messages: repairSession.getMessages() as unknown as Record<string, unknown>[],
+          updatedAt: new Date(),
+        })
+        .where(eq(conversations.id, conversation.id));
+    },
+  });
+
+  session.store.getState().version = (latestIteration?.version ?? -1) + 1;
+  await db
+    .update(conversations)
+    .set({ status: "planning", forkStateHash: currentHash, updatedAt: new Date() })
+    .where(eq(conversations.id, conversation.id));
+  setSession(conversation.id, session);
+  session.start().catch((err) => {
+    logger.error(err, "[plans] AI re-plan failed");
+    removeSession(conversation.id);
+  });
+
+  return c.json({ replanStarted: true, conversationId: conversation.id, conflicts }, 202);
+});
+
 // ── Abort execution ─────────────────────────────────────────────────────────
 
 plansApp.post("/:planId/abort", async (c) => {
@@ -523,11 +686,21 @@ plansApp.post("/:planId/rollback", async (c) => {
   }
 
   const beforeState = beforeSnapshot.data as unknown as ServerState;
-  const currentState = buildServerState(guildId);
+  const currentState = await buildCurrentStateFromDiscord(guildId);
 
   // 3. Diff current → before (reverse)
   const beforeDesiredState = fork(beforeState);
   const diffResult = diffEngine(currentState, beforeDesiredState);
+
+  if (diffResult.conflicts.length > 0) {
+    return c.json(
+      {
+        error: "Rollback is blocked because resources from the before-state no longer exist.",
+        conflicts: diffResult.conflicts.map((conflict) => conflict.message),
+      },
+      409
+    );
+  }
 
   if (diffResult.steps.length === 0) {
     await db.update(plans).set({ status: "rolled_back" }).where(eq(plans.id, planId));

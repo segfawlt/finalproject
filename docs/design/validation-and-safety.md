@@ -8,7 +8,15 @@ See [desired-state-and-diff-engine.md](./desired-state-and-diff-engine.md#the-4-
 
 ## Two-Stage Validation Pipeline
 
-All plans pass through two validation stages at approval, before execution.
+Validation happens in stages at different points, not all at approval. Stage 1
+(hard-coded checks) runs at the **start of execution**, after the pre-execution
+conflict check and before any Discord mutation. Approval itself runs no
+validation — it only locks the reviewed desired state as the contract to execute.
+
+Stage 2 (server-rule enforcement) is where doc intent and current code diverge —
+the **intended** design folds rules into **planning**, but today they are checked
+at **execution time**. See the Stage 2 section below for the full status and the
+pending decision.
 
 ### Stage 1: Hard-Coded Validation (deterministic, fast, no LLM)
 
@@ -16,54 +24,112 @@ Five groups, executed in order:
 
 **A. Permission Checks**
 
-- All permission names are valid (in PermissionFlagsBits)
-- Bot has required Discord permissions for each action
-- **Bot role position MUST be highest in the server** — if any plan step targets
-  an existing role whose position > bot's highest role position, the plan is BLOCKED.
+- Permission names in `set_overwrite` are valid (present in `DISCORD_PERMISSIONS`)
+- Bot has ADMINISTRATOR permission (BLOCK — system refuses to operate without it)
+- **Bot role position MUST be strictly above every targeted role** — if any plan
+  step targets an existing role whose position >= bot's highest role position, the
+  plan is BLOCKED.
   This is a hard requirement, same as ADMINISTRATOR. The bot cannot modify roles
   above its own, and partial state from a failed role edit is worse than blocking
   upfront.
-- No attempt to modify roles above bot's role (same check as above — single
-  validation logic)
-- Bot has ADMINISTRATOR permission (BLOCK — system refuses to operate without it)
+- No attempt to modify (`edit_role`/`delete_role`/`move_role`) or assign
+  (`add_role_to_member`/`remove_role_from_member`) a role at or above the bot's highest
+  role — same hierarchy invariant as above.
+
+> **Not implemented — "bot has required Discord permissions for each action":**
+> redundant by construction. ADMINISTRATOR is a hard block above, and it grants
+> every permission, so a per-action permission check can never fail on a plan
+> that is allowed to run at all. Left out deliberately.
 
 **B. Dependency Checks**
 
 - All symbolic references resolve to a defined symbol
-- Symbol types match parameter expectations (parent=$cat_0 must be type "category")
-- No circular dependencies in depends_on
+- Symbol types match parameter expectations: `role_id` must reference a `role`
+  symbol; `channel_id` and `parent_id` must reference a `channel` symbol.
+  (Categories are emitted with symbol type `"channel"` by the diff engine, so a
+  category symbol satisfies `parent_id`.) Symbols of type `"unknown"` are skipped.
+- No circular dependencies in `dependsOn` (Kahn's algorithm)
+- Dependency indices are in range (no dangling `dependsOn` targets)
 - DAG is topologically sortable
 
 **C. Resource Constraints**
 
-- No duplicate names within the plan
+- No duplicate names within the plan's `create_*` steps
+- No duplicate member-role operations (same `member_id:role_id` twice)
 - Category child count won't exceed Discord limit (50)
-- Role position ordering valid
-- Channel type constraints respected (topic only on text, bitrate only on voice)
-- Bot has ADMINISTRATOR permission (BLOCK — system refuses to operate without it)
+- Channel type constraints respected: `topic` only on text/announcement (type 0/5);
+  `bitrate` only on voice/stage (type 2/13)
+
+> **Not implemented — "role position ordering valid":** no concrete invariant to
+> enforce among roles below the bot. Discord normalizes role positions server-side,
+> and the diff engine emits explicit `move_role` positions that resolve on apply.
+> The bot hierarchy boundary itself is validated above.
 
 **D. Safety Guards**
 
-- Won't delete IMPORTANT channels without explicit confirmation
-- Won't grant ADMINISTRATOR to roles created by the plan (unless explicitly requested)
-- Won't remove bot's own permissions
-- Won't delete ALL channels from a category
-- Rate limit estimate (warn if >5 minutes)
+- Won't grant ADMINISTRATOR to roles created by the plan (BLOCK — unless the perm
+  set explicitly includes it)
+- Rate limit estimate (WARN if the plan may take >5 minutes)
+- Overwrite-consolidation hint (WARN): if two unsynced channels
+  (`lockPermissions: false`) in the same category carry identical overwrites, the
+  plan is flagged to push the shared overwrites up to the category once. This runs
+  in `validateOverwriteConsolidation`, tagged `D. Safety`.
+
+> **Not implemented — deliberately.**
+>
+> - **"Won't remove bot's own permissions":** impossible to hit. The bot holds
+>   ADMINISTRATOR, which bypasses all channel overwrites, so it can never be locked
+>   out by one. The code documents this rationale inline (`validation.ts`,
+>   `validateSafetyGuards`). No check needed.
+> - **"Won't delete IMPORTANT channels" / "Won't delete ALL channels from a
+>   category":** both contradict the diff engine's Layer 3 philosophy — _present,
+>   don't judge; no heuristics, no scoring, no thresholds_. There is no notion of an
+>   "important" channel in the model, and tearing down a category is often
+>   intentional. The approval UI already surfaces every deletion (with message
+>   counts) for the human to accept. A hard block or warning here would be
+>   paternalistic. Left out.
 
 **E. Plan Integrity**
 
 - Plan has at least one step
-- No dangling dependencies
-- Status is "draft" or "validated"
-- planData JSON matches Zod schema
+- Status is `draft` or `validated`
 
-### Stage 2: LLM Policy Check (semantic, flexible)
+> Dangling/circular dependency checks live in Group B (they run over the DAG), not
+> here.
+>
+> **Not implemented — "planData matches Zod schema":** `planData`/steps are produced
+> internally by the diff engine (deterministic), never parsed from untrusted input,
+> and the TypeScript types already constrain the shape. There is no `PlanData` Zod
+> schema and no malformed-input path to guard. Left out.
 
-- Server rules are included directly in the planning prompt
-- LLM compares the plan against all rules
-- Violations have severity: **warning** or **block**
-- Completeness suggestions are optional ("Did you forget...?") and never block
-- No RAG or vector embeddings needed — rules are small and fit in context
+### Stage 2: Server-Rule Enforcement (semantic, flexible)
+
+Server rules are per-guild natural-language policy strings (`rules` table:
+`{ guildId, ruleText }`). The **intended** design is compliant-by-construction:
+the rules are injected into the planning prompt so the LLM weighs them as it
+builds the plan, and the human approval gate in Studio is the backstop. No RAG or
+embeddings — rules are small and fit in context.
+
+> **Implementation status — does not yet match the intended design.** Today the
+> planner (`buildSystemPrompt` in `planning-session.ts`) does **not** query the
+> `rules` table, and rule enforcement instead happens at **execution time** via
+> `validateWithLLM` (`validation.ts`), a second LLM pass tagged `Stage 2: Policy`
+> that reads the rules + a plan summary and returns block/warning issues. It
+> no-ops when `LLM_API_KEY` is unset or the guild has no rules.
+>
+> **Planned change (decision pending):** move rules into the planning prompt.
+> Open question — whether to _also_ keep `validateWithLLM` as an execution-time
+> backstop:
+>
+> - **(a) Prompt only** — drop `validateWithLLM`; rely on the planning prompt +
+>   human approval. Simpler, one fewer LLM call, no checker-LLM failure mode.
+> - **(b) Prompt + `validateWithLLM`** — keep the execution-time pass as automated
+>   enforcement that doesn't depend on the approver knowing every rule. Costs a
+>   second LLM call and adds a checker-disagrees-with-planner failure mode.
+>
+> Note: a _hardcoded deterministic_ backstop is not an option here — server rules
+> are free text, so enforcing them without an LLM would require redesigning the
+> `rules` schema into structured predicates.
 
 ---
 
@@ -78,11 +144,25 @@ Before execution, the system reads fresh Discord state and checks:
 
 ### Conflict Resolution: Re-Plan with Fresh State
 
-When any check fails, execution is **blocked**. The user is shown a conflict summary and a single action:
+When any check fails, execution is **blocked**. There is no "Force Apply" option:
+executing against stale assumptions risks partial state on the Discord server,
+even with rollback.
 
-**Re-plan with fresh state.** The system re-forks the DesiredState from fresh Discord state, then resumes the planning loop with a repair prompt: the fresh server state text, the full conversation history, a conflict summary listing what changed, and an instruction to adapt the plan. The LLM adjusts its tool calls accordingly — for trivial changes (a rename) this is one tool call; for major structural drift it may use `ask_user` for guidance. The adapted plan produces a new iteration in the same conversation. The user reviews the updated plan and approves again.
+**Intended flow — re-plan with fresh state.** The system re-forks the DesiredState
+from fresh Discord state, then resumes the planning loop with a repair prompt: the
+fresh server state text, the full conversation history, a conflict summary listing
+what changed, and an instruction to adapt the plan. The LLM adjusts its tool calls
+accordingly — for trivial changes (a rename) this is one tool call; for major
+structural drift it may use `ask_user` for guidance. The adapted plan produces a
+new iteration in the same conversation. The user reviews the updated plan and
+approves again. This preserves the user's conversation context and intent.
 
-There is no "Force Apply" option. Executing a plan against stale assumptions risks partial state on the Discord server, even with rollback. The exclusive path is to feed the LLM fresh state and let it repair the plan — preserving the user's conversation context and intent.
+> **Implementation status — built.** `POST /plans/:planId/replan` is an explicit,
+> user-confirmed repair action. It re-forks from current Discord state, gives the
+> planner the persisted conversation context, the prior desired state, and structured
+> conflict details, then persists the result as a new iteration. It never executes the
+> repaired plan; the user reviews and approves it again. Missing active channels and
+> roles are reported by the diff engine as structured conflicts rather than exceptions.
 
 ---
 

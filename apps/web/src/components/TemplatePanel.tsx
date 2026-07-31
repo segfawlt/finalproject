@@ -106,14 +106,14 @@ export default function TemplatePanel({
   });
 
   return (
-    <div className="mb-6 p-4 bg-discord-bg-secondary rounded-lg border border-discord-divider max-w-2xl">
+    <div className="mb-6 p-4 bg-shell-surface2 rounded-lg border border-shell-border max-w-2xl">
       <div className="flex items-center gap-2 mb-3">
         <button
           onClick={() => setTab("active")}
           className={`px-3 py-1 rounded-md text-xs uppercase tracking-wide transition-colors ${
             tab === "active"
-              ? "bg-discord-accent text-white"
-              : "bg-discord-bg-tertiary text-discord-text-muted hover:text-discord-text"
+              ? "bg-shell-accent text-shell-accent-fg"
+              : "bg-shell-canvas text-shell-text-muted hover:text-shell-text"
           }`}
         >
           Active ({active.length})
@@ -122,8 +122,8 @@ export default function TemplatePanel({
           onClick={() => setTab("browse")}
           className={`px-3 py-1 rounded-md text-xs uppercase tracking-wide transition-colors ${
             tab === "browse"
-              ? "bg-discord-accent text-white"
-              : "bg-discord-bg-tertiary text-discord-text-muted hover:text-discord-text"
+              ? "bg-shell-accent text-shell-accent-fg"
+              : "bg-shell-canvas text-shell-text-muted hover:text-shell-text"
           }`}
         >
           Browse
@@ -131,7 +131,7 @@ export default function TemplatePanel({
       </div>
 
       {error && (
-        <div className="mb-2 p-2 bg-red-900/40 border border-red-700 rounded text-red-200 text-xs">
+        <div className="mb-2 p-2 bg-error/10 border border-error/40 rounded text-error text-xs">
           {error}
         </div>
       )}
@@ -139,11 +139,11 @@ export default function TemplatePanel({
       {tab === "active" ? (
         <div>
           {active.length === 0 ? (
-            <div className="text-discord-text-muted text-xs">
+            <div className="text-shell-text-muted text-xs">
               No templates in context. Switch to{" "}
               <button
                 onClick={() => setTab("browse")}
-                className="text-discord-text-link underline hover:text-white transition-colors"
+                className="text-shell-text-link underline hover:text-shell-text transition-colors"
               >
                 Browse
               </button>{" "}
@@ -154,12 +154,12 @@ export default function TemplatePanel({
               {active.map((tmpl) => (
                 <span
                   key={tmpl.id}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-discord-bg-tertiary text-discord-text rounded-full text-xs border border-discord-divider hover:border-discord-text-subtle/30 transition-colors"
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-shell-canvas text-shell-text rounded-full text-xs border border-shell-border hover:border-shell-border-strong transition-colors"
                 >
                   {tmpl.name}
                   <button
                     onClick={() => removeTemplate(tmpl.id)}
-                    className="text-discord-text-muted hover:text-white ml-1 transition-colors"
+                    className="text-shell-text-muted hover:text-shell-text ml-1 transition-colors"
                     aria-label={`Remove ${tmpl.name}`}
                   >
                     <X size={12} />
@@ -168,7 +168,7 @@ export default function TemplatePanel({
               ))}
             </div>
           )}
-          <div className="text-xs text-discord-text-muted">
+          <div className="text-xs text-shell-text-muted">
             Templates are added as ideas for the LLM. They are not merged automatically.
           </div>
         </div>
@@ -177,19 +177,19 @@ export default function TemplatePanel({
           <div className="relative mb-3">
             <Search
               size={14}
-              className="absolute left-2 top-1/2 -translate-y-1/2 text-discord-text-muted"
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-shell-text-muted"
             />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search templates…"
-              className="w-full pl-7 pr-2 py-1.5 rounded-md bg-discord-bg-tertiary text-discord-text text-sm border border-discord-divider focus:border-discord-accent focus:outline-none focus:ring-1 focus:ring-discord-accent/30 transition-colors"
+              className="w-full pl-7 pr-2 py-1.5 rounded-md bg-shell-canvas text-shell-text text-sm border border-shell-border focus:border-shell-accent focus:outline-none focus:ring-1 focus:ring-shell-accent/30 transition-colors"
             />
           </div>
           {loading ? (
-            <div className="text-discord-text-muted text-xs">Loading templates…</div>
+            <div className="text-shell-text-muted text-xs">Loading templates…</div>
           ) : filteredTemplates.length === 0 ? (
-            <div className="text-discord-text-muted text-xs">No templates found.</div>
+            <div className="text-shell-text-muted text-xs">No templates found.</div>
           ) : (
             <ul className="space-y-2 max-h-64 overflow-auto">
               {filteredTemplates.map((t) => {
@@ -198,23 +198,23 @@ export default function TemplatePanel({
                 return (
                   <li
                     key={t.id}
-                    className="group flex items-start gap-2 p-2 bg-discord-bg-tertiary border border-discord-divider rounded-md hover:border-discord-text-subtle/30 hover:bg-discord-channel-hover transition-colors"
+                    className="group flex items-start gap-2 p-2 bg-shell-canvas border border-shell-border rounded-md hover:border-shell-border-strong hover:bg-shell-surface2 transition-colors"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-discord-text text-sm font-medium truncate">
+                        <span className="text-shell-text text-sm font-medium truncate">
                           {t.name}
                         </span>
                         {t.isOfficial && (
-                          <span className="px-1.5 py-0.5 bg-blue-900/50 text-blue-300 rounded text-[10px] uppercase">
+                          <span className="px-1.5 py-0.5 bg-shell-surface3 text-shell-text-muted rounded text-[10px] uppercase">
                             official
                           </span>
                         )}
                       </div>
-                      <div className="text-discord-text-muted text-xs line-clamp-2 mt-0.5">
+                      <div className="text-shell-text-muted text-xs line-clamp-2 mt-0.5">
                         {t.description}
                       </div>
-                      <div className="text-discord-text-muted text-[10px] mt-1 flex items-center gap-2">
+                      <div className="text-shell-text-muted text-[10px] mt-1 flex items-center gap-2">
                         {t.category && <span>{t.category}</span>}
                         {t.tags.length > 0 && <span>· {t.tags.slice(0, 3).join(", ")}</span>}
                       </div>
@@ -224,10 +224,10 @@ export default function TemplatePanel({
                       disabled={isActive || isAdding || adding !== null}
                       className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors ${
                         isActive
-                          ? "bg-discord-bg-secondary text-discord-text-muted cursor-default"
+                          ? "bg-shell-surface2 text-shell-text-muted cursor-default"
                           : isAdding
-                            ? "bg-discord-accent/60 text-white"
-                            : "bg-discord-accent hover:bg-discord-accent-hover text-white"
+                            ? "bg-shell-accent/60 text-shell-accent-fg"
+                            : "bg-shell-accent hover:bg-shell-accent-hover text-shell-accent-fg"
                       } disabled:opacity-60`}
                     >
                       {isActive ? (

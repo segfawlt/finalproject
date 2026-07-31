@@ -5,7 +5,7 @@ export default function Login() {
   const login = useAuthStore((state) => state.login);
 
   return (
-    <div className="min-h-screen bg-discord-bg relative overflow-hidden flex items-center justify-center px-4">
+    <div className="min-h-screen bg-shell-canvas relative overflow-hidden flex items-center justify-center px-4">
       <div
         className="absolute inset-0 -z-10 opacity-70"
         aria-hidden
@@ -28,29 +28,29 @@ export default function Login() {
         <div className="flex flex-col items-center text-center mb-8">
           <div className="relative mb-5">
             <div
-              className="absolute inset-0 rounded-2xl blur-2xl bg-discord-accent/40"
+              className="absolute inset-0 rounded-2xl blur-2xl bg-shell-accent/40"
               aria-hidden
             />
-            <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-discord-accent to-indigo-500 flex items-center justify-center shadow-lg shadow-discord-accent/30">
-              <Sparkles size={28} className="text-white" strokeWidth={1.75} />
+            <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-shell-surface3 to-shell-border-strong flex items-center justify-center shadow-lg shadow-black/30">
+              <Sparkles size={28} className="text-shell-text" strokeWidth={1.75} />
             </div>
           </div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-discord-text-muted font-semibold mb-2">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-shell-text-muted font-semibold mb-2">
             Discord Platform
           </div>
-          <h1 className="text-3xl font-semibold text-discord-text tracking-tight">
+          <h1 className="text-3xl font-semibold text-shell-text tracking-tight">
             Design your server in plain language.
           </h1>
-          <p className="text-discord-text-muted text-sm mt-3 max-w-sm leading-relaxed">
+          <p className="text-shell-text-muted text-sm mt-3 max-w-sm leading-relaxed">
             AI plans, previews, and executes your Discord server configuration — channels, roles,
             and permissions — through a review-first workflow.
           </p>
         </div>
 
-        <div className="rounded-xl border border-discord-divider bg-discord-bg-secondary/80 backdrop-blur-md p-6 shadow-2xl shadow-black/40">
+        <div className="rounded-xl border border-shell-border bg-shell-surface2/80 backdrop-blur-md p-6 shadow-2xl shadow-black/40">
           <button
             onClick={login}
-            className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-3 bg-discord-accent hover:bg-discord-accent-hover text-white rounded-md font-medium transition-colors shadow-lg shadow-discord-accent/20"
+            className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-3 bg-shell-accent hover:bg-shell-accent-hover text-shell-accent-fg rounded-md font-medium transition-colors shadow-lg shadow-black/20"
           >
             <DiscordIcon />
             Sign in with Discord
@@ -62,7 +62,7 @@ export default function Login() {
             <Feature icon={Zap} label="Execute" />
           </div>
 
-          <p className="text-[11px] text-discord-text-subtle text-center mt-5">
+          <p className="text-[11px] text-shell-text-subtle text-center mt-5">
             By continuing, you authorize this app to manage servers you administer.
           </p>
         </div>
@@ -73,9 +73,9 @@ export default function Login() {
 
 function Feature({ icon: Icon, label }: { icon: typeof Sparkles; label: string }) {
   return (
-    <div className="flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-md bg-discord-bg-tertiary/60 border border-discord-divider">
-      <Icon size={14} className="text-discord-text-muted" strokeWidth={1.75} />
-      <span className="text-[10px] uppercase tracking-wider text-discord-text-muted font-semibold">
+    <div className="flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-md bg-shell-canvas/60 border border-shell-border">
+      <Icon size={14} className="text-shell-text-muted" strokeWidth={1.75} />
+      <span className="text-[10px] uppercase tracking-wider text-shell-text-muted font-semibold">
         {label}
       </span>
     </div>

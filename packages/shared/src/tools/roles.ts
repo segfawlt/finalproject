@@ -132,13 +132,6 @@ export function getRoleCreateAssumptions(params: CreateRoleParams): Assumption[]
       checked: false,
       status: "pending",
     },
-    {
-      type: "bot_position",
-      value: params.name,
-      resourceType: "role",
-      checked: false,
-      status: "pending",
-    },
   ];
 }
 
@@ -146,13 +139,6 @@ export function getRoleEditAssumptions(params: EditRoleParams): Assumption[] {
   const assumptions: Assumption[] = [
     {
       type: "exists",
-      value: params.id,
-      resourceType: "role",
-      checked: false,
-      status: "pending",
-    },
-    {
-      type: "bot_position",
       value: params.id,
       resourceType: "role",
       checked: false,
@@ -188,13 +174,6 @@ export function getRoleDeleteAssumptions(params: DeleteRoleParams): Assumption[]
       checked: false,
       status: "pending",
     },
-    {
-      type: "bot_position",
-      value: params.id,
-      resourceType: "role",
-      checked: false,
-      status: "pending",
-    },
   ];
 }
 
@@ -210,13 +189,6 @@ export function getRoleMoveAssumptions(params: MoveRoleParams): Assumption[] {
     {
       type: "position_valid",
       value: String(params.position),
-      resourceType: "role",
-      checked: false,
-      status: "pending",
-    },
-    {
-      type: "bot_position",
-      value: params.id,
       resourceType: "role",
       checked: false,
       status: "pending",

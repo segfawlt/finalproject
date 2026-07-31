@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LogOut, LayoutGrid, History as HistoryIcon } from "lucide-react";
+import { LogOut, LayoutGrid } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
 
 function BrandMark() {
@@ -52,12 +52,6 @@ interface NavLink {
 }
 
 const NAV_LINKS: NavLink[] = [
-  {
-    to: "/dashboard",
-    label: "Dashboard",
-    icon: HistoryIcon,
-    match: (p) => p.startsWith("/dashboard"),
-  },
   { to: "/studio", label: "Studio", icon: LayoutGrid, match: (p) => p.startsWith("/studio") },
 ];
 
@@ -70,17 +64,17 @@ export default function AppHeader() {
   if (!isAuthenticated) return null;
 
   return (
-    <header className="sticky top-0 z-40 h-14 bg-discord-bg-tertiary/85 backdrop-blur-md border-b border-discord-divider">
+    <header className="sticky top-0 z-40 h-14 bg-shell-canvas/85 backdrop-blur-md border-b border-shell-border">
       <div className="h-full max-w-screen-2xl mx-auto px-4 sm:px-6 flex items-center gap-4">
         <Link
-          to="/dashboard"
+          to="/studio"
           className="flex items-center gap-2.5 shrink-0 group"
           aria-label="Discord Platform home"
         >
           <span className="inline-flex items-center justify-center transition-transform group-hover:scale-105">
             <BrandMark />
           </span>
-          <span className="text-discord-text font-semibold text-sm tracking-tight">
+          <span className="text-shell-text font-semibold text-sm tracking-tight">
             Discord Platform
           </span>
         </Link>
@@ -95,8 +89,8 @@ export default function AppHeader() {
                 to={link.to}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                   active
-                    ? "bg-discord-channel-active text-discord-text"
-                    : "text-discord-text-muted hover:text-discord-text hover:bg-discord-bg-secondary"
+                    ? "bg-shell-surface3 text-shell-text"
+                    : "text-shell-text-muted hover:text-shell-text hover:bg-shell-surface2"
                 }`}
               >
                 <Icon size={14} strokeWidth={1.75} />
@@ -110,19 +104,19 @@ export default function AppHeader() {
 
         {user && (
           <div className="flex items-center gap-2.5">
-            <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded bg-discord-bg-secondary/60 border border-discord-divider">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-discord-accent to-indigo-400 flex items-center justify-center text-[10px] font-semibold text-white shrink-0">
+            <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded bg-shell-surface2/60 border border-shell-border">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-shell-surface3 to-shell-border-strong flex items-center justify-center text-[10px] font-semibold text-shell-text shrink-0">
                 {getInitials(user.name)}
               </div>
               <div className="text-xs leading-tight">
-                <div className="text-discord-text font-medium truncate max-w-[120px]">
+                <div className="text-shell-text font-medium truncate max-w-[120px]">
                   {user.name}
                 </div>
               </div>
             </div>
             <button
               onClick={logout}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs text-discord-text-muted hover:text-discord-text hover:bg-discord-bg-secondary transition-colors"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs text-shell-text-muted hover:text-shell-text hover:bg-shell-surface2 transition-colors"
               aria-label="Sign out"
             >
               <LogOut size={14} strokeWidth={1.75} />

@@ -85,12 +85,6 @@ export const guilds = pgTable("guilds", {
   lockAcquiredAt: timestamp("lock_acquired_at"),
   lockAcquiredBy: text("lock_acquired_by"),
   lockLastHeartbeatAt: timestamp("lock_last_heartbeat_at"),
-  phaseProgress: jsonb("phase_progress").notNull().default({
-    foundation: false,
-    layout: false,
-    access: false,
-    people: false,
-  }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -218,7 +212,6 @@ export const templates = pgTable(
     name: text("name").notNull(),
     description: text("description").notNull(),
     structure: jsonb("structure").notNull(),
-    questions: jsonb("questions").notNull().default([]),
     validationRules: jsonb("validation_rules").notNull().default([]),
     category: text("category"),
     tags: text("tags").array().notNull().default([]),

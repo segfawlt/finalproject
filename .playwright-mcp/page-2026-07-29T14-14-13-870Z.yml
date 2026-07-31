@@ -1,0 +1,23 @@
+- generic [ref=f7e3]:
+  - banner [ref=f7e4]:
+    - generic [ref=f7e5]:
+      - link "Discord Platform home" [ref=f7e6] [cursor=pointer]:
+        - /url: /studio
+        - generic [ref=f7e11]: Discord Platform
+      - navigation [ref=f7e12]:
+        - link "Studio" [ref=f7e13] [cursor=pointer]:
+          - /url: /studio
+      - generic [ref=f7e19]:
+        - generic [ref=f7e20]:
+          - generic [ref=f7e21]: NI
+          - generic [ref=f7e22]: nizk
+        - button "Sign out" [ref=f7e24] [cursor=pointer]
+  - generic [ref=f7e30]:
+    - generic [ref=f7e31]:
+      - generic [ref=f7e32]:
+        - generic [ref=f7e33]: Templates
+        - heading "Library" [level=1] [ref=f7e34]
+      - link "Back to Studio" [ref=f7e35] [cursor=pointer]:
+        - /url: /studio/1517217533168582838
+    - textbox "Search templates…" [ref=f7e40]
+    - generic [ref=f7e41]: Loading…

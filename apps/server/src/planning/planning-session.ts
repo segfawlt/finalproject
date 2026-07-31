@@ -34,7 +34,7 @@ export type PlanningEventEmitter = (event: PlanningEvent) => void | Promise<void
 /**
  * OpenRouter-compatible message format.
  */
-interface LLMMessage {
+export interface LLMMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
   tool_calls?: Array<{
@@ -53,6 +53,10 @@ interface PlanningSessionOptions {
   forkStateHash: string;
   emit: PlanningEventEmitter;
   onTurnComplete?: (session: PlanningSession) => Promise<void>;
+  /** Persisted conversation context for a fresh-state repair session. */
+  messages?: LLMMessage[];
+  /** Appended after the prior context to explain why planning restarted. */
+  repairPrompt?: string;
 }
 
 /**
@@ -102,12 +106,17 @@ export class PlanningSession {
     this.emit = options.emit;
     this.onTurnComplete = options.onTurnComplete;
 
-    // Build initial messages
+    // Repair sessions retain prior conversation context but always replace the
+    // old system message: the fresh server state is the only planning base.
     const systemPrompt = this.buildSystemPrompt(options.serverState);
-    this.messages = [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: options.userPrompt },
-    ];
+    const priorMessages = options.messages?.filter((message) => message.role !== "system") ?? [];
+    this.messages = [{ role: "system", content: systemPrompt }, ...priorMessages];
+
+    if (options.repairPrompt) {
+      this.messages.push({ role: "user", content: options.repairPrompt });
+    } else if (priorMessages.length === 0) {
+      this.messages.push({ role: "user", content: options.userPrompt });
+    }
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -344,7 +353,7 @@ export class PlanningSession {
 
       await this.emit({ type: "tool_result", toolName, result });
 
-      if (tool.executionMode === "planning_only") {
+      if (toolName === "ask_user") {
         return {
           type: "ask_user",
           question: params.question,
@@ -557,9 +566,7 @@ export class PlanningSession {
     lines.push("  Phase 1 — Foundation: Roles only (create/edit/delete/move_role).");
     lines.push("           Do NOT create categories, channels, or set overwrites in this phase.");
     lines.push("  Phase 2 — Server Layout: Categories + channel structure.");
-    lines.push(
-      "           Tools: create/edit/delete/move_category, create/edit/delete/move_channel."
-    );
+    lines.push("           Tools: create/edit/delete_category, create/edit/delete/move_channel.");
     lines.push("           Default lock_permissions: true on channels under categories.");
     lines.push("           Do NOT modify roles or set permission overwrites in this phase.");
     lines.push("  Phase 3 — Access Control: Channel/category overwrites.");

@@ -1,5 +1,17 @@
 import { useState } from "react";
-import { Check, CircleAlert, Loader, Pencil, RotateCcw, Save, Send, Undo2, X } from "lucide-react";
+import {
+  Check,
+  CircleAlert,
+  Library,
+  Loader,
+  Pencil,
+  RotateCcw,
+  Save,
+  Send,
+  Undo2,
+  X,
+} from "lucide-react";
+import SaveTemplateModal from "./SaveTemplateModal";
 import DesiredStateView from "../DesiredStateView";
 import type { DesiredState, ChannelBase, Role } from "../desired-state/types";
 import type { UseConversationResult, PlanningEvent, ExecEvent } from "../../hooks/useConversation";
@@ -25,14 +37,16 @@ export interface ChatAreaEditProps {
 
 interface ChatAreaProps {
   c: UseConversationResult;
+  guildId: string;
   guildName: string;
   edit: ChatAreaEditProps;
 }
 
 // ── ChatArea ──────────────────────────────────────────────────────────────
 
-export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
+export default function ChatArea({ c, guildId, guildName, edit }: ChatAreaProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const iterationsCount = c.iterations.length;
   const currentVersion =
     iterationsCount > 0 ? Math.max(...c.iterations.map((i) => i.version)) : null;
@@ -153,6 +167,14 @@ export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
                     >
                       Approve
                     </ActionButton>
+                    {c.desiredState && (
+                      <ActionButton
+                        onClick={() => setSaveTemplateOpen(true)}
+                        icon={<Library size={13} />}
+                      >
+                        Save as template
+                      </ActionButton>
+                    )}
                     <ActionButton onClick={c.cancelPlanning} disabled={c.inFlight}>
                       Cancel
                     </ActionButton>
@@ -187,6 +209,11 @@ export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
             <AssistantBubble accent="error" label="Execution failed">
               <div className="text-shell-text text-sm">{c.error}</div>
               <ActionRow>
+                {c.canAIRepair && (
+                  <ActionButton onClick={c.replanWithAI} icon={<RotateCcw size={13} />}>
+                    Re-plan with AI
+                  </ActionButton>
+                )}
                 <ActionButton onClick={c.reset} icon={<RotateCcw size={13} />}>
                   Start over
                 </ActionButton>
@@ -218,6 +245,15 @@ export default function ChatArea({ c, guildName, edit }: ChatAreaProps) {
         currentVersion={currentVersion}
         onRevert={c.revert}
       />
+
+      {c.desiredState && (
+        <SaveTemplateModal
+          open={saveTemplateOpen}
+          onClose={() => setSaveTemplateOpen(false)}
+          guildId={guildId}
+          desiredState={c.desiredState}
+        />
+      )}
     </div>
   );
 }
@@ -385,7 +421,7 @@ function ExecutionLog({ events }: { events: ExecEvent[] }) {
                 <span className="text-error">Step failed{ev.error ? `: ${ev.error}` : ""}</span>
               )}
               {ev.type === "step_retry" && (
-                <span className="text-shell-yellow">Retrying{ev.error ? `: ${ev.error}` : ""}</span>
+                <span className="text-warning">Retrying{ev.error ? `: ${ev.error}` : ""}</span>
               )}
               {ev.type === "rollback_started" && "Rolling back…"}
               {ev.type === "rollback_completed" && "Rollback complete"}
@@ -402,7 +438,7 @@ function StepBadge({ type }: { type: ExecEvent["type"] }) {
     step_started: { char: "●", cls: "text-agent-thinking" },
     step_completed: { char: "✓", cls: "text-agent-done" },
     step_failed: { char: "✕", cls: "text-error" },
-    step_retry: { char: "↻", cls: "text-shell-yellow" },
+    step_retry: { char: "↻", cls: "text-warning" },
     rollback_started: { char: "↶", cls: "text-shell-text-muted" },
     rollback_completed: { char: "↺", cls: "text-shell-text-muted" },
   };

@@ -51,6 +51,12 @@ export interface ExecutionOptions {
   emit: EventEmitter;
   abortSignal?: AbortSignal;
   beforeSnapshot?: ServerState;
+  /**
+   * Per-step wall-clock deadline in milliseconds. A single tool call that runs
+   * longer than this is aborted so the execution loop cannot block indefinitely
+   * on one hung Discord API call. Defaults to {@link DEFAULT_STEP_TIMEOUT_MS}.
+   */
+  stepTimeoutMs?: number;
 }
 
 export interface ExecutionResult {
@@ -179,6 +185,76 @@ async function dispatchStep(step: PlanStep, ctx: ExecuteContext): Promise<Record
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }
+}
+
+// ── Per-Step Deadline ────────────────────────────────────────────────────────
+
+/** Default per-step wall-clock deadline. Conservative: any single Discord tool
+ *  call is expected to finish well within this window. */
+const DEFAULT_STEP_TIMEOUT_MS = 30 * 1000;
+
+/** Marker thrown when a step exceeds its deadline. Message contains "timeout"
+ *  so {@link isTransientError} classifies it as retryable. */
+class StepTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`Step timeout after ${ms}ms`);
+    this.name = "StepTimeoutError";
+  }
+}
+
+/** Marker thrown when the abort signal fires while a step is in flight. Not
+ *  transient: it terminates the retry loop immediately and triggers rollback. */
+class StepAbortedError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "StepAbortedError";
+  }
+}
+
+/**
+ * Race a step against its per-step deadline and the plan-level abort signal.
+ *
+ * The underlying `dispatchStep` promise cannot be cancelled (Discord.js has no
+ * abort hook here), so on timeout/abort it is left to settle in the background
+ * while the caller stops waiting. This is what unblocks the execution loop: a
+ * hung call no longer holds up the whole plan.
+ */
+function dispatchWithDeadline(
+  step: PlanStep,
+  ctx: ExecuteContext,
+  timeoutMs: number,
+  abortSignal?: AbortSignal
+): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      abortSignal?.removeEventListener("abort", onAbort);
+      fn();
+    };
+
+    const timer = setTimeout(
+      () => settle(() => reject(new StepTimeoutError(timeoutMs))),
+      timeoutMs
+    );
+    const onAbort = () =>
+      settle(() =>
+        reject(new StepAbortedError(String(abortSignal?.reason ?? "Execution aborted")))
+      );
+
+    if (abortSignal?.aborted) {
+      onAbort();
+      return;
+    }
+    abortSignal?.addEventListener("abort", onAbort, { once: true });
+
+    dispatchStep(step, ctx).then(
+      (result) => settle(() => resolve(result)),
+      (err) => settle(() => reject(err))
+    );
+  });
 }
 
 // ── Error Classification ─────────────────────────────────────────────────────
@@ -323,6 +399,15 @@ export async function rollbackFull(
   const desiredBefore = fork(beforeSnapshot);
   const diffResult = diffEngine(currentState, desiredBefore);
 
+  if (diffResult.conflicts.length > 0) {
+    const error = `Rollback blocked: ${diffResult.conflicts.map((conflict) => conflict.message).join(" ")}`;
+    logger.error(
+      { planId, conflicts: diffResult.conflicts },
+      "[execution-engine] rollback blocked"
+    );
+    return { success: false, completedSteps: [], error };
+  }
+
   if (diffResult.steps.length === 0) {
     logger.info({ planId }, "[execution-engine] rollback no-op (no diff)");
     await emit({ type: "rollback_completed", planId });
@@ -364,6 +449,7 @@ export async function rollbackFull(
  */
 export async function executePlan(options: ExecutionOptions): Promise<ExecutionResult> {
   const { planId, steps, symbolTable, ctx, emit, abortSignal, beforeSnapshot } = options;
+  const stepTimeoutMs = options.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS;
   const completedSteps: PlanStep[] = [];
 
   logger.info(
@@ -422,7 +508,7 @@ export async function executePlan(options: ExecutionOptions): Promise<ExecutionR
     // Retry loop
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const result = await dispatchStep(step, ctx);
+        const result = await dispatchWithDeadline(step, ctx, stepTimeoutMs, abortSignal);
         step.result = result;
         step.status = "completed";
         success = true;
@@ -439,6 +525,12 @@ export async function executePlan(options: ExecutionOptions): Promise<ExecutionR
         break;
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
+
+        // Abort (plan-level timeout or user request) fired mid-step — stop
+        // immediately, do not retry. Rollback is handled below.
+        if (err instanceof StepAbortedError) {
+          break;
+        }
 
         if (isTransientError(err) && attempt < MAX_RETRIES) {
           const backoff = computeBackoff(attempt);

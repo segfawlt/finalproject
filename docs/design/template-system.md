@@ -13,7 +13,6 @@ Stored as JSONB in PostgreSQL with metadata (unchanged from original design):
 
 - id, name, description, version, author_id
 - structure (roles, categories, channels with symbols and overwrites)
-- questions (dynamic parameters like team_count — Phase 2)
 - validation_rules
 - category, tags, is_official, status
 - guildId — templates are **per-server**, not global
@@ -40,7 +39,8 @@ Stored as JSONB in PostgreSQL with metadata (unchanged from original design):
 
 ### Template Library
 
-Per-server library browsable from the Dashboard and as a sidebar in the Studio:
+Per-server library browsable from the Studio's `TemplatesTab` (right panel)
+and the standalone `/templates/:guildId` page:
 
 - Browse by tags, search by name/description
 - Card preview for each template (name, description, tags, structure tree)

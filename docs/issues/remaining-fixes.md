@@ -412,10 +412,10 @@ After each fix: `pnpm lint && pnpm tsc --noEmit -p apps/server/tsconfig.json`
 
 | Issue                      | Priority | Notes                                                                                 |
 | -------------------------- | -------- | ------------------------------------------------------------------------------------- |
-| Dashboard page             | Medium   | Still "coming soon" placeholder. Needs plan history list, rules CRUD UI, bot settings |
-| Setup page                 | Medium   | Still "coming soon" placeholder. Needs guided server configuration wizard             |
-| Tests                      | Medium   | Zero test files. AGENTS.md has comprehensive strategy                                 |
-| Template browser UI        | Low      | Templates CRUD works but no frontend to browse/search/apply templates                 |
+| Dashboard page             | Resolved | Retired in Studio consolidation. Rules CRUD moved to Studio `SettingsTab`; `/dashboard` redirects to `/studio` (`Dashboard.tsx` stashed) |
+| Setup page                 | Resolved | Retired in Studio consolidation. `/setup` redirects to `/studio` (`Setup.tsx` stashed); guild picker handles bot-invite |
+| Tests                      | Medium   | AGENTS.md has comprehensive strategy                                                  |
+| Template browser UI        | Resolved | In-panel `TemplatesTab` browser (search, counts, Merge) + standalone `/templates/:guildId` page + editable structure in editor |
 | System prompt architecture | Low      | Design issue #7 — guidance file loading into planning prompt. Deferred                |
 | Plan optimizer             | Rejected | Design issue #10 — explicitly rejected by 4-layer prevention stack                    |
 | Diff engine heuristics     | Rejected | Design issue #9 — explicitly rejected by "dumb and deterministic" principle           |

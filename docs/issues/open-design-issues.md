@@ -3,9 +3,10 @@
 Outstanding design decisions that need resolution before or during implementation.
 Ranked by downstream dependency — issues earlier in the list block more things.
 
-Last updated: 2026-05-28. Most issues are now RESOLVED (implemented or decided).
-Open work: Configuration procedure (#24), lockPermissions (#23), template system (#18).
-Member role management (#22) is now IMPLEMENTED.
+Last updated: 2026-07-27. Most issues are now RESOLVED (implemented or decided).
+Open work: lockPermissions (#23), template system (#18).
+Member role management (#22) is now IMPLEMENTED. Configuration procedure (#24) was
+DROPPED — see that section.
 
 ---
 
@@ -346,7 +347,7 @@ design treats templates as reference material added to the system prompt.
 - "View in Studio" opens a read-only template viewer, accessible from:
   - Template library browser
   - Template list sidebar in a conversation
-  - Dashboard template detail page
+  - Studio `TemplatesTab` (right panel)
 - "Fork & Edit" creates a new template entry immediately, opens an editable Studio,
   auto-saves every edit via the DesiredStateStore snapshot pattern, supports
   revert-to-original and [Discard] (deletes the forked entry)
@@ -442,11 +443,6 @@ management.
 - System prompt: Phase 4 (People) enforcement
 - TOOL_ORDER updated: member steps run after role creation, before overwrites
 
-**Remaining for #22:**
-
-- Configuration procedure (#24) — guided setup flow replaced with passive sidebar
-- `phaseProgress` JSONB column on guilds table (was originally `guided_setup_completed`)
-
 **Downstream:** Full 4-phase planning model. Member role assignment completes
 the planning surface.
 
@@ -501,37 +497,19 @@ permission models.
 
 ---
 
-## 24. Configuration Procedure — Structured Workflow
+## 24. Configuration Procedure — Structured Workflow (DROPPED)
 
-**Status:** IN DESIGN — see [docs/design/member-role-management.md](../design/member-role-management.md#configuration-procedure-recommended-workflow)
+**Status:** DROPPED. Never fully built and now removed from scope. The passive
+sidebar UI (`ProcedureSidebar`) was never shipped, and the supporting
+`phaseProgress` JSONB column + guilds PATCH handler have been removed (migration
+`0010_flashy_salo.sql`). Scoping is instead handled by the planner's system
+prompt (Phase 1–4 guidance) rather than a UI checklist.
 
-**Problem:** No structured workflow for server configuration. Users may configure
-in any order (roles after channels, permissions before layout), leading to
-incoherent plans and LLM confusion. The original "guided setup" design relied on
-the LLM as a tour guide — unreliable across models.
-
-**Design decisions:**
-
-- **Passive sidebar checklist.** Always visible in Studio. Shows 4 phases with
-  completion status. Never blocks, never nags — just offers structure.
-- **Per-phase predefined prompts.** Each phase has a well-crafted scoped prompt
-  that explicitly forbids touching resources from other phases. The user clicks
-  "[Use prompt →]" to start a new conversation with that prompt.
-- **Prompt preview card.** Before sending, the Studio shows the suggested prompt
-  in an editable card. User can tweak before sending or approve immediately.
-- **Per-phase progress tracking.** `phaseProgress` JSONB on guilds table:
-  `{ foundation, layout, access, people }`. Updated when a phase's plan executes.
-- **Depreciation warnings.** Reverting to an earlier phase after later phases are
-  complete shows a non-blocking warning: "2 channels in that category may be
-  affected."
-- **Phase exit is implicit.** If the user types their own prompt without using a
-  suggested one, the sidebar stays visible but no longer highlights a current
-  phase. No explicit "exit" action needed.
-- **3 files to change:** DB schema (phaseProgress column), guilds PATCH route,
-  Studio sidebar component.
-
-**Downstream:** Cleaner planning sessions, less LLM confusion, better plan quality
-through enforced scoping.
+**Original problem (for the record):** No structured workflow for server
+configuration — users could configure in any order, leading to incoherent plans.
+The idea was a passive Studio sidebar with 4 phases, per-phase scoped prompts, and
+`phaseProgress` tracking. This was superseded by the chat-native Studio redesign;
+the phase discipline it aimed for lives in the planner prompt.
 
 ---
 
@@ -575,7 +553,7 @@ Rollback Fix (#21) ──────────┘ (execution engine, independ
 - #21 (Rollback): Track created IDs, don't re-diff stale cache.
 - #22 (Member roles): IMPLEMENTED. 15 files changed. Declarative model, symmetric diffing, Phase 4.
 - #23 (lockPermissions): IN DESIGN (updated). Heuristic sync reading, auto-de-sync as safety net, arraysEqualSorted comparison. 8 files.
-- #24 (Configuration procedure): IN DESIGN. Passive sidebar, per-phase scoped prompts, prompt preview card. 3 files.
+- #24 (Configuration procedure): DROPPED. Never shipped; phaseProgress column removed (migration 0010). Scoping lives in the planner prompt.
 - #23 (lockPermissions): Category-level permission inheritance, post-execution "Fix This" pattern. ~5 files, deferred. Affects LLM permission strategy.
 
 ```

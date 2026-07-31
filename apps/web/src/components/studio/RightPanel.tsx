@@ -12,6 +12,7 @@ import ChannelDetail from "./ChannelDetail";
 import RolesTab from "./RolesTab";
 import MembersTab from "./MembersTab";
 import TemplatesTab from "./TemplatesTab";
+import SettingsTab from "./SettingsTab";
 
 interface RightPanelProps {
   c: UseConversationResult;
@@ -63,6 +64,7 @@ export default function RightPanel({ c, guildId }: RightPanelProps) {
     { type: "roles", label: "Roles" },
     { type: "members", label: "Members" },
     { type: "templates", label: "Templates" },
+    { type: "settings", label: "Settings" },
   ];
 
   function handleAdd(type: AddOption["type"]) {
@@ -110,7 +112,10 @@ export default function RightPanel({ c, guildId }: RightPanelProps) {
         )}
         {activeTab === "roles" && <RolesTab guildId={guildId} />}
         {activeTab === "members" && <MembersTab guildId={guildId} />}
-        {activeTab === "templates" && <TemplatesTab guildId={guildId} />}
+        {activeTab === "templates" && (
+          <TemplatesTab guildId={guildId} onMerge={c.beginPlanning} />
+        )}
+        {activeTab === "settings" && <SettingsTab guildId={guildId} />}
         {activeChannelId && (
           <ChannelDetailContent
             loading={serverLoading}
@@ -127,6 +132,7 @@ export default function RightPanel({ c, guildId }: RightPanelProps) {
             activeTab !== "roles" &&
             activeTab !== "members" &&
             activeTab !== "templates" &&
+            activeTab !== "settings" &&
             !activeChannelId && (
               <div className="p-4 text-shell-text-muted text-sm">
                 Select a tab above to view its contents.

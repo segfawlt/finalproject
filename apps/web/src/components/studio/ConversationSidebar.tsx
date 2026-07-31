@@ -104,7 +104,7 @@ export default function ConversationSidebar({
             Loading…
           </div>
         ) : error ? (
-          <div className="px-2 py-3 text-shell-red text-xs">{error}</div>
+          <div className="px-2 py-3 text-error text-xs">{error}</div>
         ) : conversations.length === 0 ? (
           <div className="px-2 py-6 text-center text-shell-text-subtle text-xs">
             No conversations yet.

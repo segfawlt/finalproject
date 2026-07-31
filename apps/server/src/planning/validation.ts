@@ -68,10 +68,10 @@ function validatePermissions(steps: PlanStep[], guildId: string): ValidationIssu
         const roleId = step.params.role_id as string | undefined;
         if (roleId && !roleId.startsWith("$") && cache) {
           const role = cache.roles.get(roleId);
-          if (role && role.position > botPosition) {
+          if (role && role.position >= botPosition) {
             issues.push({
               group: "A. Permission",
-              message: `Bot cannot assign or remove role ${roleId} (position ${role.position}) because it is above the bot's highest role (position ${botPosition}).`,
+              message: `Bot cannot assign or remove role ${roleId} (position ${role.position}) because it is at or above the bot's highest role (position ${botPosition}).`,
               severity: "block",
               stepIndex: steps.indexOf(step),
             });
@@ -80,7 +80,7 @@ function validatePermissions(steps: PlanStep[], guildId: string): ValidationIssu
       }
     }
 
-    if (maxTargetPosition > botPosition) {
+    if (maxTargetPosition >= botPosition) {
       issues.push({
         group: "A. Permission",
         message: `Bot cannot execute this plan. Its highest role (position ${botPosition}) is below a role this plan modifies (position ${maxTargetPosition}). Move the bot's role to the top of the role list and try again.`,
@@ -128,15 +128,34 @@ function validatePermissions(steps: PlanStep[], guildId: string): ValidationIssu
 function validateDependencies(steps: PlanStep[], symbolTable: SymbolTable): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
-  // Check all symbols referenced in params are defined
+  // Param name → the symbol type it must reference. Categories are emitted with
+  // type "channel" (see diff-engine symbol table), so parent_id expects "channel".
+  const expectedSymbolType: Record<string, string> = {
+    role_id: "role",
+    channel_id: "channel",
+    parent_id: "channel",
+  };
+
+  // Check all symbols referenced in params are defined and of the expected type
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     for (const [key, value] of Object.entries(step.params)) {
       if (typeof value === "string" && value.startsWith("$")) {
-        if (!symbolTable[value]) {
+        const entry = symbolTable[value];
+        if (!entry) {
           issues.push({
             group: "B. Dependency",
             message: `Undefined symbol "${value}" referenced in param "${key}" of step ${i}`,
+            severity: "block",
+            stepIndex: i,
+          });
+          continue;
+        }
+        const expected = expectedSymbolType[key];
+        if (expected && entry.type !== "unknown" && entry.type !== expected) {
+          issues.push({
+            group: "B. Dependency",
+            message: `Symbol "${value}" is a ${entry.type} but param "${key}" of step ${i} expects a ${expected}`,
             severity: "block",
             stepIndex: i,
           });
@@ -282,6 +301,15 @@ function validateResourceConstraints(
           stepIndex: i,
         });
       }
+      const bitrate = step.params.bitrate as number | undefined;
+      if (bitrate != null && type !== 2 && type !== 13) {
+        issues.push({
+          group: "C. Resource",
+          message: `Bitrate can only be set on voice/stage channels (step ${i})`,
+          severity: "block",
+          stepIndex: i,
+        });
+      }
     }
   }
 
@@ -309,10 +337,10 @@ function validateSafetyGuards(steps: PlanStep[]): ValidationIssue[] {
       }
     }
 
-    // Don't remove bot's own permissions (via overwrite)
-    if (step.toolName === "set_overwrite" || step.toolName === "remove_overwrite") {
-      // TODO: when we have bot user ID, check if the overwrite targets the bot's role
-    }
+    // No guard is needed against overwrites that deny the bot's own access:
+    // the bot holds ADMINISTRATOR, which bypasses all channel overwrites, so it
+    // can never be locked out by one. Same invariant that lets @everyone
+    // VIEW_CHANNEL denial pass without a block (see docs/design/security.md).
   }
 
   // Rate limit estimate (>5 minutes = warn)

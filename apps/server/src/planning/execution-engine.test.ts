@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { executePlan } from "./execution-engine";
 import type { ExecuteContext } from "@repo/shared";
 import type { PlanStep } from "@repo/shared";
@@ -74,5 +74,76 @@ describe("executePlan — member tools", () => {
     expect(result.success).toBe(true);
     expect(calls).toHaveLength(1);
     expect(calls[0].params).toEqual({ memberId: "user-1", roleId: "role-1" });
+  });
+});
+
+describe("executePlan — per-step deadline", () => {
+  it("interrupts a hung step when the abort signal fires mid-step", async () => {
+    // Tool call never resolves — only the abort can end the step.
+    const mockCtx: ExecuteContext = {
+      guildId: "g1",
+      addRoleToMember: () => new Promise<void>(() => {}),
+    } as unknown as ExecuteContext;
+
+    const events: ExecutionEvent[] = [];
+    const emit = async (event: ExecutionEvent) => {
+      events.push(event);
+    };
+
+    const controller = new AbortController();
+    setTimeout(() => controller.abort("User requested abort"), 5);
+
+    const result = await executePlan({
+      planId: "plan-1",
+      steps: [makeStep()],
+      symbolTable: {},
+      ctx: mockCtx,
+      emit,
+      abortSignal: controller.signal,
+      stepTimeoutMs: 60_000, // long: prove the abort, not the deadline, ends it
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.failedStep?.status).toBe("failed");
+    expect(events.some((e) => e.type === "plan_failed")).toBe(true);
+  });
+
+  it("fails a step that exceeds its deadline after exhausting retries", async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      const mockCtx: ExecuteContext = {
+        guildId: "g1",
+        addRoleToMember: () => {
+          calls++;
+          return new Promise<void>(() => {}); // hangs every attempt
+        },
+      } as unknown as ExecuteContext;
+
+      const events: ExecutionEvent[] = [];
+      const emit = async (event: ExecutionEvent) => {
+        events.push(event);
+      };
+
+      const promise = executePlan({
+        planId: "plan-1",
+        steps: [makeStep()],
+        symbolTable: {},
+        ctx: mockCtx,
+        emit,
+        stepTimeoutMs: 100,
+      });
+
+      // Drive the deadline timeouts + backoff delays (4 attempts total).
+      await vi.advanceTimersByTimeAsync(60_000);
+      const result = await promise;
+
+      expect(result.success).toBe(false);
+      expect(calls).toBe(4); // 1 initial + MAX_RETRIES (3)
+      expect(events.filter((e) => e.type === "step_retry")).toHaveLength(3);
+      expect(events.some((e) => e.type === "plan_failed")).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

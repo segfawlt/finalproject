@@ -64,6 +64,20 @@
       "when": 1781660890162,
       "tag": "0008_strong_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785149041566,
+      "tag": "0009_dusty_killer_shrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785155322476,
+      "tag": "0010_flashy_salo",
+      "breakpoints": true
     }
   ]
 }
