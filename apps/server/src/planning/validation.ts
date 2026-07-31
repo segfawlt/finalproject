@@ -471,6 +471,8 @@ function validatePlanIntegrity(steps: PlanStep[], status: string): ValidationIss
 
 // ── Group F: LLM Policy Check ────────────────────────────────────────────────
 
+const POLICY_VALIDATION_TIMEOUT_MS = 30_000;
+
 function summarizePlanStep(step: PlanStep): string {
   const name = (step.params.name as string) ?? (step.params.id as string) ?? "";
   switch (step.toolName) {
@@ -501,12 +503,64 @@ function summarizePlanStep(step: PlanStep): string {
   }
 }
 
-async function validateWithLLM(steps: PlanStep[], guildId: string): Promise<ValidationIssue[]> {
-  const apiKey = validatedEnv.LLM_API_KEY;
-  if (!apiKey) return [];
+function policyUnavailable(reason: string): ValidationIssue[] {
+  return [
+    {
+      group: "Stage 2: Policy",
+      message: `Server-rule validation is unavailable because ${reason}. Execution is blocked; retry when policy validation is available.`,
+      severity: "block",
+    },
+  ];
+}
 
-  const guildRules = await db.select().from(rules).where(eq(rules.guildId, guildId));
+function parsePolicyViolations(
+  value: unknown
+): Array<{ rule: string; severity: "warning" | "block"; message: string }> | null {
+  if (!value || typeof value !== "object") return null;
+
+  const violations = (value as { violations?: unknown }).violations;
+  if (!Array.isArray(violations)) return null;
+
+  const parsed: Array<{ rule: string; severity: "warning" | "block"; message: string }> = [];
+  for (const violation of violations) {
+    if (!violation || typeof violation !== "object") return null;
+
+    const { rule, severity, message } = violation as {
+      rule?: unknown;
+      severity?: unknown;
+      message?: unknown;
+    };
+    if (
+      typeof rule !== "string" ||
+      (severity !== "warning" && severity !== "block") ||
+      typeof message !== "string" ||
+      message.length === 0
+    ) {
+      return null;
+    }
+
+    parsed.push({ rule, severity, message });
+  }
+
+  return parsed;
+}
+
+async function validateWithLLM(steps: PlanStep[], guildId: string): Promise<ValidationIssue[]> {
+  let guildRules: Array<{ ruleText: string }>;
+  try {
+    guildRules = await db.select().from(rules).where(eq(rules.guildId, guildId));
+  } catch (err) {
+    logger.error({ err, guildId }, "[validateWithLLM] failed to load rules");
+    return policyUnavailable("server rules could not be loaded");
+  }
+
   if (guildRules.length === 0) return [];
+
+  const apiKey = validatedEnv.LLM_API_KEY;
+  if (!apiKey) {
+    logger.error({ guildId }, "[validateWithLLM] LLM API key unavailable for configured rules");
+    return policyUnavailable("no LLM API key is configured");
+  }
 
   const planSummary = steps.map(summarizePlanStep).join("\n");
   if (!planSummary) return [];
@@ -544,31 +598,45 @@ async function validateWithLLM(steps: PlanStep[], guildId: string): Promise<Vali
         response_format: { type: "json_object" },
         max_tokens: 1024,
       }),
+      signal: AbortSignal.timeout(POLICY_VALIDATION_TIMEOUT_MS),
     });
 
     if (!response.ok) {
       logger.error({ status: response.status, guildId }, "[validateWithLLM] OpenRouter error");
-      return [];
+      return policyUnavailable(`the policy provider returned status ${response.status}`);
     }
 
     const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
     const content = data.choices?.[0]?.message?.content;
-    if (!content) return [];
+    if (!content) {
+      logger.error({ guildId }, "[validateWithLLM] provider returned empty response");
+      return policyUnavailable("the policy provider returned an empty response");
+    }
 
-    const parsed = JSON.parse(content) as {
-      violations?: Array<{ rule: string; severity: string; message: string }>;
-    };
+    let parsedContent: unknown;
+    try {
+      parsedContent = JSON.parse(content);
+    } catch (err) {
+      logger.error({ err, guildId }, "[validateWithLLM] provider returned invalid JSON");
+      return policyUnavailable("the policy provider returned an invalid response");
+    }
 
-    return (parsed.violations ?? []).map((v) => ({
+    const violations = parsePolicyViolations(parsedContent);
+    if (!violations) {
+      logger.error({ guildId }, "[validateWithLLM] provider returned invalid response shape");
+      return policyUnavailable("the policy provider returned an invalid response");
+    }
+
+    return violations.map((violation) => ({
       group: "Stage 2: Policy",
-      message: v.message,
-      severity: (v.severity === "block" ? "block" : "warning") as ValidationSeverity,
+      message: violation.message,
+      severity: violation.severity,
     }));
   } catch (err) {
     logger.error({ err, guildId }, "[validateWithLLM] failed");
-    return [];
+    return policyUnavailable("the policy request failed");
   }
 }
 

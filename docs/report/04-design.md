@@ -271,10 +271,11 @@ architecture earns its safety properties:
   of the computed steps; those rules are not currently injected into the
   ordinary planning prompt. This ordering matters because a check at approval
   could pass and then execute minutes later against changed state. A current
-  limitation is that Stage 2 returns no policy issues when the provider is
-  unavailable or its response cannot be parsed, so provider failure is fail-open
-  rather than fail-closed; Chapter 6 must treat FR-16 as partial until that
-  behavior is changed or explicitly accepted.
+  limitation is that a rule-conflicting proposal may reach review before Stage 2
+  identifies it. At execution, however, configured rules fail closed: rule-load
+  failure, missing LLM configuration, provider failure or timeout, and empty or
+  malformed responses all become block-level issues before any Discord
+  mutation.
 - **Rollback is convergent, not a reverse replay.** On failure the system does
   not undo steps one by one. It diffs the _current_ live state against the
   before-snapshot and executes that diff, attempting to converge the server back
@@ -511,18 +512,43 @@ decisions, not gaps, and Chapter 6 treats them as such.
 **Stage 2 — server-rule policy check (`validateWithLLM`).** Per-guild
 natural-language rules are checked by a second LLM pass that reads the rules plus
 a summary of the computed steps and returns block/warning issues. It no-ops when
-no rules exist or no LLM key is configured.
+no rules exist. When rules do exist, the check has a 30-second request bound and
+fails closed if the rules cannot be loaded, no LLM key is configured, the
+provider fails, or its response is empty or malformed.
 
-> **Known divergence, carried from Chapter 3 (FR-16).** Two things about Stage 2
-> do not yet match the intended design and are recorded here so the design and
-> the code do not silently disagree. First, the intended design folds rules into
-> the _planning_ prompt so the LLM is compliant by construction; today the
-> ordinary planning prompt does not receive the rules and enforcement happens
-> only at execution. Whether to _also_ keep the execution-time check as a
-> backstop is an open decision. Second, the check is currently _fail-open_: when
-> the provider is unavailable or its response cannot be parsed, Stage 2 returns
-> no issues rather than blocking. Chapter 6 must therefore treat FR-16 as
-> partially satisfied until this is changed or explicitly accepted.
+This second pass is a semantic defence-in-depth layer, not independent
+verification or a security guarantee. It is useful because deterministic
+validators cannot generally infer the meaning of a rule such as "do not delete
+the announcements channel unless approved." However, an LLM can still
+misinterpret a rule or plan, and using the same provider or model family for
+planning and validation creates shared reliability limitations. The additional
+call also adds latency, cost, and provider availability dependence. Hard,
+recurring constraints are therefore candidates for later representation as
+structured policy fields that deterministic validators can enforce.
+
+> **Remaining divergence, carried from Chapter 3 (FR-16).** The selected design
+> is prompt guidance plus a fail-closed execution backstop. The backstop is
+> implemented, but the ordinary planning prompt does not yet receive guild
+> rules. Enforcement therefore occurs at execution rather than making the
+> proposal compliant by construction. Chapter 6 tests the fail-closed behavior
+> separately from the remaining planning-stage gap.
+
+The proposed planning-stage integration has the following implementation path:
+
+1. load an authorised guild's current rule set when its `PlanningSession` is
+   created and retain a deterministic rule version or hash with the session;
+2. add those rules to a clearly labelled, authoritative policy section in the
+   system prompt, treating the text as policy data rather than allowing it to
+   override platform safety instructions or tool constraints;
+3. use the same rule-aware prompt builder for initial planning, clarification
+   responses, revisions, context rebuilding, template merges, and confirmed
+   stale-plan re-planning;
+4. direct the planner to explain a conflict or request clarification when the
+   administrator's request and a guild rule cannot both be satisfied;
+5. associate the rule version with the reviewed plan and require re-planning or
+   renewed review if the stored rules change before execution; and
+6. retain the fail-closed Stage 2 check as the execution backstop rather than
+   treating prompt inclusion as enforcement.
 
 A related pre-execution step, the **conflict check**, runs each step's
 `getAssumptions()` against fresh state before Stage 1. When it fails, execution
@@ -1268,7 +1294,7 @@ proposal, and the current/desired server representation.
 
 ```plantuml
 @startsalt
-'| fig-cap: Figure 4.7: Wireframe - Studio shell in plan-review state
+'| fig-cap: Figure 4.6: Wireframe - Studio shell in plan-review state
 {+
   Discord Platform - Studio | . | [Administrator] | [Sign out]
   ==
@@ -1358,7 +1384,7 @@ possible commands at once.
 
 ```plantuml
 @startuml
-'| fig-cap: Figure 4.6: State machine — conversation UI lifecycle
+'| fig-cap: Figure 4.7: State machine — conversation UI lifecycle
 hide empty description
 
 [*] --> Input
@@ -1726,18 +1752,18 @@ preconditions against the current cache. Stage 1 deterministic validation
 checks permissions, symbol dependencies and cycles, resource limits and type
 constraints, safety guards, overwrite-consolidation warnings, and plan
 integrity. Block-level issues fail closed with **400** and structured blocker
-and warning arrays. Stage 2 optionally sends a compact plan summary and the
-guild's rule text to the configured OpenRouter-compatible provider. It is
-fail-open by design when no API key or rules exist, or when the provider fails
-or returns an unusable response; runtime diagnosis is never delegated back to
-the model. This is a known safety limitation: the deterministic backstop is
-mandatory, while natural-language policy enforcement is best effort.
+and warning arrays. Stage 2 sends a compact plan summary and the guild's rule
+text to the configured OpenRouter-compatible provider only when that guild has
+rules. A no-rule guild skips the call. For a guild with rules, rule-load failure,
+missing provider configuration, a non-success response, a 30-second timeout, or
+empty/malformed output produces a block-level availability issue. Provider
+failure is therefore not interpreted as policy compliance.
 
 The current implementation also keeps guild rules out of the planning system
 prompt. They influence the execution-time Stage 2 check only, so an
 administrator may see a plan that has not been policy-screened until approval
-time. This is the documented design divergence and should be read alongside
-the fail-open behavior rather than mistaken for an earlier authorization gate.
+time. This is the remaining documented design divergence rather than a bypass
+of the execution-time enforcement gate.
 
 ### 4.6.5 Stale state, concurrency, and recovery
 

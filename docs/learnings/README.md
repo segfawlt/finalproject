@@ -46,6 +46,7 @@ _(no promote candidates yet)_
 
 - [Promise.race to add a deadline to an API with no cancellation hook](./design-patterns/promise-race-for-uncancellable-api.md) — race the call against a timer/abort listener and stop waiting; you can't cancel the work, only your wait on it. `#promise-race #cancellation #abort-signal`
 - [Combine message-matching and error subclasses for retry classification](./design-patterns/error-subclass-vs-message-matching-for-retry-classification.md) — use message-matching for fuzzy "retry like this" behavior, `instanceof` subclasses for hard invariants that must never depend on message wording. `#error-handling #retry #classification`
+- [Distinguish absent policy from unavailable validation](./design-patterns/distinguish-absent-policy-from-unavailable-validation.md) — skip validation only when no policy exists; block when configured policy cannot be evaluated. `#fail-closed #policy-validation #availability`
 
 ## tooling-decisions/
 

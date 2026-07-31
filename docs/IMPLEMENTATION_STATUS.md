@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-07-29
+Last updated: 2026-07-31
 
 Source of truth for what is actually built in this codebase. When a design doc,
 issue doc, or comment disagrees with code, this file wins. Update after major
@@ -57,8 +57,8 @@ Legend: `done` (implemented & wired) · `partial` (code present, incomplete wiri
 - `done` Planning session — `planning/planning-session.ts` (LLM loop, `buildSystemPrompt` with 4-phase model + PERMISSION STRATEGY, `ask_user`-specific pause/resume, planning-only batch tools continue the loop, message windowing, `callLLM`)
 - `done` Session manager — `planning/session-manager.ts` (in-memory `PlanningSession` registry + ask_user timeouts)
 - `done` Snapshot cleanup — `planning/snapshot-cleanup.ts` (background job, removes orphaned `plan_iterations`)
-- `done` Validation — `planning/validation.ts` (Groups A–E: perm-name validity, ADMINISTRATOR + strict bot role-hierarchy including equal-position targets, symbol resolution + **symbol-type matching**, DAG/cycle, duplicate names, member-role dedupe, category child cap, topic/**bitrate** channel-type constraints, ADMINISTRATOR-grant block, overwrite-consolidation warning; Stage 2 LLM policy check against `rules` table via `validateWithLLM`)
-  - `gap` **Server rules run at execution, not planning.** Design intends rules in the planning prompt (`buildSystemPrompt`); code enforces them at execution via `validateWithLLM`. Enforcement model (prompt-only vs prompt+backstop) is an open decision — see `docs/design/validation-and-safety.md` Stage 2.
+- `done` Validation — `planning/validation.ts` (Groups A–E: perm-name validity, ADMINISTRATOR + strict bot role-hierarchy including equal-position targets, symbol resolution + **symbol-type matching**, DAG/cycle, duplicate names, member-role dedupe, category child cap, topic/**bitrate** channel-type constraints, ADMINISTRATOR-grant block, overwrite-consolidation warning; Stage 2 LLM policy check against `rules` table via `validateWithLLM`; guilds with configured rules **fail closed** on missing key, rule-load failure, provider error/timeout, or empty/malformed output)
+  - `gap` **Server rules run at execution, not planning.** The selected design is prompt guidance plus the implemented fail-closed execution backstop. `buildSystemPrompt` still does not receive guild rules, so rule-conflicting proposals can reach review before being blocked at execution.
   - `done` **Confirmed AI re-plan for stale plans.** `POST /plans/:planId/replan` re-forks from current Discord state and starts a fresh `PlanningSession` with persisted conversation context, prior desired state, and structured conflicts. Studio offers it only after a stale execution conflict; repaired plans always return to review before execution.
   - `note` Deliberately **not** validated (documented in the design doc): per-action bot perms (redundant with ADMINISTRATOR), role-position ordering among movable roles, IMPORTANT-channel / delete-all-from-category guards (conflict with "present, don't judge"), bot-own-permission lockout (impossible under ADMINISTRATOR), planData Zod check (internal deterministic data).
 
@@ -167,10 +167,11 @@ together; none of them fetch on their own unless noted.
 
 ### Tests
 
-22 test files across the monorepo. Highest-value targets per `AGENTS.md` testing strategy:
+24 test files across the monorepo. Highest-value targets per `AGENTS.md` testing strategy:
 
 - `done` `apps/server/src/planning/diff-engine.test.ts` — 3-phase diff algorithm, edge cases
 - `done` `apps/server/src/planning/validation.test.ts` — bot hierarchy, member tools, overwrite consolidation, symbol-type matching, bitrate constraint
+- `done` `apps/server/src/planning/policy-validation.test.ts` — fail-closed rule loading/configuration/provider/response behavior, valid blockers and warnings, 30-second request bound
 - `done` `apps/server/src/planning/execution-engine.test.ts` — executePlan member tools, per-step deadline
 - `done` `apps/server/src/planning/locking.test.ts` — Drizzle `db` mock
 - `done` `apps/server/src/planning/integration.test.ts` — full planning flow
@@ -216,6 +217,7 @@ See `docs/issues/open-design-issues.md` for the full log.
 
 ## Recently resolved (since May 28, 2026)
 
+- `done` **Fail-closed guild-rule enforcement** — Stage 2 now loads rules before deciding whether an LLM call is needed. Guilds without rules skip the call; guilds with rules block execution when rules cannot be loaded, no LLM key is configured, the provider fails or exceeds 30 seconds, or the response is empty/malformed. Valid policy blockers and warnings retain their severities.
 - `done` **Template features (full set)** — (1) Save-as-template from a completed plan (`SaveTemplateModal`, stores `desiredState.active`); (2) Merge surfaced in the right-panel `TemplatesTab`, attaching via `useConversation.beginPlanning`; (3) real in-panel template browser replacing the redirect stub; (4) editable template structure in `TemplateEditor` (was read-only) via the shared `useDesiredStateEdit` hook + `DesiredStateView` `editing` mode.
 - `done` **Route consolidation** — Studio is the sole hub. `/setup` removed; `/dashboard`, `/dashboard/:guildId`, and bare `/templates` redirect to `/studio`. `Dashboard.tsx` and `Setup.tsx` kept on disk (stashed, unrouted) for a later rebuild. Bot-invite handling moved into the Studio guild picker.
 - `done` **Rules management relocated** — server-rules CRUD moved from the Dashboard's `RulesSection` to a Studio right-panel `SettingsTab`. `RulesSection.tsx` stashed with the Dashboard.
@@ -238,7 +240,7 @@ See `docs/issues/open-design-issues.md` for the full log.
 ## Drift between docs and code
 
 - `docs/issues/remaining-fixes.md` lists 5 fixes — **all five are now done** in code, but the doc wasn't updated. This file is the corrected view.
-- `docs/issues/remaining-fixes.md` says "Zero test files" — **22 test files exist** (see Tests section above).
+- `docs/issues/remaining-fixes.md` says "Zero test files" — **24 test files exist** (see Tests section above).
 - `docs/issues/channel-role-gaps.md` Gap 7 (lockPermissions) status was "IN DESIGN" — **now implemented**, see Recently resolved.
 - `AGENTS.md` env vars table (line 236) lists `OPENROUTER_API_KEY`/`OPENROUTER_MODEL` — code uses `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL` (see `.env.example`).
 - `docs/design/overview.md` mentions `apps/docs/` (Astro SSG) — directory exists but is empty; no Astro app was ever built there.

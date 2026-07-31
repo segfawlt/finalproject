@@ -65,6 +65,8 @@ application on port 5173, while the Hono server defaults to port 3001. The serve
 authentication, web-origin, Discord, and LLM configuration through `validateEnv()` before normal
 operation. Development may omit the LLM key and use a mock planner response; production requires the
 Discord bot and OAuth credentials in addition to the database and authentication configuration.
+If a development guild has server rules, execution also requires an LLM key because the
+execution-time policy check fails closed.
 
 No secret is embedded in the browser bundle. The browser receives only the API URL and communicates
 with the server using the Better Auth session cookie. Discord tokens, OAuth secrets, the database
@@ -347,9 +349,10 @@ resource constraints, duplicate names, channel-type properties, member-role dupl
 structure, administrator grants, and plan status. Any block-level issue prevents execution.
 
 The second stage loads the selected guild's natural-language rules and asks the configured LLM to
-classify the plan. This stage is currently best effort: it is skipped when no rules or no LLM key are
-available and does not block execution when the provider fails. The implications and recommended
-policy are recorded in Section 5.8 rather than presented as a complete safety guarantee.
+classify the plan. A guild without rules skips this stage. When rules exist, the stage fails closed:
+rule-load failure, missing LLM configuration, a non-success provider response, a request exceeding
+30 seconds, and empty or malformed output all produce a block-level availability issue. Valid
+responses preserve the provider's `block` and `warning` severities.
 
 ### 5.4.4 Ordered execution, deadlines, and retry
 
@@ -442,9 +445,10 @@ LLM-driven merge. A merge creates a normal planning conversation and therefore s
 reviewable desired state rather than applying the template directly.
 
 Guild rules are edited in `SettingsTab` and stored in the `rules` table. The validation pipeline
-loads them for Stage 2 policy checking. They are not currently included in the initial planning
-system prompt, so the planner may propose a rule-conflicting state that is detected only when the
-administrator attempts execution.
+loads them for mandatory Stage 2 policy checking. They are not currently included in the initial
+planning system prompt, so the planner may propose a rule-conflicting state that is detected only
+when the administrator attempts execution. If the configured rules cannot be evaluated, execution
+is blocked and the existing error flow displays the availability reason.
 
 ### 5.5.4 Drift reporting
 
@@ -520,28 +524,35 @@ explicit product decision.
 | Medium   | The drift detector compares the custom guild cache with Discord.js's own in-memory guild cache rather than fetching channels and roles through REST. It can detect divergence between the two caches, but it is not an independent fresh-state poll and cannot substantiate that Discord was re-read when both caches missed the same event. | Fetch channels and roles during each drift pass, project the fetched collections, and compare that verified snapshot with the custom cache. Rate-limit and serialize the poll per guild, and suppress or classify expected differences while a locked execution is in progress.                                        |
 | Medium   | The HTTP listener and immediate snapshot cleanup are started before the asynchronous migration callback has completed. This allows jobs or early requests to touch a schema that may still be migrating, despite comments claiming migrations run before traffic.                                                                            | Refactor startup into one awaited `main()`: validate configuration, run migrations, clear stale locks, initialize jobs and bot handlers, and only then call `serve()`. Exit before binding the port when migration fails.                                                                                              |
 
-### 5.8.2 Decision-required policy problem
+### 5.8.2 Remaining planning-stage policy gap
 
-Natural-language guild rules are absent from the planning prompt and are checked only during
-execution validation. That check is fail-open when the LLM key is missing, the provider fails, or the
-response is unusable. The current behavior favors availability, but it can execute a plan without
-enforcing the administrator's configured natural-language policy.
+The policy decision is resolved as **prompt guidance plus a fail-closed execution backstop**. The
+backstop is implemented: guilds without rules remain fully deterministic, while guilds with rules
+cannot execute when rule loading or policy evaluation is unavailable. The checker has a 30-second
+request bound, validates the response shape, and returns an actionable availability blocker through
+the same error flow as other validation blockers.
 
-Three defensible policies are available:
+The remaining gap is earlier guidance. Natural-language guild rules are absent from the planning
+prompt, so the planner can still propose a rule-conflicting state and make the administrator wait
+until execution to discover the conflict. This is a proposal-quality and feedback-timing
+limitation, rather than an absence of enforcement: the plan can reach review, but it cannot pass
+the execution boundary when Stage 2 returns a blocker or cannot complete the check.
 
-- **Prompt only:** include rules during planning but do not block execution when policy checking is
-  unavailable. This has the lowest execution friction but the weakest enforcement.
-- **Prompt plus fail-open backstop:** include rules during planning and retain the current best-effort
-  execution check. This improves plan quality but still allows unverified execution during provider
-  failure.
-- **Prompt plus fail-closed backstop:** include rules during planning and block execution when a guild
-  has rules but those rules cannot be evaluated. This adds provider availability as an execution
-  dependency but makes the word “enforced” defensible.
+During informal development observation, administrators tended to express task-specific
+constraints directly in the natural-language request. This is not a controlled user study and
+cannot establish how frequently the wider user population would use persistent rules. It does,
+however, suggest a useful distinction: chat instructions are convenient for one task, while saved
+guild rules are most valuable for recurring organisational policies, multiple administrators, and
+constraints that should not depend on being repeated in every request.
 
-The recommended policy is **prompt plus fail-closed backstop for guilds that have configured rules**.
-Guilds without rules remain fully deterministic and do not need the second LLM call. The UI should
-distinguish a policy-provider outage from a plan violation and allow the administrator to retry
-validation without regenerating the desired state.
+Planning-stage integration was therefore retained as future work rather than represented as a
+one-line prompt change. A complete change must load and retain the authorised guild's rule set,
+include it in initial and rebuilt prompts, cover revision, template-merge, and stale-replanning
+paths, and associate the reviewed plan with a rule version so a later rule change triggers
+re-planning or renewed review. The planner should explain unsatisfiable conflicts rather than
+quietly produce a violating state. The execution-time check should remain as the authoritative
+backstop because prompt instructions, the planner, and the human reviewer can all miss or
+misinterpret a free-text rule. Section 4.2.4 gives the complete implementation sequence.
 
 ## 5.9 Screenshot Evidence
 

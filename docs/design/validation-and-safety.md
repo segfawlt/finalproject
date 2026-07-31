@@ -13,10 +13,10 @@ Validation happens in stages at different points, not all at approval. Stage 1
 conflict check and before any Discord mutation. Approval itself runs no
 validation — it only locks the reviewed desired state as the contract to execute.
 
-Stage 2 (server-rule enforcement) is where doc intent and current code diverge —
-the **intended** design folds rules into **planning**, but today they are checked
-at **execution time**. See the Stage 2 section below for the full status and the
-pending decision.
+Stage 2 (server-rule enforcement) is where doc intent and current code partly
+diverge — the **intended** design folds rules into **planning**, but today they
+are enforced by a fail-closed check at **execution time**. See the Stage 2
+section below for the resolved policy and remaining planning gap.
 
 ### Stage 1: Hard-Coded Validation (deterministic, fast, no LLM)
 
@@ -110,22 +110,20 @@ the rules are injected into the planning prompt so the LLM weighs them as it
 builds the plan, and the human approval gate in Studio is the backstop. No RAG or
 embeddings — rules are small and fit in context.
 
-> **Implementation status — does not yet match the intended design.** Today the
-> planner (`buildSystemPrompt` in `planning-session.ts`) does **not** query the
-> `rules` table, and rule enforcement instead happens at **execution time** via
-> `validateWithLLM` (`validation.ts`), a second LLM pass tagged `Stage 2: Policy`
-> that reads the rules + a plan summary and returns block/warning issues. It
-> no-ops when `LLM_API_KEY` is unset or the guild has no rules.
+> **Implementation status — execution backstop built; planning injection
+> remains.** Today the planner (`buildSystemPrompt` in `planning-session.ts`)
+> does **not** query the `rules` table. Rule enforcement happens at execution
+> time via `validateWithLLM` (`validation.ts`), a second LLM pass tagged
+> `Stage 2: Policy` that reads the rules plus a plan summary and returns
+> block/warning issues.
 >
-> **Planned change (decision pending):** move rules into the planning prompt.
-> Open question — whether to _also_ keep `validateWithLLM` as an execution-time
-> backstop:
->
-> - **(a) Prompt only** — drop `validateWithLLM`; rely on the planning prompt +
->   human approval. Simpler, one fewer LLM call, no checker-LLM failure mode.
-> - **(b) Prompt + `validateWithLLM`** — keep the execution-time pass as automated
->   enforcement that doesn't depend on the approver knowing every rule. Costs a
->   second LLM call and adds a checker-disagrees-with-planner failure mode.
+> The selected design is **prompt plus fail-closed execution backstop**. The
+> execution half is implemented: when a guild has rules, execution is blocked if
+> the LLM key is missing, the rules cannot be loaded, the provider fails or
+> times out after 30 seconds, or its response is empty or malformed. A guild with
+> no rules skips the second LLM call and remains fully deterministic. The
+> remaining planned change is to inject the same rules into the planning prompt
+> so rule-conflicting proposals are less likely to reach review.
 >
 > Note: a _hardcoded deterministic_ backstop is not an option here — server rules
 > are free text, so enforcing them without an LLM would require redesigning the

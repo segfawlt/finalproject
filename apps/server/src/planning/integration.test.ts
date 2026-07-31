@@ -20,6 +20,21 @@ vi.mock("../bot/cache", () => ({
   },
 }));
 
+vi.mock("@repo/db", () => ({
+  db: {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(async () => []),
+      })),
+    })),
+  },
+  rules: { guildId: "guild_id" },
+}));
+
+vi.mock("drizzle-orm", () => ({
+  eq: vi.fn(() => ({})),
+}));
+
 function makeServerState(overrides: Partial<ServerState> = {}): ServerState {
   return {
     guildId: "g1",
