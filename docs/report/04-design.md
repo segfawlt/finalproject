@@ -1,9 +1,9 @@
-# 4. System Design
+# Chapter 4: System Design
 
 Chapter 3 described the system from the outside: what an administrator can do
 and the qualities the system must have. This chapter turns inward and describes
 _how_ the system is built and behaves to meet those requirements. It proceeds
-from the high-level architecture — the overall shape and the major components —
+from the high-level architecture, the overall shape and the major components,
 down to the detailed design of individual parts: the data model, the key
 algorithms, the API surface, the user interface, and the security design.
 
@@ -19,7 +19,7 @@ requirements the final build fully or partially satisfies.
 Every significant structural choice in this system follows from one problem: a
 large language model, which can misread intent or fabricate output, must be
 allowed to reshape a _live_ Discord server that real communities depend on. The
-architecture's job is to make that safe. Its answer is **indirection** — a
+architecture's job is to make that safe. Its answer is **indirection**: a
 series of deliberate gaps between the model's intent and irreversible reality,
 so that nothing the AI produces reaches Discord without first being made
 declarative, previewable, validatable, and recoverable where Discord permits.
@@ -46,15 +46,15 @@ requirement from Chapter 3:
   execution, and failures trigger an automatic structural recovery attempt.
 
 The remainder of this section presents the architecture at three levels of
-zoom — system context, containers, and the plan-first data flow — and then
+zoom: system context, containers, and the plan-first data flow. It then
 records the three architectural decisions that most shape the system.
 
 ### 4.1.2 System context
 
 At the widest zoom, the platform is a single system used by one external human
 actor and depends on two external services. The administrator drives every
-workflow from the browser. The scheduler is an internal background task —
-part of the platform's own backend infrastructure — that periodically triggers
+workflow from the browser. The scheduler is an internal background task within
+the platform's own backend infrastructure. It periodically triggers
 drift detection; it is not an external actor. Discord is both the system of
 record the platform reads from and the system it applies changes to, and the
 LLM provider turns natural language into structured plans.
@@ -90,29 +90,33 @@ The system boundary is meaningful: the administrator never talks to Discord or
 the LLM directly, and the AI never talks to Discord. All external relationships
 pass through the platform, which is where every safety control lives. The
 Scheduler sits inside the boundary because it is application code the project
-built — a periodic timer in the backend that detects drift — not a third-party
+built: a periodic timer in the backend that detects drift, not a third-party
 service.
 
-### 4.1.3 Containers
+### 4.1.3 Container diagram
 
 Zooming in, the system is organised as a pnpm monorepo with two runnable
-applications and two shared packages.
+applications and two shared packages. The term "Container" here refers to the
+C4 model vocabulary: a Container is a separately runnable or deployable unit,
+such as an application or data store, rather than a Docker container (Brown, n.d.). In this
+architecture, each Container represents either a process (web app, server) or a
+persistence layer (database).
 
-- **Web app (`apps/web`)** — a Vite + React single-page application. It hosts the
+- **Web app (`apps/web`)**: a Vite + React single-page application. It hosts the
   Studio, where the administrator describes changes, watches the Discord-like
   preview update live, and approves plans. State is held in Zustand; styling is
   Tailwind. It talks to the server over a REST API and receives live updates
   over Server-Sent Events (SSE).
-- **Server (`apps/server`)** — a single Node.js process that runs _both_ the Hono
+- **Server (`apps/server`)**: a single Node.js process that runs _both_ the Hono
   HTTP API and the Discord.js bot. This co-location is deliberate (Section
   4.1.5): the API reads the server's current structure from the bot's in-memory
   cache with no extra Discord calls. The server also owns the planning engine,
   diff engine, execution engine, validation, locking, and drift detection.
-- **Shared package (`packages/shared`)** — the pure domain core: the tool
+- **Shared package (`packages/shared`)**: the pure domain core: the tool
   registry, the desired-state model and store, the diff-relevant types,
   permission constants, and the `ExecuteContext` interface. It depends on
   neither Discord.js nor the database, so it is portable and directly testable.
-- **Database package (`packages/db`)** — the Drizzle ORM schema, migrations, and
+- **Database package (`packages/db`)**: the Drizzle ORM schema, migrations, and
   client. PostgreSQL persists conversations, plan iterations, plans, snapshots,
   rules, templates, and drift events.
 
@@ -180,7 +184,7 @@ fulfils it against Discord.js. This isolates step dispatch and makes the
 execution engine testable with a plain mock context, although validation still
 reads Discord-derived role positions through the bot permission helpers.
 Second, `API --> Bot : reads cache`: the API reads live server structure by a
-direct in-process call into the bot's cache, not over the network — the reason
+direct in-process call into the bot's cache, not over the network, the reason
 the two run as one process.
 
 ### 4.1.4 The plan-first data flow
@@ -193,7 +197,7 @@ server.
 
 ```plantuml
 @startuml
-'| fig-cap: Figure 4.3: Activity diagram — plan-first data flow
+'| fig-cap: Figure 4.3: Activity diagram, plan-first data flow
 skinparam activityDiamondBackgroundColor #FFF3CD
 start
 :Administrator describes a change
@@ -309,11 +313,13 @@ possible without changing the domain logic.
 **Server-Sent Events over polling or WebSockets.** Planning and execution
 progress are pushed to the Studio over SSE (for example, `GET
 /api/plan/:id/stream`). The communication is one-way (server → client) and
-append-only — a live log of steps — which is exactly SSE's shape, so the
+append-only, a live log of steps, which is exactly SSE's shape, so the
 bidirectional complexity of WebSockets is unnecessary. Browser `EventSource`
-attempts reconnection automatically. The server does not currently replay
-events missed during a disconnect, so reconnection restores the stream but not
-necessarily the complete log. SSE also carries only server-to-client traffic;
+attempts reconnection automatically. The planning stream replays its latest
+terminal event to a late subscriber, preventing a fast completion or clarification
+request from leaving the Studio stuck. Intermediate planning events and execution
+progress are not replayed, so reconnection does not necessarily restore the complete
+log. SSE also carries only server-to-client traffic;
 client actions (approve, revise, abort) use ordinary REST calls, which fits
 since those are discrete commands rather than a stream.
 
@@ -362,7 +368,7 @@ defined.
   other.
 - **The desired-state model and store (`state/`).** `DesiredState` is the
   central data structure of the system: the declarative description of what the
-  server should look like after execution. It is not a plain snapshot — it
+  server should look like after execution. It is not a plain snapshot, it
   carries `active` items (things that should exist), `tombstones` (things
   explicitly deleted during planning), and a symbol counter for naming
   not-yet-created resources. Every mutation flows through `DesiredStateStore`,
@@ -401,13 +407,13 @@ defined.
 
 The planning engine turns natural language into a `DesiredState`. Its job is to
 drive a constrained conversation with the LLM, dispatch the tool calls the LLM
-emits, and stream progress — all without touching Discord.
+emits, and stream progress, all without touching Discord.
 
 - **Planning session (`planning-session.ts`).** The core state machine. It is
   not a simple loop: it can pause on an `ask_user` call, hold its state in server
   memory, and resume when the administrator answers. On each turn it builds the
-  system prompt (which encodes the four-phase planning model — roles, then
-  layout, then access control, then members — and restricts which tools are
+  system prompt (which encodes the four-phase planning model, roles, then
+  layout, then access control, then members, and restricts which tools are
   legal in each phase), sends the conversation plus the tool schemas to the LLM,
   and dispatches each returned tool call through the registry into the store.
   Validation happens at dispatch: Zod checks the parameter shape, then the store
@@ -415,14 +421,15 @@ emits, and stream progress — all without touching Discord.
   cap (`maxTurns = 20`) prevents a runaway loop; on exhaustion the session
   force-completes with an explanatory summary. The pause-and-resume design is
   necessary because a single LLM exchange can last several seconds and an
-  `ask_user` pause is indefinite — blocking a thread for that duration is
+  `ask_user` pause is indefinite, blocking a thread for that duration is
   impractical. Decoupling the session object from the HTTP request lets the route
   return immediately and the administrator's reply resume the same session later.
 - **Session manager (`session-manager.ts`).** An in-memory registry of active
   `PlanningSession` objects keyed by conversation, plus the timeouts that expire
   an `ask_user` pause that is never answered. Sessions live in memory
-  deliberately (Section 4.4): a server restart loses in-flight planning state,
-  and the administrator starts a fresh conversation from current state.
+  deliberately (Section 4.4): a server restart loses an in-flight LLM turn, so
+  startup marks planning and waiting rows as interrupted. Completed iterations
+  remain durable and can still be reviewed and approved without the old session.
 - **LLM transport (`llm-request.ts`, `stream-parser.ts`).** A thin layer over a
   raw streaming `fetch` to an OpenAI-compatible chat-completions endpoint,
   configured entirely by `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`. The
@@ -434,8 +441,8 @@ emits, and stream progress — all without touching Discord.
 The engine emits its progress at _tool-call granularity_, not token by token: a
 tool call is dispatched the moment it is fully accumulated, and a
 `tool_called` / `tool_result` pair is streamed to the Studio so the preview
-re-renders live. The administrator sees the level that matters — which tools ran
-and what they did — rather than a stream of raw tokens. Emitting at this
+re-renders live. The administrator sees the level that matters, which tools ran
+and what they did, rather than a stream of raw tokens. Emitting at this
 granularity is also what makes the planning side-effect free: every tool call
 mutates only `DesiredStateStore` and nothing on Discord, so the entire planning
 output can be inspected, revised, or discarded without any cleanup cost.
@@ -445,7 +452,7 @@ output can be inspected, revised, or discarded without any cleanup cost.
 The diff engine (`diff-engine.ts`) is the component that makes the system
 declarative. It is a pure function, `(ServerState, DesiredState) → PlanStep[]`,
 and it makes no decisions of its own: no heuristics, no rename detection, no
-scoring. It reads explicit state — `active` items, tombstones, symbols — and
+scoring. It reads explicit state, `active` items, tombstones, symbols, and
 emits the corresponding Discord steps. This "dumb and deterministic" stance is a
 deliberate design choice, argued at length in the design docs: any cleverness
 here (for instance, guessing that a delete-plus-create was "really" a rename)
@@ -458,8 +465,8 @@ It runs in three phases:
    it is existing (emit an `edit_*` step if it differs, skip if identical, flag
    a conflict if it has vanished from the server); if it carries a symbol it is
    new (emit a `create_*` step). Overwrites and member roles are diffed
-   _symmetrically_ — anything present in the server but absent from desired
-   state becomes a removal — because, unlike channels and roles, they gain
+   _symmetrically_, anything present in the server but absent from desired
+   state becomes a removal, because, unlike channels and roles, they gain
    nothing from a tombstone audit trail. Each tombstone becomes a `delete_*`
    step.
 2. **Topological sort.** Steps are ordered by `TOOL_ORDER` (categories before
@@ -472,7 +479,7 @@ It runs in three phases:
    drop no-op steps (an edit whose field set turned out empty).
 
 The output is an ordered `PlanStep[]` plus a symbol table recording which step
-defines each symbol — the input the execution engine resolves against.
+defines each symbol, the input the execution engine resolves against.
 
 ### 4.2.4 The validation subsystem
 
@@ -481,35 +488,35 @@ Validation (`validation.ts`) runs at the _start of execution_, not at approval
 behind the `ExecuteContext` seam, because it reads stored server rules and the
 bot's role position. It is organised as two stages.
 
-**Stage 1 — deterministic checks (no LLM).** Five groups run in order and are
+**Stage 1: deterministic checks (no LLM).** Five groups run in order and are
 pure functions over the plan steps and desired state, so they are fast and fully
 unit-testable:
 
-- **A. Permissions and hierarchy** — permission names are valid; the bot holds
+- **A. Permissions and hierarchy**: permission names are valid; the bot holds
   ADMINISTRATOR (hard block); and no step edits, moves, deletes, or assigns a
   role positioned above the bot's highest role (the hierarchy invariant behind
   FR-3).
-- **B. Dependencies** — every symbolic reference resolves to a defined symbol of
+- **B. Dependencies**: every symbolic reference resolves to a defined symbol of
   the right type, and the dependency graph is a sortable DAG with no cycles or
   dangling indices.
-- **C. Resource constraints** — no duplicate names among created items, no
+- **C. Resource constraints**: no duplicate names among created items, no
   duplicate member-role operations, category child counts within Discord's limit
   of 50, and channel-type constraints (a `topic` only on text/announcement, a
   `bitrate` only on voice/stage).
-- **D. Safety guards** — block granting ADMINISTRATOR to a plan-created role
+- **D. Safety guards**: block granting ADMINISTRATOR to a plan-created role
   unless explicitly requested; warn when the plan may exceed the execution time
   budget; warn when two unsynced channels in a category carry identical
   overwrites that could be consolidated up to the category.
-- **E. Plan integrity** — the plan has at least one step and a legal status.
+- **E. Plan integrity**: the plan has at least one step and a legal status.
 
-The design docs record several checks that were _deliberately_ left out —
+The design docs record several checks that were _deliberately_ left out,
 per-action permission checks (redundant under ADMINISTRATOR), "won't delete
 important channels" guards (they contradict the present-don't-judge philosophy),
 and a `planData` schema check (the data is produced internally by the diff
 engine, never parsed from untrusted input). These omissions are design
 decisions, not gaps, and Chapter 6 treats them as such.
 
-**Stage 2 — server-rule policy check (`validateWithLLM`).** Per-guild
+**Stage 2: server-rule policy check (`validateWithLLM`).** Per-guild
 natural-language rules are checked by a second LLM pass that reads the rules plus
 a summary of the computed steps and returns block/warning issues. It no-ops when
 no rules exist. When rules do exist, the check has a 30-second request bound and
@@ -526,33 +533,26 @@ call also adds latency, cost, and provider availability dependence. Hard,
 recurring constraints are therefore candidates for later representation as
 structured policy fields that deterministic validators can enforce.
 
-> **Remaining divergence, carried from Chapter 3 (FR-16).** The selected design
-> is prompt guidance plus a fail-closed execution backstop. The backstop is
-> implemented, but the ordinary planning prompt does not yet receive guild
-> rules. Enforcement therefore occurs at execution rather than making the
-> proposal compliant by construction. Chapter 6 tests the fail-closed behavior
-> separately from the remaining planning-stage gap.
+The selected design combines early prompt guidance with the fail-closed
+execution backstop. An authorised guild's current rule text is loaded when a
+`PlanningSession` is created and retained with that session. The shared prompt
+builder places the rules in a clearly labelled policy section and tells the
+planner to explain a conflict or request clarification instead of deliberately
+producing a violating state. Because clarification, revision, template-context
+changes, template merges, and confirmed stale-plan repair all use the same
+session prompt builder, rebuilt prompts retain both the original server context
+and the loaded rules.
 
-The proposed planning-stage integration has the following implementation path:
-
-1. load an authorised guild's current rule set when its `PlanningSession` is
-   created and retain a deterministic rule version or hash with the session;
-2. add those rules to a clearly labelled, authoritative policy section in the
-   system prompt, treating the text as policy data rather than allowing it to
-   override platform safety instructions or tool constraints;
-3. use the same rule-aware prompt builder for initial planning, clarification
-   responses, revisions, context rebuilding, template merges, and confirmed
-   stale-plan re-planning;
-4. direct the planner to explain a conflict or request clarification when the
-   administrator's request and a guild rule cannot both be satisfied;
-5. associate the rule version with the reviewed plan and require re-planning or
-   renewed review if the stored rules change before execution; and
-6. retain the fail-closed Stage 2 check as the execution backstop rather than
-   treating prompt inclusion as enforcement.
+Prompt inclusion improves proposal quality but is not enforcement. A session
+retains the rule set it began with, so rules changed during a long review may
+not appear in that session's prompt. Stage 2 therefore reloads the current rules
+at execution and remains authoritative: changed, unavailable, or violated rules
+block execution and require the administrator to revise or re-plan. This avoids
+treating an LLM's compliance with prompt text as a security boundary.
 
 A related pre-execution step, the **conflict check**, runs each step's
 `getAssumptions()` against fresh state before Stage 1. When it fails, execution
-is blocked outright — there is no force-apply — and the administrator can invoke
+is blocked outright, there is no force-apply, and the administrator can invoke
 the confirmed AI re-plan flow (`POST /plans/:planId/replan`), which re-forks from
 current state and asks the planner to adapt the plan, preserving the
 conversation and prior intent.
@@ -563,7 +563,7 @@ The execution engine (`execution-engine.ts`) is the only server component that
 causes side effects on Discord, and it is the component where the recoverability
 requirements (NFR-2, NFR-6, NFR-9) are realised. It receives an ordered
 `PlanStep[]`, a symbol table, and an `ExecuteContext`, and applies the steps.
-Confining all Discord mutations here — behind the `ExecuteContext` interface — is
+Confining all Discord mutations here, behind the `ExecuteContext` interface, is
 a deliberate seam: the planning engine, diff engine, and validation subsystem
 never touch Discord directly, which keeps them fully unit-testable and makes the
 execution context the single target for integration hardening.
@@ -578,13 +578,13 @@ execution context the single target for integration hardening.
   exponential backoff (1 s → 2 s → 4 s) and ±25% jitter. Discord.js handles 429
   rate-limit backoff itself. Known permanent errors (403/404/400) are diagnosed
   through a hardcoded fix map and fail the step; unknown errors fail the step
-  too — the engine never asks the LLM to diagnose an execution error.
+  too, the engine never asks the LLM to diagnose an execution error.
 - **Two deadlines (NFR-9).** A per-step deadline (`DEFAULT_STEP_TIMEOUT_MS =
-  30 s`) stops the loop from blocking forever on one hung Discord call, and an
+30 s`) stops the loop from blocking forever on one hung Discord call, and an
   overall execution deadline (`EXECUTION_TIMEOUT_MS = 5 min`, enforced in the
   plans route via an `AbortController`) stops the engine scheduling new work.
   Both bound the engine's _wait_; neither can cancel a Discord request already in
-  flight, so a timed-out request may still settle later — a limit stated plainly
+  flight, so a timed-out request may still settle later, a limit stated plainly
   in Chapter 3 and honoured in the reporting.
 - **Convergent rollback (NFR-2).** On any permanent step failure, abort, or
   overall timeout, `rollbackFull()` does _not_ replay steps in reverse. It reads
@@ -594,7 +594,7 @@ execution context the single target for integration hardening.
   only partly applied, and handles external changes since execution uniformly.
   It is best-effort structural recovery, not a transaction: Discord discards
   message history and original IDs on deletion, and a rollback step can itself
-  fail. The engine reports the outcome — success or residual divergence — rather
+  fail. The engine reports the outcome, success or residual divergence, rather
   than claiming unconditional restoration.
 
 ### 4.2.6 The bot and its cache
@@ -607,7 +607,7 @@ two distinct roles.
   lifecycle events (`ChannelCreate/Update/Delete`, `GuildRoleCreate/…`,
   `GuildMemberAdd/…`, `GuildCreate/Delete`). Because the API runs in the same
   process (Section 4.1.5), planning reads this projection as a direct in-process
-  call, with no Discord round-trip and no rate-limit cost — the mechanism behind
+  call, with no Discord round-trip and no rate-limit cost, the mechanism behind
   low-latency planning reads (NFR-8).
 - **`ExecuteContext` implementation (`bot/execute-context.ts`).** The concrete
   fulfilment of the domain interface: every Discord.js call the execution engine
@@ -631,17 +631,20 @@ stage.
   (`startPeriodicLockCleanup`, every 5 minutes, also run at boot) clears any
   lock older than a 30-minute TTL or without a heartbeat for 5 minutes, which is
   how a crashed execution frees its guild.
-- **Drift detection (`drift-detector.ts`).** A scheduled poll (every 60 s)
-  compares live Discord state against the cache; when they differ it persists a
-  `driftEvents` row and pushes an event to any subscribed Studio client over
-  SSE. Detection and remedy are deliberately separated: the system reports drift
-  and then waits for the administrator (FR-24), rather than refreshing a plan
-  automatically. The server-side stale hash check remains in force regardless of
-  whether the visible notice is dismissed.
+- **Drift detection (`drift-detector.ts`, `bot/index.ts`).** Relevant channel,
+  role, and member-role changes observed through the Discord gateway immediately
+  emit and persist a guild-scoped drift event. Events observed while an execution
+  lock is held are suppressed as expected plan effects. A scheduled poll (every
+  60 s) remains as a consistency check between the Discord.js and application
+  caches; detected mismatches are also persisted and streamed over SSE. Detection and
+  remedy are deliberately separated: the system reports drift and then waits for
+  the administrator (FR-24), rather than refreshing a plan automatically. The
+  server-side stale hash check remains in force regardless of whether the visible
+  notice is dismissed.
 - **Event buses (`event-bus.ts`, `planning-event-bus.ts`) and snapshot cleanup
   (`snapshot-cleanup.ts`).** Two small pub/sub buses decouple the engines from
-  the SSE endpoints — one per plan for execution events, one per conversation
-  for planning events — so a component emits progress without knowing who is
+  the SSE endpoints, one per plan for execution events, one per conversation
+  for planning events, so a component emits progress without knowing who is
   listening. A daily cleanup job deletes snapshots past their 30-day retention
   (NFR-5) and orphaned plan iterations.
 
@@ -652,8 +655,8 @@ schema in `packages/db/src/schema.ts`. The schema serves two purposes that shape
 its design: it is the durable audit record required by NFR-13 (conversations,
 plans, and executed outcomes survive restarts and are available for review), and
 it is the recovery store required by NFR-5 (before/after snapshots retained so a
-completed plan can be reversed). Ephemeral planning state — the in-flight LLM
-loop, the live `DesiredState` being mutated within a turn — is held in server
+completed plan can be reversed). Ephemeral planning state, the in-flight LLM
+loop, the live `DesiredState` being mutated within a turn, is held in server
 memory, not the database (Section 4.4); what reaches the database is the
 _committed_ record of a plan iteration, not the working state.
 
@@ -661,7 +664,7 @@ A convention runs through the schema. Every table carries `id`, `createdAt`, and
 `updatedAt`; column names are `snake_case` in SQL and camelCase in TypeScript;
 resource-scoped tables carry a `guildId` that both links to the owning guild and
 serves as the isolation boundary enforced above the database (NFR-11); and
-larger structured payloads — desired state, plan steps, snapshot contents — are
+larger structured payloads, desired state, plan steps, snapshot contents, are
 stored as `jsonb` rather than being decomposed into relational columns, because
 they are read and written as whole documents by the domain code and are never
 queried field-by-field in SQL.
@@ -680,7 +683,7 @@ readability, as they hang off `users` in the conventional way.
 
 ```plantuml
 @startuml
-'| fig-cap: Figure 4.4: Entity–relationship diagram — database schema
+'| fig-cap: Figure 4.4: Entity–relationship diagram, database schema
 hide circle
 skinparam linetype ortho
 
@@ -794,7 +797,7 @@ plans ||--o{ snap
 Two relationships in this diagram carry the plan-first model. A **conversation**
 owns an ordered series of **plan iterations** (`version` unique per
 conversation), each holding one `DesiredState` document and tagged by how it was
-produced — `llm_generated`, `manual_edit`, or `revert`. This is the iteration
+produced, `llm_generated`, `manual_edit`, or `revert`. This is the iteration
 history that powers preview, revert (FR-12), and manual editing (FR-13). A
 **plan** is the contract created at approval; it links back to the conversation
 that produced it and forward to the **snapshots** taken around its execution, so
@@ -807,8 +810,8 @@ standard and are not detailed here.
 
 - **`guilds`.** The anchor for a Discord server and, notably, the home of the
   **execution lock** (Section 4.2.7). Rather than a separate lock table, the
-  lock is four columns on the guild row — `currentPlanId`, `lockAcquiredAt`,
-  `lockAcquiredBy`, `lockLastHeartbeatAt` — so that "acquire the lock" is a
+  lock is four columns on the guild row, `currentPlanId`, `lockAcquiredAt`,
+  `lockAcquiredBy`, `lockLastHeartbeatAt`, so that "acquire the lock" is a
   single conditional `UPDATE … WHERE current_plan_id IS NULL` that PostgreSQL
   serialises for us (NFR-3). `settings` and `serverType` are per-guild
   configuration; `subscriptionTier` exists but is currently unused. `icon`
@@ -816,14 +819,14 @@ standard and are not detailed here.
   the row is first created (`GuildCreate`, Section 4.2.6) and is not refreshed
   if the server's icon changes afterward. The guild-list and guild-detail
   routes include it in their JSON response, but the currently routed Studio
-  guild picker (Section 4.5.1) renders only the guild name and member count —
+  guild picker (Section 4.5.1) renders only the guild name and member count,
   the icon-as-avatar rendering exists only in the retired, unrouted Dashboard
   and Setup pages, so the column is populated and exposed by the API without
   a live consumer today.
 - **`conversations`.** The top-level planning unit and the LLM audit log. It
   stores the originating `userPrompt`, the full `messages` array as `jsonb`, a
   `status` (`active`, `waiting_for_user`, `cancelled`, `expired`, …), and the
-  `forkStateHash` — the SHA-256 of the server state the conversation forked from,
+  `forkStateHash`, the SHA-256 of the server state the conversation forked from,
   which is the value stale-state protection (NFR-4) compares against.
 - **`plan_iterations`.** One row per saved desired-state version within a
   conversation. `desiredState` is the full `jsonb` document; `version` is unique
@@ -843,7 +846,7 @@ standard and are not detailed here.
   `expiresAt` drives the 30-day retention cleanup. Indexed by `(guildId, type)`,
   by `planId`, and by `expiresAt` so the cleanup job can scan efficiently.
 - **`rules`.** Per-guild natural-language policy strings (`ruleText`) consumed by
-  the Stage 2 policy check (FR-16, FR-25). Deliberately unstructured free text —
+  the Stage 2 policy check (FR-16, FR-25). Deliberately unstructured free text,
   which is why enforcing them requires an LLM rather than a deterministic check.
 - **`templates`.** Reusable configuration templates scoped to a guild
   (`structure` as `jsonb`, plus `name`, `description`, `category`, `tags`,
@@ -853,7 +856,7 @@ standard and are not detailed here.
   `kind`, `summary`, and `details`, indexed by `(guildId, createdAt)` for
   history. The table also defines a `resolvedAt` column and a
   `(guildId, resolvedAt)` index intended for an open/resolved distinction, but
-  no code path currently writes or reads `resolvedAt` — the live Studio drift
+  no code path currently writes or reads `resolvedAt`, the live Studio drift
   toast (Section 4.5.4) is driven entirely by the in-memory SSE event the
   drift detector emits, not by a database query. The column is schema-defined
   groundwork for future drift-resolution tracking, not a wired-up feature
@@ -869,15 +872,15 @@ documents.** The domain code reads and writes them whole (`plan.planData as
 unknown as PlanData`), so decomposing them into relational tables would buy
 nothing and cost a great deal of mapping. The accepted trade-off is analytical
 rather than operational: because the individual steps inside a plan are not
-broken out into columns, a future reporting feature — for example, "how many
-plans deleted a voice channel last month?" — could not be answered with an
+broken out into columns, a future reporting feature, for example, "how many
+plans deleted a voice channel last month?", could not be answered with an
 ordinary indexed `WHERE` clause. It would require either a GIN index over the
 `jsonb` document, which is heavier to maintain and more awkward to query than a
 B-tree index on a normalized column, or a separate extraction step that
 materializes the fields of interest. This is a deliberate limitation logged as a
 Phase-2 item (making `planData` queryable), not a defect: the product has no
 analytics surface today, and where a table genuinely does need to be filtered by
-its contents — `drift_events`, indexed by guild and creation time — the schema
+its contents, `drift_events`, indexed by guild and creation time, the schema
 already uses normalized, indexed columns rather than burying those fields in
 `jsonb`. `drift_events` also carries a `resolvedAt` column and index for a
 resolution-status filter, but that filter is not yet queried by any route; see
@@ -897,7 +900,7 @@ state that no local password is ever stored despite the column existing.
 Section 4.1.4 described the plan-first pipeline at the level of stages and safety
 properties. This section makes that pipeline concrete: the shape of the HTTP API
 the Studio calls, the conventions every endpoint shares, and the request/response
-sequences of the two flows that carry the most weight — starting a planning
+sequences of the two flows that carry the most weight, starting a planning
 conversation and executing an approved plan. Where 4.1.4 answered _what_ happens
 and _why_ it is safe, this section answers _how a client drives it_.
 
@@ -910,22 +913,22 @@ The API is resource-oriented and mostly nested under a guild
 Discord server. It is not a strict REST/CRUD API: several endpoints are
 _commands_ (`/plans/:planId/execute`, `/conversations/:convId/approve`) rather
 than resource mutations, which matches a domain where the interesting operations
-are verbs — plan, approve, execute, roll back — not row edits.
+are verbs, plan, approve, execute, roll back, not row edits.
 
 Every request passes through a fixed middleware chain before reaching a handler,
 and the order matters:
 
-1. **CORS** — credentialed CORS is scoped to the configured web origin
+1. **CORS**, credentialed CORS is scoped to the configured web origin
    (`WEB_APP_URL`, default `http://localhost:5173`), because the browser sends
    the session cookie cross-origin.
-2. **Rate limit** — a sliding-window limiter caps traffic at 100 requests per
+2. **Rate limit**, a sliding-window limiter caps traffic at 100 requests per
    minute (`hono/middleware/rate-limit.ts`), applied to all of `/api/*` (NFR-9).
-3. **Bot-ready gate** — every `/api/*` handler awaits the `botReady` promise
+3. **Bot-ready gate**, every `/api/*` handler awaits the `botReady` promise
    before running. This is a deliberate correctness guard, not just startup
    hygiene: a request served before the guild cache is populated would fork a
    plan from an empty state and silently corrupt the planning contract. Blocking
    until the cache is warm makes that class of bug impossible.
-4. **Authentication** — `authMiddleware` resolves the Better Auth session from
+4. **Authentication**, `authMiddleware` resolves the Better Auth session from
    the cookie and attaches the user to the Hono context; `requireUser` throws a
    401 if absent. The SSE stream endpoints remain inside this bot-ready and
    authentication chain, then run an additional resource lookup and guild
@@ -957,7 +960,7 @@ conventions are uniform: JSON throughout, resource creation returns **201**, and
 errors return a JSON object with an `error` string (plus, for the execution
 pipeline, structured `conflicts` / `blockers` / `warnings` arrays so the Studio
 can render actionable messages rather than a bare string). A single
-`app.onError` handler centralises the failure contract — it maps
+`app.onError` handler centralises the failure contract, it maps
 `HTTPException` to its status, converts an internal `DiscordApiError` into a
 **503** ("Discord API is temporarily unavailable"), and collapses everything
 else to a **500** so an unexpected throw never leaks an internal error shape to
@@ -974,28 +977,28 @@ three `stream` endpoints are Server-Sent Event streams rather than ordinary
 responses. The plan and conversation streams are covered in 4.4.4; the drift
 stream is covered in Section 4.2.7.
 
-| Resource / endpoint | Methods | Purpose |
-| --- | --- | --- |
-| `/api/health` | GET | Liveness — DB reachable, bot connected (unauthenticated) |
-| `/api/auth/*` | GET, POST | Better Auth handler (Discord OAuth2 sign-in/callback/session) |
-| `/api/me` | GET | Current authenticated user |
-| `/api/bot` | GET `/status`, GET `/invite` | Bot connection status; OAuth invite URL |
-| `/api/guilds` | GET (list), GET `/:id`, PATCH `/:id` | Guilds the user manages; server type & settings |
-| `/api/guilds/:g/rules` | GET, POST, PUT `/:id`, DELETE `/:id` | Server policy rules (Stage 2 input) |
-| `/api/guilds/:g/state` etc. | GET `/state`, `/channels`, `/roles` | Read the cached current server state |
-| `/api/guilds/:g/drift/stream` | GET (SSE) | Live external-change (drift) notifications for the guild |
-| `/api/guilds/:g/plans` | GET, GET `/:id`, POST | List / read / create a plan |
-| `/api/guilds/:g/plans/:id/*` | POST `execute`, `abort`, `rollback`, `replan` | Execution lifecycle commands |
-| `/api/guilds/:g/conversations` | GET, GET `/:id`, POST | List / read / start a planning conversation |
-| `/api/guilds/:g/conversations/:id/*` | POST `approve`, `revise`, `cancel`, `ask-user`, `revert/:v`, `edit-state`, template attach/detach | Planning-loop commands |
-| `/api/guilds/:g/templates` | GET, GET `/:id`, POST, PUT, DELETE, POST `/:id/merge` | Template CRUD + LLM merge |
-| `/api/plan/:id/stream` | GET (SSE) | Live execution progress |
-| `/api/conversations/:id/stream` | GET (SSE) | Live planning progress |
+| Resource / endpoint                  | Methods                                                                                           | Purpose                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `/api/health`                        | GET                                                                                               | Liveness, DB reachable, bot connected (unauthenticated)      |
+| `/api/auth/*`                        | GET, POST                                                                                         | Better Auth handler (Discord OAuth2 sign-in/callback/session) |
+| `/api/me`                            | GET                                                                                               | Current authenticated user                                    |
+| `/api/bot`                           | GET `/status`, GET `/invite`                                                                      | Bot connection status; OAuth invite URL                       |
+| `/api/guilds`                        | GET (list), GET `/:id`, PATCH `/:id`                                                              | Guilds the user manages; server type & settings               |
+| `/api/guilds/:g/rules`               | GET, POST, PUT `/:id`, DELETE `/:id`                                                              | Server policy rules (Stage 2 input)                           |
+| `/api/guilds/:g/state` etc.          | GET `/state`, `/channels`, `/roles`                                                               | Read the cached current server state                          |
+| `/api/guilds/:g/drift/stream`        | GET (SSE)                                                                                         | Live external-change (drift) notifications for the guild      |
+| `/api/guilds/:g/plans`               | GET, GET `/:id`, POST                                                                             | List / read / create a plan                                   |
+| `/api/guilds/:g/plans/:id/*`         | POST `execute`, `abort`, `rollback`, `replan`                                                     | Execution lifecycle commands                                  |
+| `/api/guilds/:g/conversations`       | GET, GET `/:id`, POST                                                                             | List / read / start a planning conversation                   |
+| `/api/guilds/:g/conversations/:id/*` | POST `approve`, `revise`, `cancel`, `ask-user`, `revert/:v`, `edit-state`, template attach/detach | Planning-loop commands                                        |
+| `/api/guilds/:g/templates`           | GET, GET `/:id`, POST, PUT, DELETE, POST `/:id/merge`                                             | Template CRUD + LLM merge                                     |
+| `/api/plan/:id/stream`               | GET (SSE)                                                                                         | Live execution progress                                       |
+| `/api/conversations/:id/stream`      | GET (SSE)                                                                                         | Live planning progress                                        |
 
 ### 4.4.2 Flow: starting a planning conversation
 
 The most characteristic request in the system is `POST
-/api/guilds/:guildId/conversations` — the client sends a natural-language prompt
+/api/guilds/:guildId/conversations`, the client sends a natural-language prompt
 and the server begins an LLM planning session. What makes it architecturally
 interesting is that the HTTP response does _not_ carry the plan. The request
 returns almost immediately with a conversation record, and the actual planning
@@ -1008,7 +1011,7 @@ The handler (`conversations.ts`) runs the following sequence:
    the guild.
 2. **Fork the current state.** It builds a `ServerState` from the bot cache and
    computes a `forkStateHash` (SHA-256) over it. This hash is persisted on the
-   conversation row and is the anchor for every later stale-state check — it
+   conversation row and is the anchor for every later stale-state check, it
    records exactly which version of reality the plan was formed against. If the
    cache is not yet populated, hashing fails and the handler returns **503**
    with a retry message rather than forking from nothing.
@@ -1023,8 +1026,8 @@ From that point the client opens `GET /api/conversations/:id/stream` and
 receives the planning progress live: streamed reasoning, each tool call and its
 effect on the desired state, and finally either a `completed` event or an
 `ask_user` event. The `emit` callback also drives the conversation's persisted
-`status` as a side effect — `waiting_for_user` when the LLM asks a clarifying
-question, `completed` when it finishes, `expired` on error or timeout — so the
+`status` as a side effect, `waiting_for_user` when the LLM asks a clarifying
+question, `completed` when it finishes, `expired` on error or timeout, so the
 database always reflects the live session even though the work is detached from
 any single request.
 
@@ -1046,20 +1049,20 @@ so the Studio can distinguish "the plan is stale" from "the plan is invalid"
 from "someone else is executing." The handler runs them in this order, returning
 at the first failure:
 
-1. **Operability + authorization** — `checkGuildOperable` (404/403) and
+1. **Operability + authorization**, `checkGuildOperable` (404/403) and
    `userHasManageGuild` (403), as for every command.
-2. **Load and state-check the plan** — the plan must exist for this guild (404)
+2. **Load and state-check the plan**, the plan must exist for this guild (404)
    and be in `draft` or `approved` status (400); a plan mid-execution or already
    completed cannot be re-run.
 3. **Stale-state detection (409).** If the plan is tied to a conversation, the
    server rebuilds `ServerState` from the current cache, recomputes its hash, and
    compares it to the conversation's `forkStateHash`. A mismatch means the server
    changed since planning began, so execution is refused with **409** and
-   `canAIRepair: true` — the signal the Studio uses to offer the confirmed AI
+   `canAIRepair: true`, the signal the Studio uses to offer the confirmed AI
    re-plan flow (FR-21) rather than a dead error.
 4. **Re-diff (409).** The desired state is diffed against current reality. If the
-   diff reports conflicts — for example the plan edits a channel that no longer
-   exists — it returns **409** with the conflict messages.
+   diff reports conflicts, for example the plan edits a channel that no longer
+   exists, it returns **409** with the conflict messages.
 5. **Pre-execution assumption checks (409).** Each step's tool assumptions
    (parent exists, no name collision, bot hierarchy) are evaluated against the
    current state; any failure returns **409** with the specific messages.
@@ -1068,7 +1071,7 @@ at the first failure:
    arrays. On success the plan advances to `status: "validated"`.
 7. **Lock acquisition (423).** `acquireGuildLock` takes the per-guild execution
    lock via a conditional UPDATE. If another plan holds it, the endpoint returns
-   **423 Locked** — the status that names exactly this condition — and the guild
+   **423 Locked**, the status that names exactly this condition, and the guild
    serialises rather than executing two plans concurrently.
 
 Only after all seven gates pass does the handler snapshot the before-state,
@@ -1081,7 +1084,7 @@ execution is not reclaimed by the stale-lock sweeper.
 The terminal outcomes are deliberately explicit. On success the plan is marked
 `completed`, an after-snapshot is stored, and the JSON response reports
 `{ success, steps, error }`. On failure the handler updates the plan to `failed`
-and — if a before-snapshot was captured and the bot is still connected — attempts
+and, if a before-snapshot was captured and the bot is still connected, attempts
 the convergent rollback described in 4.1.4, streaming `rollback_started` and per
 -step rollback events. If the bot disconnected mid-execution it _skips_ rollback
 because it cannot safely compute the reverse diff without a live cache. The
@@ -1091,13 +1094,13 @@ than pretending that recovery succeeded. A `finally` block always clears the
 abort controller, stops the heartbeat, and releases the lock, so no failure path
 can strand the guild in a locked state. As a final consistency step, sibling conversations
 whose `forkStateHash` no longer matches the new reality are marked `stale` and
-their in-memory sessions cancelled — the same drift the drift detector would
+their in-memory sessions cancelled, the same drift the drift detector would
 otherwise catch, applied immediately at the moment the server changed.
 
 ### 4.4.4 Server-Sent Events for live progress
 
 Both long-running flows report progress over SSE rather than in the HTTP
-response, because both are one-way, append-only logs — precisely SSE's shape, as
+response, because both are one-way, append-only logs, precisely SSE's shape, as
 argued in 4.1.5. The two stream endpoints (`/api/plan/:id/stream`,
 `/api/conversations/:id/stream`) share a structure: they authorise the caller
 against the resource's guild, emit an initial `streaming_ready` status, then
@@ -1108,21 +1111,21 @@ proxies, and an `onAbort` handler unsubscribes when the client disconnects so th
 bus does not leak subscribers.
 
 This is the read side of an asymmetric design: the server pushes progress over
-SSE, but every client _action_ — approve, revise, execute, abort — is an ordinary
+SSE, but every client _action_, approve, revise, execute, abort, is an ordinary
 authenticated REST call. Those are discrete commands, not a stream, so forcing
 them through a bidirectional socket would add complexity for no benefit. The
 Studio therefore holds one `EventSource` open per active resource and issues
 normal POSTs alongside it.
 
-The event bus that feeds these streams is in-process and holds no history, which
-has a direct consequence for reconnection. Browser `EventSource` reconnects
-automatically on drop, but the server has no per-connection buffer to replay, so
-any progress event emitted during the gap is lost to that client. The design
-mitigates this at the point where it matters most rather than by making the
-stream itself durable: the authoritative record of a flow is the persisted
+The event buses are in-process rather than durable logs. The planning bus retains
+the latest terminal event (`ask_user`, `completed`, `error`, or `expired`) so a
+subscriber that attaches after a fast turn still reaches the correct phase.
+Intermediate planning events and execution events emitted during a disconnect
+are not replayed. The design mitigates this at the point where it matters most
+rather than by making the complete stream durable: the authoritative record is the persisted
 resource (the conversation's iteration history, the plan's status and step
 results), not the event log. Accordingly the client treats SSE as a live
-_accelerator_ and REST as the source of truth — on a terminal event such as
+_accelerator_ and REST as the source of truth, on a terminal event such as
 `completed` it re-fetches the conversation over REST to load the full iteration
 history and latest desired state, so a reconnect that misses intermediate events
 still converges on correct final state. The remaining limitation is
@@ -1143,7 +1146,7 @@ conversation returns the conversation row while the LLM keeps planning;
 approving returns a plan handle, and the subsequent execution reports its
 progress over the plan stream. This keeps
 request handlers short and within normal HTTP timeouts even though the underlying
-operations — LLM loops of tens of seconds, executions of up to five minutes —
+operations, LLM loops of tens of seconds, executions of up to five minutes,
 run far longer than any single response should. It is the API-level expression
 of the same separation the whole architecture rests on: the request records
 _intent_, and the actual effects unfold, observably, behind it.
@@ -1222,19 +1225,19 @@ BareTemplates --> Picker : redirect
 The route guard in `App.tsx` encloses every Studio and template route in
 `AppLayout`. If no authenticated session exists, navigation to any protected
 route is replaced with `/login`; an authenticated user who visits `/login` is
-sent to `/studio`. The layout contributes the global header — product identity,
-the Studio navigation item, signed-in user identity, and sign-out — while the
+sent to `/studio`. The layout contributes the global header, product identity,
+the Studio navigation item, signed-in user identity, and sign-out, while the
 selected route supplies the workspace beneath it.
 
 The main routes have the following interface responsibilities:
 
-| Route | Primary interface responsibility |
-| --- | --- |
-| `/login` | Begin Discord OAuth2 sign-in; no local-password form is presented. |
-| `/studio` | List guilds available to the signed-in administrator and provide the bot-invite empty state when no guild is ready. |
-| `/studio/:guildId` | Host conversation history, natural-language planning, desired-state review, execution progress, drift feedback, templates, and rules for one guild. |
-| `/templates/:guildId` | Search and browse the selected guild's saved template library. |
-| `/templates/:guildId/:templateId` | Edit template metadata and structure, fork a copy, or delete the template. |
+| Route                             | Primary interface responsibility                                                                                                                    |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/login`                          | Begin Discord OAuth2 sign-in; no local-password form is presented.                                                                                  |
+| `/studio`                         | List guilds available to the signed-in administrator and provide the bot-invite empty state when no guild is ready.                                 |
+| `/studio/:guildId`                | Host conversation history, natural-language planning, desired-state review, execution progress, drift feedback, templates, and rules for one guild. |
+| `/templates/:guildId`             | Search and browse the selected guild's saved template library.                                                                                      |
+| `/templates/:guildId/:templateId` | Edit template metadata and structure, fork a copy, or delete the template.                                                                          |
 
 The old Dashboard is intentionally absent from the active sitemap. Existing
 `/dashboard` links are compatibility redirects to the Studio, and the retained
@@ -1295,8 +1298,8 @@ Each column has one primary responsibility:
   begins with curated request suggestions and a free-form prompt, then renders
   the user's request, planning events, clarification controls, the completed
   desired state, and execution results as a chronological conversation. The
-  controls that change lifecycle state — revise, edit, approve, save as a
-  template, rollback, and start over — appear next to the result they affect.
+  controls that change lifecycle state, revise, edit, approve, save as a
+  template, rollback, and start over, appear next to the result they affect.
 - **Current and desired structure (right).** `RightPanel` behaves like an editor
   tab strip. **Server** and **Desired** are persistent tabs; the latter displays
   an empty instruction until a conversation produces desired state. The `+`
@@ -1401,7 +1404,7 @@ possible commands at once.
 
 ```plantuml
 @startuml
-'| fig-cap: Figure 4.7: State machine — conversation UI lifecycle
+'| fig-cap: Figure 4.7: State machine, conversation UI lifecycle
 hide empty description
 
 [*] --> Input
@@ -1427,15 +1430,15 @@ Executed --> Executed : completed-plan rollback
 
 The visible treatment of each phase is as follows:
 
-| UI phase | Visible design and available action |
-| --- | --- |
-| `input` | `WelcomeScreen` offers five representative configuration prompts and a free-form textarea. Either path creates a conversation. |
-| `planning` | The user prompt remains visible and an assistant bubble is labelled **Planning…**. A collapsed log grows as `turn_started`, `tool_called`, and `tool_result` events arrive, exposing progress without overwhelming the primary conversation. |
-| `ask_user` | A **Waiting for you** planning state is followed by the planner's question. The control supports single- or multi-select options and a custom answer when allowed; submission returns to planning. |
-| `completed` / review | A **Plan ready** bubble presents the summary, desired-state preview, iteration-history entry point, and Edit, Approve, Save as template, and Cancel actions. A separate Revise input remains docked below the conversation. |
-| `executing` | An **Executing…** bubble appends step-start, completion, retry, failure, and rollback events as they stream from the plan endpoint. Actions that could submit a duplicate lifecycle command are guarded while a request is in flight. |
-| `executed` | The bubble becomes **Execution complete** and offers Rollback or New plan. |
-| `execute_failed` | A human-readable error is presented with Start over. When the API marks a stale/conflicted plan as AI-repairable, **Re-plan with AI** starts the confirmed repair flow and returns the conversation to planning. |
+| UI phase             | Visible design and available action                                                                                                                                                                                                          |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `input`              | `WelcomeScreen` offers five representative configuration prompts and a free-form textarea. Either path creates a conversation.                                                                                                               |
+| `planning`           | The user prompt remains visible and an assistant bubble is labelled **Planning…**. A collapsed log grows as `turn_started`, `tool_called`, and `tool_result` events arrive, exposing progress without overwhelming the primary conversation. |
+| `ask_user`           | A **Waiting for you** planning state is followed by the planner's question. The control supports single- or multi-select options and a custom answer when allowed; submission returns to planning.                                           |
+| `completed` / review | A **Plan ready** bubble presents the summary, desired-state preview, iteration-history entry point, and Edit, Approve, Save as template, and Cancel actions. A separate Revise input remains docked below the conversation.                  |
+| `executing`          | An **Executing…** bubble appends step-start, completion, retry, failure, and rollback events as they stream from the plan endpoint. Actions that could submit a duplicate lifecycle command are guarded while a request is in flight.        |
+| `executed`           | The bubble becomes **Execution complete** and offers Rollback or New plan.                                                                                                                                                                   |
+| `execute_failed`     | A human-readable error is presented with Start over. When the API marks a stale/conflicted plan as AI-repairable, **Re-plan with AI** starts the confirmed repair flow and returns the conversation to planning.                             |
 
 This state-specific design supports progressive disclosure. A new user only
 needs to understand the prompt box; planning exposes the tool log only on
@@ -1591,7 +1594,7 @@ actions such as Approve, Delete, Rollback, and Save. The tab strip exposes
 `tablist`, `tab`, selection, and close labels; modal history identifies itself as
 a dialog; the drift notification uses alert semantics; and icon-only close
 controls carry accessible labels. These measures do not constitute a full
-accessibility evaluation — that belongs in Chapter 6 — but they make the
+accessibility evaluation, that belongs in Chapter 6, but they make the
 intended interaction semantics explicit in the component design.
 
 Errors are translated into workflow choices where the server provides enough
@@ -1621,17 +1624,11 @@ separate analytics dashboard. This is not yet a dedicated persisted
 plan-and-outcome history view of the kind required by FR-23; the API can list
 plans, but the active web routes do not expose that list.
 
-Three smaller navigation and command gaps remain in the current Studio. The
-Cancel control that calls the conversation-cancellation command is rendered in
-the **Plan ready** bubble, not while the `planning` phase is visibly in progress,
-so the web interface does not yet expose the in-progress cancellation promised
-by FR-27 at the point it is needed. Similarly, the plans API supports aborting
-an execution, but `ChatArea` does not present an Abort action during the
-`executing` phase (FR-28). Finally, the contextual header's Settings shortcut
-currently targets the legacy `/dashboard/:guildId` redirect; the working route
-to `SettingsTab` is the right panel's `+` menu. These are interface wiring gaps,
-not claims that the corresponding server commands or safety checks are absent,
-and they should be closed or assessed explicitly in Chapters 5 and 6.
+Lifecycle commands are presented at the phase where they are meaningful. Cancel
+appears while the planner is generating or waiting for clarification, Abort
+appears during execution, and the contextual Settings shortcut opens the Studio
+`SettingsTab` directly. Server-side status, authorization, and lock checks remain
+authoritative if a client submits one of these commands at an invalid time.
 
 Finally, the design keeps browser controls advisory and the API authoritative.
 The interface disables actions when it knows a request is unsafe or stale, but
@@ -1688,8 +1685,8 @@ RBAC or subscription gates.
 This boot-time validation is also where least-privilege secret handling
 (NFR-12) is enforced. `BETTER_AUTH_SECRET`, `DISCORD_BOT_TOKEN`, and
 `DISCORD_CLIENT_SECRET` are parsed once by `env.ts` into the `validatedEnv`
-singleton (`env-validated.ts`), and the modules that need them — Better Auth's
-config, the bot login call — import that singleton rather than re-reading
+singleton (`env-validated.ts`), and the modules that need them, Better Auth's
+config, the bot login call, import that singleton rather than re-reading
 `process.env`. The `LLM_API_KEY` is the one exception to that single-path
 pattern: `planning-session.ts` reads `process.env.LLM_API_KEY` directly rather
 than through `validatedEnv`, because it is optional and gates the mock-planner
@@ -1698,9 +1695,9 @@ centralised scheme, not a leak, since the value still never leaves the server
 process. None of these credentials ever crosses the client/server boundary:
 the web app's own `VITE_API_URL` is the only environment value bundled into
 the browser build (Vite only exposes `VITE_`-prefixed variables), and no
-server route echoes a credential value back in a JSON response — the
+server route echoes a credential value back in a JSON response, the
 `DISCORD_CLIENT_ID` returned by the bot-invite endpoint is a public OAuth
-application identifier, not a secret. Logging follows the same discipline —
+application identifier, not a secret. Logging follows the same discipline,
 the reviewed `logger.*` call sites around configuration (for example, the
 missing-bot-token warning in `index.ts` and the missing-LLM-key error in
 `validation.ts`) log that a credential is absent, never its value. `.env` and
@@ -1823,8 +1820,8 @@ records plan, owner, acquisition time, and heartbeat time; a 60-second heartbeat
 keeps healthy five-minute executions alive. A 30-minute TTL and five-minute
 periodic cleanup recover locks from crashes or dead processes, while the
 `finally` block releases the lock on every normal or error path. Co-locating the
-lock on the `guilds` row keeps the design simple — no separate lock table, and
-acquisition is a single indexed write — at the cost of one tradeoff worth
+lock on the `guilds` row keeps the design simple, no separate lock table, and
+acquisition is a single indexed write, at the cost of one tradeoff worth
 naming: because the lock columns share the row with the guild's configuration,
 every lock check, heartbeat, and release writes that same row. Under a workload
 with very high concurrent reads and writes of one guild's configuration this
@@ -1859,9 +1856,10 @@ control.
 
 SSE connections authenticate and authorize before subscribing, emit a ready
 event, and unregister on client abort. Heartbeats keep intermediaries from
-closing idle streams. Because the event bus keeps no history, progress events
-missed during a reconnect are not replayed; the client recovers authoritative
-state by re-fetching the persisted resource over REST, as detailed in 4.4.4.
+closing idle streams. Planning terminal events have a bounded in-memory replay,
+while intermediate planning and execution progress missed during reconnect is
+not replayed; the client recovers authoritative state by re-fetching the
+persisted resource over REST, as detailed in 4.4.4.
 
 Conversations, prompts, LLM messages, desired states, plans, rules, and
 snapshots are persisted as PostgreSQL rows, several as `jsonb` documents. The

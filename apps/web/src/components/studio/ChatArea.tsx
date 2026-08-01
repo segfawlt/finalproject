@@ -8,6 +8,7 @@ import {
   RotateCcw,
   Save,
   Send,
+  Square,
   Undo2,
   X,
 } from "lucide-react";
@@ -98,6 +99,13 @@ export default function ChatArea({ c, guildId, guildName, edit }: ChatAreaProps)
                 <EmptyLine text="Thinking about your request…" />
               ) : (
                 <PlanningLog events={c.planningEvents} />
+              )}
+              {(c.phase === "planning" || c.phase === "ask_user") && (
+                <ActionRow>
+                  <ActionButton onClick={c.cancelPlanning} disabled={c.inFlight}>
+                    Cancel planning
+                  </ActionButton>
+                </ActionRow>
               )}
             </AssistantBubble>
           )}
@@ -191,6 +199,13 @@ export default function ChatArea({ c, guildId, guildName, edit }: ChatAreaProps)
               label={c.phase === "executing" ? "Executing…" : "Execution complete"}
             >
               <ExecutionLog events={c.execEvents} />
+              {c.phase === "executing" && (
+                <ActionRow>
+                  <ActionButton onClick={c.abortExecution} icon={<Square size={12} />}>
+                    Abort execution
+                  </ActionButton>
+                </ActionRow>
+              )}
               {c.phase === "executed" && (
                 <ActionRow>
                   <ActionButton onClick={c.rollback} icon={<Undo2 size={13} />}>
@@ -426,9 +441,7 @@ function ExecutionLog({ events }: { events: ExecEvent[] }) {
               {ev.type === "rollback_started" && "Rolling back…"}
               {ev.type === "rollback_completed" && "Rollback complete"}
               {ev.type === "rollback_failed" && (
-                <span className="text-error">
-                  Rollback failed{ev.error ? `: ${ev.error}` : ""}
-                </span>
+                <span className="text-error">Rollback failed{ev.error ? `: ${ev.error}` : ""}</span>
               )}
             </span>
           </li>

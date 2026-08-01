@@ -23,23 +23,31 @@ async function waitForConversationStatus(
 // ── PF-01: Progress events appear before terminal events ─────────────────────
 
 test.describe("PF-01: Progress-event ordering", () => {
-  test.fixme("SSE plan stream emits streaming_ready before any terminal event", async ({ page }) => {
-    // Create a conversation, approve it to get a plan, then verify SSE ordering.
-    // With mock LLM, planning completes immediately with no tool calls (no desiredState change).
+  test("SSE conversation stream emits streaming_ready before any terminal event", async ({
+    page,
+  }) => {
+    // The ready event is emitted on every successful stream connection, independent of
+    // whether the LLM produces tool calls.
     const convRes = await page.request.post(`/api/guilds/${GUILD_ID}/conversations`, {
       data: { userPrompt: "PF-01 event ordering test" },
     });
     expect(convRes.status()).toBe(201);
     const { id: convId } = await convRes.json();
 
-    await waitForConversationStatus(page.request, convId, ["completed", "error", "waiting_for_user"], 30_000);
+    await waitForConversationStatus(
+      page.request,
+      convId,
+      ["completed", "error", "waiting_for_user"],
+      30_000
+    );
 
     // Verify plan SSE stream sends streaming_ready (initial status event) immediately on connect.
     // We do this by opening the stream in the page context (has auth cookies) and collecting events.
+    await page.goto("/");
     const events: string[] = await page.evaluate(async (convId: string) => {
       return new Promise<string[]>((resolve) => {
         const collected: string[] = [];
-        const es = new EventSource(`http://localhost:5173/api/guilds/1517217533168582838/conversations/${convId}/stream`);
+        const es = new EventSource(`/api/conversations/${convId}/stream`);
         es.addEventListener("status", (e) => {
           collected.push("status:" + e.data);
           es.close();
@@ -49,7 +57,10 @@ test.describe("PF-01: Progress-event ordering", () => {
           es.close();
           resolve(collected);
         };
-        setTimeout(() => { es.close(); resolve(collected); }, 5000);
+        setTimeout(() => {
+          es.close();
+          resolve(collected);
+        }, 5000);
       });
     }, convId);
 
@@ -59,14 +70,13 @@ test.describe("PF-01: Progress-event ordering", () => {
     expect(firstEvent).toContain("streaming_ready");
   });
 
-  test.fixme(
-    "at least one progress event appears before each terminal event in execution stream",
-    async ({ request }) => {
-      // Requires a real plan execution. With mock LLM + empty desiredState,
-      // the diff produces no steps, so no progress events are emitted.
-      // Run after ST-05 has produced a real multi-step execution.
-    }
-  );
+  test.fixme("at least one progress event appears before each terminal event in execution stream", async ({
+    request,
+  }) => {
+    // Requires a real plan execution. With mock LLM + empty desiredState,
+    // the diff produces no steps, so no progress events are emitted.
+    // Run after ST-05 has produced a real multi-step execution.
+  });
 });
 
 // ── PF-02: p95 latency ≤ 1s under 20 concurrent reads ───────────────────────
@@ -117,20 +127,17 @@ test.describe("PF-03: Execution deadlines", () => {
     const plan = await createRes.json();
 
     // Verify abort endpoint is live (timeout + abort share the same controller)
-    const abortRes = await request.post(
-      `/api/guilds/${GUILD_ID}/plans/${plan.id}/abort`
-    );
+    const abortRes = await request.post(`/api/guilds/${GUILD_ID}/plans/${plan.id}/abort`);
     // 404 = no active execution (plan was never started) — confirms endpoint exists
     expect(abortRes.status()).toBe(404);
   });
 
-  test.fixme(
-    "hung step times out at ~30s; overall plan times out at ~5min with rollback",
-    async ({ request }) => {
-      // Requires: controllable hung Discord adapter that never resolves
-      // Cannot be simulated from E2E without bot-level injection
-    }
-  );
+  test.fixme("hung step times out at ~30s; overall plan times out at ~5min with rollback", async ({
+    request,
+  }) => {
+    // Requires: controllable hung Discord adapter that never resolves
+    // Cannot be simulated from E2E without bot-level injection
+  });
 });
 
 // PF-04 (rate limiting) lives in zzz-pf-04-rate-limit.spec.ts — it must run

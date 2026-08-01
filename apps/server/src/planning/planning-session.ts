@@ -57,6 +57,8 @@ interface PlanningSessionOptions {
   messages?: LLMMessage[];
   /** Appended after the prior context to explain why planning restarted. */
   repairPrompt?: string;
+  /** Authorised guild policy guidance included in every system-prompt rebuild. */
+  guildRules?: string[];
 }
 
 /**
@@ -82,6 +84,8 @@ export class PlanningSession {
   onTurnComplete?: (session: PlanningSession) => Promise<void>;
   lastSummary = "";
   lastReasoning = "";
+  private readonly planningBaseState: ServerState;
+  private readonly guildRules: string[];
   private abortController: AbortController = new AbortController();
   private preTurnSnapshot: DesiredState | null = null;
 
@@ -102,6 +106,8 @@ export class PlanningSession {
     this.conversationId = options.conversationId;
     this.userPrompt = options.userPrompt;
     this.forkStateHash = options.forkStateHash;
+    this.planningBaseState = options.serverState;
+    this.guildRules = [...(options.guildRules ?? [])];
     this.store = DesiredStateStore.fork(options.serverState);
     this.emit = options.emit;
     this.onTurnComplete = options.onTurnComplete;
@@ -213,18 +219,9 @@ export class PlanningSession {
 
   private rebuildSystemPrompt(): void {
     if (this.messages.length === 0) return;
-    // Replace the first message (system prompt) with updated version
-    const serverState = this.store.getState();
     this.messages[0] = {
       role: "system",
-      content: this.buildSystemPrompt({
-        guildId: serverState.guildId,
-        guildName: serverState.guildName,
-        memberCount: 0,
-        channels: [],
-        roles: [],
-        overwrites: [],
-      }),
+      content: this.buildSystemPrompt(this.planningBaseState),
     };
   }
 
@@ -266,14 +263,16 @@ export class PlanningSession {
         "[planning-session] turn completed"
       );
 
-      // Persist iteration snapshot after this turn
-      try {
-        await this.onTurnComplete?.(this);
-      } catch (err) {
-        logger.error(err, "[planning-session] onTurnComplete failed");
-      }
+      // Durable persistence is part of the turn transition. Do not publish a
+      // terminal completion event until the resulting iteration is stored.
+      await this.onTurnComplete?.(this);
 
       if (turnResult === "completed") {
+        await this.emit({
+          type: "completed",
+          summary: this.lastSummary,
+          reasoning: this.lastReasoning,
+        });
         return;
       }
       if (turnResult === "ask_user") {
@@ -302,11 +301,6 @@ export class PlanningSession {
       this.status = "completed";
       this.lastSummary = response.content;
       this.lastReasoning = response.content;
-      await this.emit({
-        type: "completed",
-        summary: response.content,
-        reasoning: response.content,
-      });
       return "completed";
     }
 
@@ -616,6 +610,16 @@ export class PlanningSession {
       "- If the user asks for Phase N+1 work without Phases 1..N complete, you MAY proceed but MUST note the risk in your summary."
     );
     lines.push("");
+    if (this.guildRules.length > 0) {
+      lines.push("Guild-specific rules (the proposal must respect all of them):");
+      for (const [index, rule] of this.guildRules.entries()) {
+        lines.push(`${index + 1}. ${rule}`);
+      }
+      lines.push(
+        "If the request conflicts with a guild rule, explain the conflict and use ask_user instead of planning a violating state."
+      );
+      lines.push("");
+    }
     if (this.activeTemplates.length > 0) {
       lines.push("Available template layouts for inspiration:");
       for (const tmpl of this.activeTemplates) {

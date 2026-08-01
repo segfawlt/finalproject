@@ -4,9 +4,9 @@ This chapter reviews the concepts, methods, technologies, and existing products 
 Discord Platform. The project is not simply a chatbot connected to a Discord bot. It is a
 configuration-management system in which natural language captures an administrator's intent,
 while a declarative state model, deterministic checks, human approval, and a controlled execution
-engine decide what may happen to the live server. The literature is therefore drawn from four
+engine decide what may happen to the live server. The literature is therefore drawn from five
 areas: Discord administration, tool-using language models, declarative configuration management,
-and safety patterns for long-running external operations.
+safety patterns for long-running external operations, and software-development methodologies.
 
 ## 2.1 Background Knowledge
 
@@ -16,7 +16,7 @@ Discord calls each server a **guild**. A guild contains channels, categories, ro
 permission settings. Roles grant guild-level capabilities to groups of members, while channel
 permission overwrites can allow or deny specific capabilities for a role or member in one channel.
 Discord represents permissions as a bitfield and evaluates them through a hierarchy of guild
-permissions, role positions, and channel-specific overwrites [1], [2]. Consequently, apparently
+permissions, role positions, and channel-specific overwrites (Discord, n.d.-a; Discord, n.d.-b). Consequently, apparently
 simple requests such as "make a private staff section" involve several dependent decisions:
 
 - a staff role must exist;
@@ -33,14 +33,14 @@ understand resource relationships, ordering, and the bot's authorization boundar
 
 Discord applications normally use two complementary interfaces. The Gateway is a persistent
 WebSocket connection through which Discord sends events such as channel, role, and member changes
-[3]. The REST API is used for explicit reads and mutations. Both surfaces are authenticated and
-subject to Discord's permission and rate-limit rules [1], [4]. This creates a common systems
+(Discord, n.d.-c). The REST API is used for explicit reads and mutations. Both surfaces are authenticated and
+subject to Discord's permission and rate-limit rules (Discord, n.d.-a; Discord, n.d.-d). This creates a common systems
 trade-off: cached Gateway state is efficient for interactive planning, but a fresh REST read is
 more appropriate when correctness at an execution boundary matters.
 
 The human and bot identities are also distinct. OAuth2 authenticates the administrator and exposes
 the guilds that the user can access, whereas a bot token identifies the application account that
-performs Discord operations [1]. A safe management platform must check both sides: the human must
+performs Discord operations (Discord, n.d.-a). A safe management platform must check both sides: the human must
 be authorized to manage the selected guild, and the bot must have sufficient Discord permissions
 and role position to carry out the approved change.
 
@@ -54,9 +54,9 @@ model may produce different outputs for similar prompts.
 
 Research on language-model agents provides a useful separation between **reasoning about a task**
 and **acting through a constrained interface**. ReAct interleaves reasoning with task-specific
-actions so that a model can update a plan using observations from its environment [5]. Toolformer
+actions so that a model can update a plan using observations from its environment (Yao et al., 2023). Toolformer
 similarly studies models that decide which external API to call, when to call it, and which
-arguments to provide [6]. These works motivate tool use, but tool use alone does not guarantee safe
+arguments to provide (Schick et al., 2023). These works motivate tool use, but tool use alone does not guarantee safe
 administration. A model-selected function call remains probabilistic output. The receiving system
 must still validate its name and arguments, control its effects, and decide whether it is permitted
 to run.
@@ -71,9 +71,9 @@ and an explicit human approval step.
 
 Declarative systems describe **what state should exist**, rather than prescribing every command
 needed to reach it. Kubernetes controllers, for example, observe current state and repeatedly move
-managed resources toward desired state [7]. Terraform applies a related plan-first workflow: it
+managed resources toward desired state (Kubernetes Authors, n.d.). Terraform applies a related plan-first workflow: it
 compares configuration with current infrastructure, presents an execution plan, and applies the
-reviewed changes later [8]. Both examples show why current state, desired state, and the difference
+reviewed changes later (HashiCorp, n.d.). Both examples show why current state, desired state, and the difference
 between them should be separate concepts.
 
 The same model is valuable for Discord administration:
@@ -107,7 +107,7 @@ The methodology has three boundaries:
 - **semantic boundary:** the requested mutation must be valid for the current desired state; and
 - **authority boundary:** planning a tool must not execute it against Discord.
 
-This project goes beyond the typical reason-act loop described by ReAct [5]. Most structural tools
+This project goes beyond the typical reason-act loop described by ReAct (Yao et al., 2023). Most structural tools
 are deferred: their planning function updates desired state, while their execution function remains
 unreachable until the plan has been generated, validated, and approved. The special interaction
 tool can pause planning to ask the administrator a question, but it has no Discord side effect.
@@ -116,7 +116,7 @@ This distinction prevents conversational uncertainty from becoming an immediate 
 ### 2.2.2 Plan, preview, approve, and apply
 
 Terraform's saved-plan workflow illustrates an important control: the reviewed plan can become the
-specific artifact later applied, rather than merely an informal preview [8]. The Discord Platform
+specific artifact later applied, rather than merely an informal preview (HashiCorp, n.d.). The Discord Platform
 adopts the same principle as a methodology, although its state model and operations are specific to
 Discord.
 
@@ -136,7 +136,7 @@ while the explicit step list preserves technical detail for validation and execu
 
 The NIST Generative AI Profile recommends documenting how model output is used and overseen,
 combining human oversight with automated evaluation, and maintaining governance throughout the AI
-system lifecycle [9]. These recommendations are particularly relevant when model output may cause
+system lifecycle (NIST, 2024). These recommendations are particularly relevant when model output may cause
 external side effects.
 
 No single control is sufficient for this project. Human approval can catch intent errors but may
@@ -164,7 +164,7 @@ remain necessary.
 A Discord execution is a long-running sequence of remote operations, not one database transaction.
 Once Discord has accepted a channel deletion or role change, a PostgreSQL rollback cannot undo it.
 The Saga pattern addresses a similar problem by decomposing a long-lived transaction into smaller
-transactions with compensating actions when later work fails [10].
+transactions with compensating actions when later work fails (Garcia-Molina and Salem, 1987).
 
 This project uses the same broad recovery idea but avoids claiming full transactional rollback. It
 captures the guild's structural state before execution and, after a failure or rollback request,
@@ -181,13 +181,60 @@ Planning and execution both produce ordered, server-to-browser progress updates.
 commands through ordinary HTTP requests, while the server sends turn, step, completion, failure,
 and rollback events in one direction. Server-Sent Events (SSE) fit this communication shape: the
 HTML standard defines the `EventSource` interface for a server to push events to a web page over an
-HTTP event stream [11].
+HTTP event stream (WHATWG, n.d.).
 
 WebSockets would support full-duplex communication, but the project does not require arbitrary
 messages in both directions over the same connection. Keeping commands as authenticated REST
 requests and progress as SSE reduces protocol and state-management complexity. The trade-off is
 that reconnect behavior and missed terminal events must be handled deliberately by the client and
 server.
+
+### 2.2.6 Software-development methodologies
+
+The project's control methodology describes how the finished platform handles a Discord change;
+it is separate from the development methodology used to build and evaluate the software. Four
+approaches were considered for the latter.
+
+**Sequential development** divides work into ordered requirement, design, implementation, testing,
+and delivery stages. Its strengths are a visible document trail, stable review points, and a clear
+relationship between an agreed requirement and its designed solution. These qualities suit an
+academic project with prescribed chapters and deliverables. Its weakness is the assumption that
+important uncertainty can be removed before implementation. Royce's early description of staged
+large-system development also included feedback to earlier stages rather than presenting a purely
+one-pass process (Royce, 1970). For this project, Discord behavior, LLM output, and asynchronous browser
+flows could not all be validated from documents alone; important defects emerged only when the
+working system was exercised.
+
+**Scrum** organises development around a Product Backlog, a cross-functional Scrum Team, fixed-
+length Sprints, and defined planning, review, and retrospective events (Schwaber and Sutherland, 2020). It supports frequent
+inspection and adaptation, and its increments can expose integration problems earlier than a final
+test phase. However, claiming Scrum requires evidence of its roles, artifacts, commitments, and
+events. This project did not maintain a Product Owner, Scrum Master, formal Sprint Reviews, or the
+complete Scrum artifact set. Calling an informal series of short development periods "Scrum" would
+therefore overstate the process actually followed.
+
+**Spiral development** is explicitly risk-driven. Each cycle considers objectives, alternatives,
+constraints, risks, development, and evaluation before the next commitment (Boehm, 1988). This is attractive
+for a system whose main uncertainties concern privileged Discord mutations, probabilistic model
+output, stale external state, and recovery after partial failure. A formal Spiral process,
+nevertheless, requires repeated risk-analysis and commitment artifacts that would add substantial
+overhead to a single-project implementation. Risk influenced the work strongly, but the complete
+formal model was not used.
+
+**Iterative and incremental development** delivers the system in successive working slices and
+revisits earlier decisions as evidence emerges. Larman and Basili describe the long history of this
+approach and its common rejection of a single-pass, document-driven lifecycle (Larman and Basili, 2003). It also aligns
+with the Agile principles of frequent working-software delivery, responsiveness to changed
+requirements, technical excellence, and reflection on how to improve (Beck et al., 2001). Its trade-off is that
+requirements, design, implementation, tests, and documentation can drift unless every increment
+updates the complete evidence chain.
+
+| Methodology               | Principal benefit for this project                             | Principal mismatch or cost                                            |
+| ------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Sequential development    | Clear academic stages and documentation checkpoints            | External and AI behavior revealed late changes that crossed stages    |
+| Scrum                     | Frequent inspection of working increments                      | Formal roles, events, and artifacts were not maintained               |
+| Spiral                    | Direct focus on Discord, AI, concurrency, and recovery risks   | Full risk-analysis cycles would impose disproportionate overhead      |
+| Iterative and incremental | Working slices can be tested and corrected as evidence emerges | Requires disciplined synchronization of requirements, code, and tests |
 
 ## 2.3 Related Work and Existing Systems
 
@@ -199,10 +246,10 @@ feedback, but a complex setup requires many separate screens and a detailed unde
 Discord's permission model.
 
 Discord Server Templates reduce repeated setup. A template can clone categories, channels, roles,
-and permissions, and Discord provides a preview before creating a server [12]. However, the native
+and permissions, and Discord provides a preview before creating a server (Discord, 2025). However, the native
 workflow creates a **new** guild from the template. It is not a general plan-and-diff mechanism for
 modifying an existing guild. Templates also require manual synchronization when the source changes,
-and Discord documents that some community channel types are not transferred [12]. Native templates
+and Discord documents that some community channel types are not transferred (Discord, 2025). Native templates
 therefore solve repeatable initial structure more directly than iterative management of a live
 server.
 
@@ -210,13 +257,13 @@ server.
 
 Xenon is a mature Discord backup, cloning, and template product. Its public documentation describes
 loading a template or backup onto an existing guild, including channels, categories, roles, and
-permissions [13]. Its backup system can store channels, roles, and server settings by default, with
-additional message and member data available in paid tiers [14].
+permissions (Xenon Bot, 2025). Its backup system can store channels, roles, and server settings by default, with
+additional message and member data available in paid tiers (Xenon Bot, n.d.).
 
 Xenon's strength is recoverability and replication. It can copy structure across guilds and offers
 scheduled backups. Its documentation also warns administrators to back up first and review
-permissions after loading a template because a load may overwrite settings [13]. The default backup
-load replaces channels and roles, although options can narrow that behavior [14]. This workflow is
+permissions after loading a template because a load may overwrite settings (Xenon Bot, 2025). The default backup
+load replaces channels and roles, although options can narrow that behavior (Xenon Bot, n.d.). This workflow is
 template- or snapshot-driven rather than a conversational translation of a new intent into a
 minimal desired-state diff. Xenon does not document a desired-state model, an iterative
 planning conversation, stale-state detection, or a step-level validation pipeline. An
@@ -227,10 +274,10 @@ rollback guarantees cannot obtain that from the documented Xenon workflow.
 
 AI-assisted server builders now overlap directly with this project's natural-language goal.
 BuildMyDiscord publicly describes a "describe, review, deploy" flow in which generated channels,
-roles, and permissions are editable before initial deployment [15]. It also provides a tool-using
+roles, and permissions are editable before initial deployment (BuildMyDiscord, n.d.). It also provides a tool-using
 AI editor for live servers and requires confirmation for destructive operations. Its broader scope
 includes an integrated management bot with moderation, onboarding, tickets, and other community
-features [15].
+features (BuildMyDiscord, n.d.).
 
 BuildMyDiscord does not document a persistent desired-state model, iteration history, stale-state
 detection, deterministic whole-plan validation, or a convergent rollback mechanism. An
@@ -240,7 +287,7 @@ cannot obtain those guarantees from the reviewed BuildMyDiscord materials.
 
 AiGuild provides another in-Discord approach. Its Discord App Directory listing describes a
 prompt-based `/setup` command that generates a server, together with commands for onboarding and
-voice statistics [16]. The public listing focuses on generation through slash commands and does not
+voice statistics (Discord, n.d.-e). The public listing focuses on generation through slash commands and does not
 document a desired-state history, deterministic whole-plan validation, stale-state rejection,
 failure compensation, or drift workflow.
 
@@ -256,14 +303,14 @@ The following comparison is limited to capabilities documented by each product's
 materials as accessed on July 29, 2026. "Not documented" does not prove that a private or newer
 version lacks the capability; it means the capability cannot be credited from the reviewed source.
 
-| System                          | Primary interaction                                       | Existing-guild changes       | Review before mutation                                                                 | Documented recovery model                                                    | Relationship to this project                                                                                    |
-| ------------------------------- | --------------------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Discord native settings         | Manual graphical settings                                 | Yes, one setting at a time   | The edited form is visible, but there is no whole-change plan                          | Manual correction                                                            | Baseline control and familiarity; high effort for coordinated changes                                           |
-| Discord Server Templates        | Template link and preview                                 | No; creates a new guild      | Yes, template preview                                                                  | No rollback workflow documented                                              | Strong for repeatable initial structures, not live-guild reconciliation [12]                                    |
-| Xenon                           | Slash commands, backups, and templates                    | Yes                          | Documentation recommends post-load review rather than a full minimal-diff contract     | Snapshot/backup loading                                                      | Stronger backup and content-preservation scope; less focused on conversational intent [13], [14]                |
-| BuildMyDiscord                  | Natural-language builder and live AI editor               | Yes                          | Initial generated structure is reviewable; destructive live edits require confirmation | Comparable automatic failure rollback is not documented on the reviewed page | Closest functional competitor; broader management-bot scope, different execution controls [15]                  |
-| AiGuild                         | Prompt through Discord slash commands                     | Generates/configures a guild | Not documented in the public listing                                                   | Not documented in the public listing                                         | Lightweight in-Discord generation; less publicly documented planning and recovery detail [16]                   |
-| Discord Platform (this project) | Natural-language Studio plus manual desired-state editing | Yes                          | Full desired-state and diff review before every structural execution                   | Before-snapshot, automatic best-effort compensation, and requested rollback, with the outcome (success or failure) reported rather than assumed  | Narrower than all-in-one management bots; deeper emphasis on plan integrity, validation, stale state, and drift |
+| System                          | Primary interaction                                       | Existing-guild changes       | Review before mutation                                                                 | Documented recovery model                                                                                                                       | Relationship to this project                                                                                    |
+| ------------------------------- | --------------------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Discord native settings         | Manual graphical settings                                 | Yes, one setting at a time   | The edited form is visible, but there is no whole-change plan                          | Manual correction                                                                                                                               | Baseline control and familiarity; high effort for coordinated changes                                           |
+| Discord Server Templates        | Template link and preview                                 | No; creates a new guild      | Yes, template preview                                                                  | No rollback workflow documented                                                                                                                 | Strong for repeatable initial structures, not live-guild reconciliation (Discord, 2025)                                    |
+| Xenon                           | Slash commands, backups, and templates                    | Yes                          | Documentation recommends post-load review rather than a full minimal-diff contract     | Snapshot/backup loading                                                                                                                         | Stronger backup and content-preservation scope; less focused on conversational intent (Xenon Bot, 2025; Xenon Bot, n.d.)                |
+| BuildMyDiscord                  | Natural-language builder and live AI editor               | Yes                          | Initial generated structure is reviewable; destructive live edits require confirmation | Comparable automatic failure rollback is not documented on the reviewed page                                                                    | Closest functional competitor; broader management-bot scope, different execution controls (BuildMyDiscord, n.d.)                  |
+| AiGuild                         | Prompt through Discord slash commands                     | Generates/configures a guild | Not documented in the public listing                                                   | Not documented in the public listing                                                                                                            | Lightweight in-Discord generation; less publicly documented planning and recovery detail (Discord, n.d.-e)                   |
+| Discord Platform (this project) | Natural-language Studio plus manual desired-state editing | Yes                          | Full desired-state and diff review before every structural execution                   | Before-snapshot, automatic best-effort compensation, and requested rollback, with the outcome (success or failure) reported rather than assumed | Narrower than all-in-one management bots; deeper emphasis on plan integrity, validation, stale state, and drift |
 
 The comparison shows that the project should not be evaluated as a replacement for every Discord
 administration product. It does not attempt Xenon's message-level archival, BuildMyDiscord's
@@ -289,16 +336,16 @@ framework in each category. The system needed:
 
 | Layer                  | Selected technology                                  | Rationale and trade-off                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ---------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Language and workspace | TypeScript and pnpm workspaces                       | TypeScript provides static checking before execution [17], which is valuable when the same domain contracts cross the web, server, database, and tool layers. pnpm workspaces link local packages into one repository [18]. The trade-off is a compile-time type system that still requires runtime validation at external boundaries.                                                                                                                               |
-| Web interface          | React, React Router, Vite, Tailwind CSS, and Zustand | React's component model suits the Studio's independent chat, preview, tab, modal, and sidebar states [19]. Vite provides a fast development server and optimized production build [20]. Tailwind keeps styling colocated through utility classes [21], while Zustand provides a small hook-based store with selector subscriptions [22]. This stack is productive for a SPA but places accessibility, loading-state, and client-state discipline on the application. |
-| HTTP API               | Hono on Node.js                                      | Hono uses standard `Request` and `Response` primitives and supports Node through an adapter [23]. Its small routing and middleware surface matches a monolithic API without requiring a larger service framework. The trade-off is that architectural boundaries must be maintained by project structure rather than framework modules.                                                                                                                              |
-| Discord integration    | Discord.js v14                                       | Discord.js provides object-oriented access to the Discord API [24], including Gateway caches and REST-backed guild operations. It avoids reimplementing authentication, event handling, resource managers, and permission constants. The application still must handle Discord-specific hierarchy, propagation delay, and non-cancellable in-flight calls.                                                                                                           |
-| Persistence            | PostgreSQL and Drizzle ORM                           | PostgreSQL supports relational constraints and transactions together with `jsonb`, whose binary representation is efficient to process and can be indexed [25]. This fits normalized ownership/status data plus versioned plan documents. Drizzle keeps schemas and SQL-like queries in TypeScript [26]. JSONB flexibility is useful, but plan content is less directly queryable than a fully normalized step schema.                                               |
-| Authentication         | Better Auth with Discord OAuth2                      | Better Auth is a framework-agnostic TypeScript authentication system with social sign-on and session management [27]. Discord OAuth2 avoids a separate password store and provides the identity needed for guild authorization. Authentication alone is insufficient; every guild route must still check the user's current Manage Server permission.                                                                                                                |
-| LLM access             | Raw `fetch` to an OpenAI-compatible endpoint         | OpenRouter exposes an OpenAI-compatible chat-completions API and a broad model catalogue [28]. Using raw HTTP rather than a provider SDK keeps the endpoint, key, and model configurable and reduces coupling. The trade-off is that streaming parsing, errors, aborts, and tool-call accumulation are application responsibilities.                                                                                                                                 |
-| Runtime schemas        | Zod                                                  | Zod combines runtime validation with inferred TypeScript types [29]. The same tool schema can validate model arguments and be converted for the LLM's tool definition. It adds a schema layer, but prevents compile-time types from being mistaken for runtime checks.                                                                                                                                                                                               |
-| Live progress          | Server-Sent Events                                   | SSE is a web standard for one-way server push [11], which matches planning and execution logs. It is simpler than a bidirectional socket for this flow, but reconnect and event-lifecycle handling remain explicit concerns.                                                                                                                                                                                                                                         |
-| Testing                | Vitest                                               | Vitest uses Vite's transform and configuration pipeline [30], giving the TypeScript monorepo a consistent unit-test environment. Discord and database boundaries still require mocks or integration infrastructure; framework convenience does not remove that cost.                                                                                                                                                                                                 |
+| Language and workspace | TypeScript and pnpm workspaces                       | TypeScript provides static checking before execution (Microsoft, n.d.), which is valuable when the same domain contracts cross the web, server, database, and tool layers. pnpm workspaces link local packages into one repository (pnpm Contributors, n.d.). The trade-off is a compile-time type system that still requires runtime validation at external boundaries.                                                                                                                               |
+| Web interface          | React, React Router, Vite, Tailwind CSS, and Zustand | React's component model suits the Studio's independent chat, preview, tab, modal, and sidebar states (React Team, n.d.). Vite provides a fast development server and optimized production build (Vite Team, n.d.). Tailwind keeps styling colocated through utility classes (Tailwind Labs, n.d.), while Zustand provides a small hook-based store with selector subscriptions (pmndrs, n.d.). This stack is productive for a SPA but places accessibility, loading-state, and client-state discipline on the application. |
+| HTTP API               | Hono on Node.js                                      | Hono uses standard `Request` and `Response` primitives and supports Node through an adapter (Hono Authors, n.d.). Its small routing and middleware surface matches a monolithic API without requiring a larger service framework. The trade-off is that architectural boundaries must be maintained by project structure rather than framework modules.                                                                                                                              |
+| Discord integration    | Discord.js v14                                       | Discord.js provides object-oriented access to the Discord API (discord.js Authors, n.d.), including Gateway caches and REST-backed guild operations. It avoids reimplementing authentication, event handling, resource managers, and permission constants. The application still must handle Discord-specific hierarchy, propagation delay, and non-cancellable in-flight calls.                                                                                                           |
+| Persistence            | PostgreSQL and Drizzle ORM                           | PostgreSQL supports relational constraints and transactions together with `jsonb`, whose binary representation is efficient to process and can be indexed (PostgreSQL Global Development Group, n.d.). This fits normalized ownership/status data plus versioned plan documents. Drizzle keeps schemas and SQL-like queries in TypeScript (Drizzle Team, n.d.). JSONB flexibility is useful, but plan content is less directly queryable than a fully normalized step schema.                                               |
+| Authentication         | Better Auth with Discord OAuth2                      | Better Auth is a framework-agnostic TypeScript authentication system with social sign-on and session management (Better Auth, n.d.). Discord OAuth2 avoids a separate password store and provides the identity needed for guild authorization. Authentication alone is insufficient; every guild route must still check the user's current Manage Server permission.                                                                                                                |
+| LLM access             | Raw `fetch` to an OpenAI-compatible endpoint         | OpenRouter exposes an OpenAI-compatible chat-completions API and a broad model catalogue (OpenRouter, n.d.). Using raw HTTP rather than a provider SDK keeps the endpoint, key, and model configurable and reduces coupling. The trade-off is that streaming parsing, errors, aborts, and tool-call accumulation are application responsibilities.                                                                                                                                 |
+| Runtime schemas        | Zod                                                  | Zod combines runtime validation with inferred TypeScript types (McDonnell, n.d.). The same tool schema can validate model arguments and be converted for the LLM's tool definition. It adds a schema layer, but prevents compile-time types from being mistaken for runtime checks.                                                                                                                                                                                               |
+| Live progress          | Server-Sent Events                                   | SSE is a web standard for one-way server push (WHATWG, n.d.), which matches planning and execution logs. It is simpler than a bidirectional socket for this flow, but reconnect and event-lifecycle handling remain explicit concerns.                                                                                                                                                                                                                                         |
+| Testing                | Vitest                                               | Vitest uses Vite's transform and configuration pipeline (Vitest Team, n.d.), giving the TypeScript monorepo a consistent unit-test environment. Discord and database boundaries still require mocks or integration infrastructure; framework convenience does not remove that cost.                                                                                                                                                                                                 |
 
 This stack also supports a simple monorepo boundary: `packages/shared` owns the declarative model,
 tool contracts, and validation utilities; `packages/db` owns persistence; `apps/server` owns the API,
@@ -335,6 +382,38 @@ also creates a traceable boundary between probabilistic interpretation and privi
 boundary directly supports the safety, reliability, and maintainability requirements defined in
 Chapter 3 and the architecture detailed in Chapter 4.
 
+### 2.4.4 Selected development methodology
+
+The selected development methodology was **iterative and incremental development with risk-driven
+prioritisation**. This description matches the recorded work without claiming the formal roles and
+events of Scrum or the complete risk-analysis process of Spiral. Requirements and design provided a
+baseline, but they remained revisable when implementation and evaluation produced contrary
+evidence.
+
+The system developed through a sequence of connected increments:
+
+1. establish the plan-first boundary and shared server-state contracts;
+2. implement desired-state mutation and the registered planning tools;
+3. generate deterministic diffs and add structural and permission validation;
+4. integrate the Discord adapter, locking, deadlines, snapshots, and rollback;
+5. expose planning and execution through the API, persistence layer, and SSE event streams;
+6. build the Studio preview, iteration, template, rule, drift, and recovery workflows; and
+7. add automated, browser-level, and live Discord evaluation, then correct defects found at those
+   boundaries.
+
+Risk determined the order within and between these increments. The project tested pure state and
+diff behavior before relying on Discord; isolated the LLM from the execution context before adding
+live mutations; added stale-state checks and per-guild locking before treating execution as safe;
+and treated failures discovered during live Discord and SSE use as inputs to another implementation
+and regression-test cycle. Chapter 5 records examples including strict role hierarchy, terminal
+event replay, durable planning completion, and truthful rollback-failure reporting.
+
+This approach retained the documentation discipline useful to an academic project while allowing
+the design to respond to observed behavior. Its main cost was synchronization: a corrected feature
+could leave an earlier requirement, design paragraph, test classification, or screenshot obsolete.
+The report therefore uses requirement identifiers, implementation inventories, recorded test
+results, and the traceability appendix to reconnect the final evidence after the last increment.
+
 ## 2.5 Project Scope Compared with Similar Systems
 
 The project covers the lifecycle from a natural-language request to a controlled structural change
@@ -346,8 +425,8 @@ on an existing Discord guild:
 - deterministic structural validation and LLM-assisted guild-rule checking;
 - explicit approval, stale-state rejection, and per-guild execution locking;
 - ordered Discord execution with progress events and transient retries;
-- automatic and requested best-effort structural rollback, with the outcome — success
-  or failure — reported rather than assumed; and
+- automatic and requested best-effort structural rollback, with the outcome, success
+  or failure, reported rather than assumed; and
 - detection of external drift.
 
 The following areas are deliberately outside the project scope:

@@ -7,15 +7,15 @@ this report.
 
 ## 1.1 Background and Context
 
-Discord is a widely used communication platform organized around **servers** —
-called _guilds_ in Discord's own API — each of which contains channels,
+Discord is a widely used communication platform organized around **servers**,
+known as _guilds_ in Discord's own API. Each server contains channels,
 categories, roles, and members. What distinguishes Discord from most other
 mainstream chat platforms is the depth and configurability of this structure.
 A role grants guild-level capabilities to a group of members; a channel can then
 override those capabilities for a specific role or member through a permission
 _overwrite_; categories group channels and can propagate their own permissions to
 the channels beneath them. Discord evaluates the result through a hierarchy of
-guild permissions, role positions, and channel-specific overwrites.
+guild permissions, role positions, and channel-specific overwrites (Discord, n.d.-a; Discord, n.d.-b).
 
 This configurability is a strength for communities that need fine-grained control,
 but it also means that a server's configuration is not a flat list of independent
@@ -38,7 +38,7 @@ roles, categories, channels, and overwrites depend on one another, the effort of
 managing a server does not scale linearly with its size. A large community server
 can hold dozens of channels and many roles, and each change has to be reasoned
 about in relation to the others. It is not that an administrator has "a lot to
-learn"; it is that a single intended outcome — a new members-only section, say —
+learn"; it is that a single intended outcome (a new members-only section, say)
 decomposes into several dependent edits that must be made consistently. An
 administrator may be comfortable with roles but unsure about per-channel
 overwrites, or the reverse, and the coupling means a gap in either area can
@@ -63,8 +63,8 @@ the familiar experience that a long-running server becomes hard to keep clean.
 Recent tool-using language models can translate an informal instruction into a
 structured, typed set of operations. This makes it feasible to let an
 administrator describe an outcome in plain English and have software turn that
-into an inspectable plan — a workflow that was not practical before models could
-reliably emit constrained, schema-valid output. The opportunity is therefore to
+into an inspectable plan. This workflow was not practical before models could
+reliably emit constrained, schema-valid output (Yao et al., 2023; Schick et al., 2023). The opportunity is therefore to
 use an LLM as an _intent interpreter_ while keeping authority over the live server
 in deterministic software and an explicit human approval step.
 
@@ -81,7 +81,7 @@ precisely because the complexity is of the coupled, interdependent kind that a
 declarative plan-first system is well suited to relieve. Discord is also a serious
 target rather than a toy: it hosts large communities with real stakes around
 access control and moderation, and it exposes a capable bot and REST API through
-which such a system can actually be built. For these reasons Discord is the
+which such a system can actually be built (Discord, n.d.-a; Discord, n.d.-c; Discord, n.d.-d). For these reasons Discord is the
 platform where this approach is both most needed and most feasible.
 
 ## 1.3 Problem Statement
@@ -97,7 +97,7 @@ would be doing so against a live server that a real community depends on, with t
 same lack of preview and recovery.
 
 The problem is therefore not merely to _generate_ Discord configuration from
-natural language — existing products already do that — but to place a
+natural language (existing products already do that; BuildMyDiscord, n.d.; Discord, n.d.-e), but to place a
 **declarative, reviewable, and recoverable control plane** between the model's
 probabilistic interpretation and the privileged actions that reshape a live guild,
 so that natural-language convenience does not come at the cost of safety.
@@ -160,10 +160,11 @@ The remainder of this report is organized as follows.
 - **Chapter 2 (Literature Review)** reviews the concepts, technologies, and
   existing systems that frame the project: Discord administration, tool-using
   language models, declarative configuration management, and safety patterns for
-  long-running external operations. It also explains and justifies the selected
-  technology stack and control methodology.
-- **Chapter 3 (Requirement Analysis)** describes the system's external behavior —
-  what it does as observed by its users and the external systems it depends on —
+  long-running external operations. It also compares software-development
+  methodologies and explains the selected development, technology, and control
+  approaches.
+- **Chapter 3 (Requirement Analysis)** describes the system's external behavior:
+  what it does as observed by its users and the external systems it depends on,
   through functional and non-functional requirements, a use case diagram, and use
   case specifications.
 - **Chapter 4 (System Design)** turns inward and describes how the system is built
@@ -178,4 +179,10 @@ The remainder of this report is organized as follows.
   verify the system's correctness and quality, presents the test cases and their
   results, and evaluates the system against its requirements, including its
   strengths and limitations.
+- **Chapter 7 (Conclusion and Future Work)** evaluates the project objectives,
+  identifies its principal contribution and lessons, prioritises the work needed
+  to close the remaining evidence and implementation gaps, and gives the final
+  conclusion.
 
+The appendices provide detailed requirements traceability and the supporting test
+registers referred to by the main chapters.

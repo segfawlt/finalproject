@@ -7,6 +7,7 @@ import { hashServerState } from "@repo/shared";
 import { userHasManageGuild } from "../../auth/helpers";
 import { requireUser } from "../../auth/middleware";
 import { checkGuildOperable } from "../../planning/guild-check";
+import { loadGuildRuleTexts } from "../../planning/guild-rules";
 import { isGuildLocked } from "../../planning/locking";
 import { PlanningSession } from "../../planning/planning-session";
 import {
@@ -191,6 +192,7 @@ conversationsApp.post("/", zValidator("json", createConversationSchema), async (
       503
     );
   }
+  const guildRules = await loadGuildRuleTexts(guildId);
 
   // Insert conversation row
   const [conversation] = await db
@@ -212,6 +214,7 @@ conversationsApp.post("/", zValidator("json", createConversationSchema), async (
     userPrompt: body.userPrompt,
     serverState,
     forkStateHash,
+    guildRules,
     emit: async (event) => {
       emitConversationEvent(conversation.id, event);
 
@@ -396,12 +399,15 @@ conversationsApp.post("/:convId/approve", async (c) => {
   }
 
   const session = getSession(convId);
-  if (!session) {
-    return c.json({ error: "No active planning session for this conversation" }, 409);
+  if (session && session.status !== "completed") {
+    return c.json({ error: "Planning session not completed" }, 400);
   }
 
-  if (session.status !== "completed") {
-    return c.json({ error: "Planning session not completed" }, 400);
+  if (!session && conversation.status !== "completed") {
+    return c.json(
+      { error: "Planning was interrupted before a completed result was persisted" },
+      409
+    );
   }
 
   // Snapshot the latest iteration's desiredState so execution uses the approved contract
@@ -412,12 +418,16 @@ conversationsApp.post("/:convId/approve", async (c) => {
     .orderBy(desc(planIterations.version))
     .limit(1);
 
+  if (!latestIteration) {
+    return c.json({ error: "Completed conversation has no persisted desired state" }, 409);
+  }
+
   const planData = {
     llmResponse: {
-      summary: session.lastSummary,
-      reasoning: session.lastReasoning,
+      summary: session?.lastSummary ?? "Approved from a persisted completed conversation.",
+      reasoning: session?.lastReasoning ?? "",
     },
-    desiredState: latestIteration?.desiredState ?? undefined,
+    desiredState: latestIteration.desiredState,
   };
 
   const [plan] = await db

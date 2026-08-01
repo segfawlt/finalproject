@@ -12,7 +12,7 @@ Legend: `done` (implemented & wired) · `partial` (code present, incomplete wiri
 
 ### `apps/server/src/bot/`
 
-- `done` Guild cache + lifecycle — `bot/index.ts` (init, sync on `ChannelCreate/Update/Delete`, `GuildRoleCreate/Update/Delete`, `GuildMemberAdd/Update/Remove`, `GuildCreate/Delete`)
+- `done` Guild cache + lifecycle — `bot/index.ts` (init; sync on channel/role/member events; persist and stream externally observed channel, role, and member-role drift; suppress expected gateway events while an execution lock is held)
 - `done` Client setup — `bot/client.ts` (Discord.js Client, intents, singletons)
 - `done` Cache data structure — `bot/cache.ts` (in-memory `guildCache` Map, lookup helpers, `permissionsLocked` reading)
 - `done` Permission parsing — `bot/permissions.ts` (`botHasAdministrator`, `bitfieldToPermissionNames`)
@@ -48,23 +48,25 @@ Legend: `done` (implemented & wired) · `partial` (code present, incomplete wiri
 - `done` Diff engine — `planning/diff-engine.ts` (3-phase: raw steps → topo sort → optimize; lockPermissions skip for synced channels; `arraysEqualSorted` helper; member role symmetric diffing; overwrite symmetric diffing)
 - `done` Drift detector — `planning/drift-detector.ts` (periodic poll, compares real Discord state vs cache, persists `driftEvents`)
 - `done` Event bus — `planning/event-bus.ts` (pub/sub for execution events per plan)
-- `done` Planning event bus — `planning/planning-event-bus.ts` (pub/sub per conversation for streaming LLM events)
+- `done` Planning event bus — `planning/planning-event-bus.ts` (pub/sub per conversation with bounded replay of the latest terminal event for late SSE subscribers)
 - `done` Execution engine — `planning/execution-engine.ts` (resolveSymbols, isTransientError/isKnownError, exponential backoff with jitter, hardcoded `diagnoseError`, diff-based `rollbackFull` for rollback (recomputes reverse diff from live state vs before-snapshot), tracked completed-step Discord IDs, per-step deadline via `dispatchWithDeadline` — `StepTimeoutError` retryable / `StepAbortedError` terminal, abort-aware so plan-level timeout interrupts mid-step)
 - `done` Guild access check — `planning/guild-check.ts` (admin + bot-in-guild check)
+- `done` Guild-rule loader — `planning/guild-rules.ts` (loads authorised guild policy text for initial, template-merge, and stale-repair planning prompts)
 - `done` LLM HTTP — `planning/llm-request.ts` (raw POST to OpenRouter-compatible endpoint, configurable via `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL`)
 - `done` Stream parser — `planning/stream-parser.ts` (SSE chunk parsing, tool-call delta accumulation, thought/answer separation)
 - `done` Locking — `planning/locking.ts` (per-guild execution locks, stale-lock recovery at boot, periodic cleanup)
-- `done` Planning session — `planning/planning-session.ts` (LLM loop, `buildSystemPrompt` with 4-phase model + PERMISSION STRATEGY, `ask_user`-specific pause/resume, planning-only batch tools continue the loop, message windowing, `callLLM`)
+- `done` Planning session — `planning/planning-session.ts` (LLM loop, `buildSystemPrompt` with 4-phase model + PERMISSION STRATEGY, retained fork-state and guild-rule context during prompt rebuilds, persistence-before-completion ordering, `ask_user`-specific pause/resume, planning-only batch tools continue the loop, message windowing, `callLLM`)
 - `done` Session manager — `planning/session-manager.ts` (in-memory `PlanningSession` registry + ask_user timeouts)
+- `done` Restart recovery — `planning/session-recovery.ts` (marks orphaned planning/waiting rows as interrupted errors; completed persisted iterations remain approvable)
 - `done` Snapshot cleanup — `planning/snapshot-cleanup.ts` (background job, removes orphaned `plan_iterations`)
 - `done` Validation — `planning/validation.ts` (Groups A–E: perm-name validity, ADMINISTRATOR + strict bot role-hierarchy including equal-position targets, symbol resolution + **symbol-type matching**, DAG/cycle, duplicate names, member-role dedupe, category child cap, topic/**bitrate** channel-type constraints, ADMINISTRATOR-grant block, overwrite-consolidation warning; Stage 2 LLM policy check against `rules` table via `validateWithLLM`; guilds with configured rules **fail closed** on missing key, rule-load failure, provider error/timeout, or empty/malformed output)
-  - `gap` **Server rules run at execution, not planning.** The selected design is prompt guidance plus the implemented fail-closed execution backstop. `buildSystemPrompt` still does not receive guild rules, so rule-conflicting proposals can reach review before being blocked at execution.
+  - `done` **Server rules guide planning and are revalidated at execution.** Initial conversations, template merges, and stale-plan repair load authorised guild rules into retained prompt context. Stage 2 reloads current rules and remains the fail-closed execution boundary.
   - `done` **Confirmed AI re-plan for stale plans.** `POST /plans/:planId/replan` re-forks from current Discord state and starts a fresh `PlanningSession` with persisted conversation context, prior desired state, and structured conflicts. Studio offers it only after a stale execution conflict; repaired plans always return to review before execution.
   - `note` Deliberately **not** validated (documented in the design doc): per-action bot perms (redundant with ADMINISTRATOR), role-position ordering among movable roles, IMPORTANT-channel / delete-all-from-category guards (conflict with "present, don't judge"), bot-own-permission lockout (impossible under ADMINISTRATOR), planData Zod check (internal deterministic data).
 
 ### `apps/server/src/`
 
-- `done` Process entry — `index.ts` (Hono serve, migrations, bot login, background jobs, drift detector lifecycle)
+- `done` Process entry — `index.ts` (awaited migration/recovery sequence before Hono binding, bot login, background jobs, drift detector lifecycle, shutdown cleanup)
 - `done` Migrations — `migrate.ts` (runs pending Drizzle migrations on boot)
 - `done` Env validation — `env.ts` + `env-validated.ts` (Zod-validated, fails fast on missing required vars)
 - `done` Logger — `utils/logger.ts` (pino + pino-pretty)
@@ -136,10 +138,10 @@ The redesigned Studio is composed of focused components. Routes wire them
 together; none of them fetch on their own unless noted.
 
 - `done` StudioShell — 3-column grid (header | sidebar | chat | rightPanel); columns collapse when their slot is empty
-- `done` StudioHeader — contextual header (back-to-picker, guild name, Templates / Settings shortcuts)
+- `done` StudioHeader — contextual header (back-to-picker, guild name, Templates route, Settings shortcut opens the Studio tab directly)
 - `done` ConversationSidebar — collapsible left column; New Chat button, conversation list grouped by date; selection synced from the store
 - `done` WelcomeScreen — curated suggestion cards + freeform textarea for the empty state
-- `done` ChatArea — message list + docked input. Bubble variants: user prompt, assistant planning (with collapsed log), ask_user, completed (summary + DesiredStateView + inline actions), executing (live step log), executed (rollback / new plan), execute_failed. Revise input is docked at the bottom
+- `done` ChatArea — message list + docked input. Bubble variants: user prompt, assistant planning (with collapsed log + Cancel), ask_user, completed (summary + DesiredStateView + inline actions), executing (live step log + Abort), executed (rollback / new plan), execute_failed. Revise input is docked at the bottom
 - `done` RightPanel — owns the right column; current-state fetch is shared with the channel detail tab; renders the active tab content
 - `done` TabPanel — VSCode-style tab bar; persistent vs closable tabs; "+" popover for new closable tabs
 - `done` ServerTab — read-only view of the current Discord state; clickable channels open the channel detail tab
@@ -167,7 +169,7 @@ together; none of them fetch on their own unless noted.
 
 ### Tests
 
-26 test files across the monorepo. Highest-value targets per `AGENTS.md` testing strategy:
+27 Vitest files across the monorepo. Highest-value targets per `AGENTS.md` testing strategy:
 
 - `done` `apps/server/src/planning/diff-engine.test.ts` — 3-phase diff algorithm, edge cases
 - `done` `apps/server/src/planning/validation.test.ts` — bot hierarchy, member tools, overwrite consolidation, symbol-type matching, bitrate constraint
@@ -179,6 +181,7 @@ together; none of them fetch on their own unless noted.
 - `done` `apps/server/src/planning/stream-parser.test.ts` — SSE parsing
 - `done` `apps/server/src/planning/drift-detector.test.ts` — periodic poll + persistence
 - `done` `apps/server/src/planning/planning-session.test.ts` — mocked LLM flow
+- `done` `apps/server/src/planning/planning-event-bus.test.ts` — late terminal-event replay and stale replay clearing
 - `done` `apps/server/src/planning/repair-context.test.ts` — repair-context assembly
 - `done` `apps/server/src/planning/rollback-reporting.test.ts` — rollback success/failure event emission (conflict-blocked and step-failure paths)
 - `done` `apps/server/src/hono/routes/templates.test.ts` — template read authorization (global vs guild-scoped access)
@@ -219,6 +222,7 @@ See `docs/issues/open-design-issues.md` for the full log.
 
 ## Recently resolved (since May 28, 2026)
 
+- `done` **Section 5.8 implementation-review batch** — bounded terminal planning-event replay closes the late-SSE race; planning completion now follows durable iteration persistence; prompt rebuilds retain fork, template, and guild-rule context; failed after-snapshot reads no longer fabricate empty Discord state; persisted completed conversations remain approvable after restart while in-flight rows are marked interrupted; Studio exposes phase-correct Cancel/Abort/Settings actions; gateway drift for channels, roles, and member-role changes is persisted and suppressed during execution locks; migrations and recovery finish before traffic and background jobs start. Covered by `planning-event-bus.test.ts`, expanded `planning-session.test.ts`, `plans.test.ts`, full typecheck, and 208 passing Vitest cases across 27 files.
 - `done` **Rollback failure reporting** — `rollbackFull` and the step-failure/conflict-blocked paths in `execution-engine.ts` now emit a distinct `rollback_failed` event (added to the `ExecutionEvent` union) instead of silently reporting `plan_failed`. The web client (`useConversation.ts` SSE listener + `ChatArea.tsx` render branch and step badge) surfaces the failed-rollback state to the user. Covered by `rollback-reporting.test.ts`.
 - `done` **Template read authorization** — `GET /api/guilds/:guildId/templates` (list) and `GET /:templateId` now require manage access for guild-scoped templates; global templates (`guildId === null`) stay readable by any authenticated user, and cross-guild template reads return 404. Covered by `templates.test.ts`.
 - `done` **Post-planning session survival** — the SSE merge handler no longer removes the planning session on `completed`, so the approve/execute path can still retrieve a `completed` session (matches `POST /conversations`).

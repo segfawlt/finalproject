@@ -3,10 +3,31 @@
 The Markdown chapters in this directory are the authoritative working drafts of
 the final report. DOCX files are exports, not source material.
 
+The current source order is `00-abstract.md`, `00-abbreviations.md`, Chapters 1–7,
+Appendices A–C, and `references.md`. The title page, generated contents and
+figure/table lists, and required declarations are added during final assembly.
+
+## DOCX export
+
+Use Pandoc 3.6 or later with the diagram filter and the following options. The
+`--toc`, `--lof`, and `--lot` options create Word fields for the table of
+contents, list of figures, and list of tables. Update the fields in Word after
+opening the generated document if the entries are not refreshed automatically.
+
+```bash
+JAVA_TOOL_OPTIONS=-Djava.awt.headless=true pandoc \
+  docs/report/00-abstract.md docs/report/00-abbreviations.md \
+  docs/report/0{1..7}-*.md docs/report/appendix-*.md docs/report/references.md \
+  --from=gfm --toc --toc-depth=3 --lof --lot \
+  --lua-filter="$HOME/.local/share/pandoc/filters/diagram.lua" \
+  --resource-path=docs/report:docs/report/screenshots \
+  -o report.docx
+```
+
 ## Rules
 
 - `Report-Structure.md` defines what each chapter must contain.
-- Write in English using IEEE numbered citations (`[1]`, `[2]`, and so on).
+- Write in English using author–year citations (for example, `(Yao et al., 2023)`), with `n.d.` for an undated source.
 - Review relevant chapters, documentation, code, and tests before writing. Never
   invent features, behavior, results, citations, screenshots, or implementation
   details.

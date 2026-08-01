@@ -6,6 +6,7 @@ import { eq, desc, ne, and } from "drizzle-orm";
 import { userHasManageGuild } from "../../auth/helpers";
 import { requireUser } from "../../auth/middleware";
 import { checkGuildOperable } from "../../planning/guild-check";
+import { loadGuildRuleTexts } from "../../planning/guild-rules";
 import { acquireGuildLock, releaseGuildLock, heartbeatGuildLock } from "../../planning/locking";
 import { diffEngine } from "../../planning/diff-engine";
 import {
@@ -387,28 +388,22 @@ plansApp.post("/:planId/execute", async (c) => {
     // 7. Create after snapshot — fetch fresh from Discord so the
     //    execution_after row reflects what actually happened, not whatever
     //    the in-memory cache had not yet absorbed from async events.
-    let afterState: ServerState;
+    let afterState: ServerState | null = null;
     try {
       afterState = await buildCurrentStateFromDiscord(guildId);
     } catch (err) {
       logger.error(err, "[plans] failed to build after-snapshot from Discord");
-      afterState = {
-        guildId,
-        guildName: guild?.name ?? guildId,
-        memberCount: guild?.memberCount ?? 0,
-        channels: [],
-        roles: [],
-        overwrites: [],
-      };
     }
 
-    await db.insert(snapshots).values({
-      type: "execution_after",
-      guildId,
-      planId,
-      data: afterState as unknown as Record<string, unknown>,
-      expiresAt: new Date(Date.now() + SNAPSHOT_RETENTION_MS),
-    });
+    if (afterState) {
+      await db.insert(snapshots).values({
+        type: "execution_after",
+        guildId,
+        planId,
+        data: afterState as unknown as Record<string, unknown>,
+        expiresAt: new Date(Date.now() + SNAPSHOT_RETENTION_MS),
+      });
+    }
 
     // 8. Update plan status
     const finalStatus = executionResult.success ? "completed" : "failed";
@@ -427,22 +422,41 @@ plansApp.post("/:planId/execute", async (c) => {
       })
       .where(eq(plans.id, planId));
 
-    // Mark sibling conversations as stale if forkStateHash no longer matches
-    const currentHash = hashServerState(afterState as unknown as Record<string, unknown>);
-    await db
-      .update(conversations)
-      .set({ status: "stale" })
-      .where(and(eq(conversations.guildId, guildId), ne(conversations.forkStateHash, currentHash)));
-
-    // Invalidate in-memory sessions for stale conversations
     const activeSessions = getSessionsByGuild(guildId);
-    for (const { conversationId, session } of activeSessions) {
-      if (session.forkStateHash !== currentHash) {
+    if (afterState) {
+      // Mark sibling conversations as stale if forkStateHash no longer matches.
+      const currentHash = hashServerState(afterState as unknown as Record<string, unknown>);
+      await db
+        .update(conversations)
+        .set({ status: "stale" })
+        .where(
+          and(eq(conversations.guildId, guildId), ne(conversations.forkStateHash, currentHash))
+        );
+
+      for (const { conversationId, session } of activeSessions) {
+        if (session.forkStateHash === currentHash) continue;
         session.cancel("Server state has changed since planning began");
         removeSession(conversationId);
         await emitConversationEvent(conversationId, {
           type: "expired",
           error: "Server state has changed since planning. Start a new conversation.",
+        });
+      }
+    } else {
+      // Execution may have changed Discord, but without a verified fresh read
+      // there is no safe hash to compare. Conservatively invalidate every
+      // conversation for the guild instead of inventing an empty snapshot.
+      await db
+        .update(conversations)
+        .set({ status: "stale" })
+        .where(eq(conversations.guildId, guildId));
+
+      for (const { conversationId, session } of activeSessions) {
+        session.cancel("Discord state could not be verified after execution");
+        removeSession(conversationId);
+        await emitConversationEvent(conversationId, {
+          type: "expired",
+          error: "Discord state could not be verified after execution. Start a new conversation.",
         });
       }
     }
@@ -451,6 +465,7 @@ plansApp.post("/:planId/execute", async (c) => {
       success: executionResult.success,
       steps: executionResult.completedSteps,
       error: executionResult.error,
+      afterSnapshotAvailable: afterState !== null,
     });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
@@ -561,6 +576,7 @@ plansApp.post("/:planId/replan", async (c) => {
     previousDesiredState: planData.desiredState,
     conflicts,
   });
+  const guildRules = await loadGuildRuleTexts(guildId);
 
   const session = new PlanningSession({
     guildId,
@@ -570,6 +586,7 @@ plansApp.post("/:planId/replan", async (c) => {
     forkStateHash: currentHash,
     messages: conversation.messages as unknown as LLMMessage[],
     repairPrompt,
+    guildRules,
     emit: async (event) => {
       emitConversationEvent(conversation.id, event);
       if (event.type === "ask_user") {

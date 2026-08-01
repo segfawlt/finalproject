@@ -32,22 +32,22 @@ approved first.
 
 ## Cast of characters
 
-| Role | What it is | Lives in |
-|---|---|---|
-| **Admin** | The human user logged into the Studio web UI. Must have "Manage Server" permission in the target Discord guild. | browser |
-| **Studio UI** | The chat-style web frontend. Shows the planner's reasoning, the preview, and the approve/execute buttons. | `apps/web/` |
-| **API server** | Hono HTTP server. Routes, auth, SSE streams. | `apps/server/src/hono/` |
-| **Planner** | The AI loop that turns a sentence into a structured plan. Calls an LLM and a set of 17 tools. | `apps/server/src/planning/planning-session.ts` |
-| **Diff engine** | Compares "what we want" vs "what Discord has" → ordered step list. | `apps/server/src/planning/diff-engine.ts` |
-| **Validator** | Hard-coded safety checks + an LLM policy check against the server's own rules. | `apps/server/src/planning/validation.ts` |
-| **Execution engine** | Runs each step against live Discord. Resolves placeholders, retries, rolls back. | `apps/server/src/planning/execution-engine.ts` |
-| **Bot** | A Discord.js client that holds the bot's token and performs the actual Discord API calls. | `apps/server/src/bot/` |
-| **Cache** | The bot's in-memory snapshot of the guild (channels, roles, members, permission overwrites). Kept fresh by Discord events. | `apps/server/src/bot/cache.ts` |
-| **PostgreSQL** | Persistent storage: conversations, plans, snapshots, rules, drift events. | `packages/db/` |
+| Role                 | What it is                                                                                                                 | Lives in                                       |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **Admin**            | The human user logged into the Studio web UI. Must have "Manage Server" permission in the target Discord guild.            | browser                                        |
+| **Studio UI**        | The chat-style web frontend. Shows the planner's reasoning, the preview, and the approve/execute buttons.                  | `apps/web/`                                    |
+| **API server**       | Hono HTTP server. Routes, auth, SSE streams.                                                                               | `apps/server/src/hono/`                        |
+| **Planner**          | The AI loop that turns a sentence into a structured plan. Calls an LLM and a set of 17 tools.                              | `apps/server/src/planning/planning-session.ts` |
+| **Diff engine**      | Compares "what we want" vs "what Discord has" → ordered step list.                                                         | `apps/server/src/planning/diff-engine.ts`      |
+| **Validator**        | Hard-coded safety checks + an LLM policy check against the server's own rules.                                             | `apps/server/src/planning/validation.ts`       |
+| **Execution engine** | Runs each step against live Discord. Resolves placeholders, retries, rolls back.                                           | `apps/server/src/planning/execution-engine.ts` |
+| **Bot**              | A Discord.js client that holds the bot's token and performs the actual Discord API calls.                                  | `apps/server/src/bot/`                         |
+| **Cache**            | The bot's in-memory snapshot of the guild (channels, roles, members, permission overwrites). Kept fresh by Discord events. | `apps/server/src/bot/cache.ts`                 |
+| **PostgreSQL**       | Persistent storage: conversations, plans, snapshots, rules, drift events.                                                  | `packages/db/`                                 |
 
 Before walking the flow, two concepts need explaining because every stage
-relies on them: how the system *reads* Discord (next section), and how it
-*tells* Discord to change (the section after that).
+relies on them: how the system _reads_ Discord (next section), and how it
+_tells_ Discord to change (the section after that).
 
 ---
 
@@ -61,10 +61,10 @@ Discord exposes two surfaces to a bot. Discord.js wraps both; this platform
 uses the library rather than calling the raw HTTP endpoints, but the
 underlying surface is the same.
 
-| Surface | What it is | When our system uses it |
-|---|---|---|
-| **Gateway** (WebSocket) | A persistent socket Discord pushes events over: channel created, role updated, member joined, etc. Discord.js keeps a local in-memory cache in sync with these events. | Continuously. On bot startup, on every `GuildCreate`, and on every channel/role/member event the bot updates an in-memory `guildCache` (`apps/server/src/bot/cache.ts`, `bot/index.ts`). This is the fast path — zero HTTP cost per request. |
-| **REST API** | Standard HTTPS GET/POST against `https://discord.com/api/v10/...`. Slower (real network call), rate-limited by Discord. | Only when we need a guaranteed-fresh read of the entire guild: building the "after" snapshot post-execution, the drift detector's periodic poll, and boot-time member listing. Implemented in `buildCurrentStateFromDiscord` (`apps/server/src/planning/execution-engine.ts:250`), which calls `guild.channels.fetch()`, `guild.roles.fetch()`, and `guild.members.fetch()`. |
+| Surface                 | What it is                                                                                                                                                             | When our system uses it                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Gateway** (WebSocket) | A persistent socket Discord pushes events over: channel created, role updated, member joined, etc. Discord.js keeps a local in-memory cache in sync with these events. | Continuously. On bot startup and every channel/role/member event, the bot updates `guildCache`. Relevant external structural changes are also persisted and streamed as drift at this observation point; events under an execution lock are treated as expected plan effects.                                                                               |
+| **REST API**            | Standard HTTPS GET/POST against `https://discord.com/api/v10/...`. Slower (real network call), rate-limited by Discord.                                                | When a guaranteed-fresh guild read is required, principally the post-execution snapshot, rollback comparison, and boot-time member listing. `buildCurrentStateFromDiscord` calls `guild.channels.fetch()`, `guild.roles.fetch()`, and `guild.members.fetch()`. The periodic drift comparator is a cache-consistency fallback, not an independent REST poll. |
 
 **The cache is the source of truth during planning.** When the admin sends a
 request and the server builds the initial `ServerState`, it reads from
@@ -83,23 +83,23 @@ fetch.
 Discord.js handles authentication, retries, and rate-limit buckets; the table
 below is what it maps to under the hood.
 
-| Discord.js call | Underlying REST endpoint | Used by this system for |
-|---|---|---|
-| `guild.channels.cache` / `guild.channels.fetch()` | `GET /guilds/{guild.id}/channels` | `ServerState.channels` (cache) and the after-snapshot (fetch) |
-| `guild.roles.cache` / `guild.roles.fetch()` | `GET /guilds/{guild.id}/roles` | `ServerState.roles` and the after-snapshot |
-| `guild.members.fetch()` | `GET /guilds/{guild.id}/members?limit=...` | `ServerState.memberRoles` (boot), the after-snapshot |
-| `channel.permissionOverwrites.cache` | Returned with the channel payload | `ServerState.overwrites` |
-| `guild.members.cache.get(botId).permissions` | Derived from the member's role bitfield | `botHasAdministrator` permission check |
-| `guild.channels.create(name, options)` | `POST /guilds/{guild.id}/channels` | Tool: `create_channel` / `create_category` |
-| `channel.edit(options)` | `PATCH /channels/{channel.id}` | Tools: `edit_channel`, `move_channel` |
-| `channel.delete()` | `DELETE /channels/{channel.id}` | Tool: `delete_channel` |
-| `guild.roles.create(options)` | `POST /guilds/{guild.id}/roles` | Tool: `create_role` |
-| `role.edit(options)` | `PATCH /guilds/{guild.id}/roles/{role.id}` | Tools: `edit_role`, `move_role` |
-| `role.delete()` | `DELETE /guilds/{guild.id}/roles/{role.id}` | Tool: `delete_role` |
-| `channel.permissionOverwrites.create(target, options)` | `PUT /channels/{channel.id}/permissions/{target.id}` | Tool: `set_overwrite` |
-| `channel.permissionOverwriteDelete(target)` | `DELETE /channels/{channel.id}/permissions/{target.id}` | Tool: `remove_overwrite` |
-| `member.roles.add(roleId)` | `PUT /guilds/{guild.id}/members/{member.id}/roles/{role.id}` | Tool: `add_role_to_member` |
-| `member.roles.remove(roleId)` | `DELETE /guilds/{guild.id}/members/{member.id}/roles/{role.id}` | Tool: `remove_role_from_member` |
+| Discord.js call                                        | Underlying REST endpoint                                        | Used by this system for                                       |
+| ------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------- |
+| `guild.channels.cache` / `guild.channels.fetch()`      | `GET /guilds/{guild.id}/channels`                               | `ServerState.channels` (cache) and the after-snapshot (fetch) |
+| `guild.roles.cache` / `guild.roles.fetch()`            | `GET /guilds/{guild.id}/roles`                                  | `ServerState.roles` and the after-snapshot                    |
+| `guild.members.fetch()`                                | `GET /guilds/{guild.id}/members?limit=...`                      | `ServerState.memberRoles` (boot), the after-snapshot          |
+| `channel.permissionOverwrites.cache`                   | Returned with the channel payload                               | `ServerState.overwrites`                                      |
+| `guild.members.cache.get(botId).permissions`           | Derived from the member's role bitfield                         | `botHasAdministrator` permission check                        |
+| `guild.channels.create(name, options)`                 | `POST /guilds/{guild.id}/channels`                              | Tool: `create_channel` / `create_category`                    |
+| `channel.edit(options)`                                | `PATCH /channels/{channel.id}`                                  | Tools: `edit_channel`, `move_channel`                         |
+| `channel.delete()`                                     | `DELETE /channels/{channel.id}`                                 | Tool: `delete_channel`                                        |
+| `guild.roles.create(options)`                          | `POST /guilds/{guild.id}/roles`                                 | Tool: `create_role`                                           |
+| `role.edit(options)`                                   | `PATCH /guilds/{guild.id}/roles/{role.id}`                      | Tools: `edit_role`, `move_role`                               |
+| `role.delete()`                                        | `DELETE /guilds/{guild.id}/roles/{role.id}`                     | Tool: `delete_role`                                           |
+| `channel.permissionOverwrites.create(target, options)` | `PUT /channels/{channel.id}/permissions/{target.id}`            | Tool: `set_overwrite`                                         |
+| `channel.permissionOverwriteDelete(target)`            | `DELETE /channels/{channel.id}/permissions/{target.id}`         | Tool: `remove_overwrite`                                      |
+| `member.roles.add(roleId)`                             | `PUT /guilds/{guild.id}/members/{member.id}/roles/{role.id}`    | Tool: `add_role_to_member`                                    |
+| `member.roles.remove(roleId)`                          | `DELETE /guilds/{guild.id}/members/{member.id}/roles/{role.id}` | Tool: `remove_role_from_member`                               |
 
 The bot authenticates with `Authorization: Bot <DISCORD_BOT_TOKEN>` on every
 REST call. Discord applies its own per-route rate limits; the execution
@@ -125,8 +125,8 @@ a structured `tool_call` object (function name + arguments) instead of, or
 alongside, text. The caller executes the function locally, feeds the result
 back to the LLM as a `tool` message, and the conversation continues.
 
-The LLM never runs the function itself — it only tells us *which* function
-to call and with *what* arguments. All execution happens in our code.
+The LLM never runs the function itself — it only tells us _which_ function
+to call and with _what_ arguments. All execution happens in our code.
 
 ### Who defined the tools here
 
@@ -140,39 +140,39 @@ provider understands them.
 
 Each tool is a plain TypeScript object with four parts:
 
-| Part | What it's for |
-|---|---|
-| `name` + `description` + `parameters` (a Zod schema) | The part the LLM sees. Serialized via `getOpenAIFunctionDefinitions()` and sent in every `callLLM` request as `tools`. |
-| `plan(params, store)` | Mutates the in-memory `DesiredState` when the LLM calls the tool. **No Discord side effect.** This is the "thinking" half of the tool. |
-| `getAssumptions(params)` | Pre-execution checks (parent category exists, no name conflict, etc.) that run before any Discord call. |
-| `execute(params, ctx)` (separately, in `apps/server/src/bot/execute-context.ts`) | Runs against live Discord via the `DiscordExecuteContext`. This is the "acting" half — only runs at Stage 7, never during planning. |
+| Part                                                                             | What it's for                                                                                                                          |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `name` + `description` + `parameters` (a Zod schema)                             | The part the LLM sees. Serialized via `getOpenAIFunctionDefinitions()` and sent in every `callLLM` request as `tools`.                 |
+| `plan(params, store)`                                                            | Mutates the in-memory `DesiredState` when the LLM calls the tool. **No Discord side effect.** This is the "thinking" half of the tool. |
+| `getAssumptions(params)`                                                         | Pre-execution checks (parent category exists, no name conflict, etc.) that run before any Discord call.                                |
+| `execute(params, ctx)` (separately, in `apps/server/src/bot/execute-context.ts`) | Runs against live Discord via the `DiscordExecuteContext`. This is the "acting" half — only runs at Stage 7, never during planning.    |
 
 The split between `plan()` and `execute()` is the heart of the platform's
 "plan-first, never-imperative" design: the LLM can only ever mutate the
-*imagined* state. Real Discord isn't touched until the admin approves and
+_imagined_ state. Real Discord isn't touched until the admin approves and
 execution begins.
 
 ### The 17 tools
 
-| Tool | What `plan()` records in DesiredState | What `execute()` does to live Discord |
-|---|---|---|
-| `create_category` | New category entry with a `$symbol` placeholder ID | POST a new channel of type Category |
-| `edit_category` | Mutated fields on the category entry | PATCH the channel |
-| `delete_category` | Tombstone entry for the category | DELETE the channel |
-| `create_channel` | New channel entry under a parent, with `$symbol` | POST a new channel |
-| `edit_channel` | Mutated fields (topic, NSFW, rate limit, forum tags, etc.) | PATCH the channel |
-| `move_channel` | Changed `position` / `parentId` on the channel | PATCH with new position/parent |
-| `delete_channel` | Tombstone entry for the channel | DELETE the channel |
-| `create_role` | New role entry with `$symbol`, permissions as names | POST a new role |
-| `edit_role` | Mutated role fields (color, hoist, permissions, etc.) | PATCH the role |
-| `move_role` | Changed `position` on the role | PATCH with new position |
-| `delete_role` | Tombstone entry for the role | DELETE the role |
-| `set_overwrite` | A `PermissionOverwrite` record keyed by `channel:role` | PUT a permission overwrite on the channel |
-| `remove_overwrite` | Tombstone for the overwrite record | DELETE the permission overwrite |
-| `batch_set_overwrite` | Several overwrite records at once | Loop of PUTs (one per overwrite) |
-| `add_role_to_member` | Member's `roleIds` array extended | PUT member-role association |
-| `remove_role_from_member` | Member's `roleIds` array reduced | DELETE member-role association |
-| `ask_user` | (Special — pauses the loop, no state mutation) | (Special — emits a question SSE event and waits for the admin's answer) |
+| Tool                      | What `plan()` records in DesiredState                      | What `execute()` does to live Discord                                   |
+| ------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `create_category`         | New category entry with a `$symbol` placeholder ID         | POST a new channel of type Category                                     |
+| `edit_category`           | Mutated fields on the category entry                       | PATCH the channel                                                       |
+| `delete_category`         | Tombstone entry for the category                           | DELETE the channel                                                      |
+| `create_channel`          | New channel entry under a parent, with `$symbol`           | POST a new channel                                                      |
+| `edit_channel`            | Mutated fields (topic, NSFW, rate limit, forum tags, etc.) | PATCH the channel                                                       |
+| `move_channel`            | Changed `position` / `parentId` on the channel             | PATCH with new position/parent                                          |
+| `delete_channel`          | Tombstone entry for the channel                            | DELETE the channel                                                      |
+| `create_role`             | New role entry with `$symbol`, permissions as names        | POST a new role                                                         |
+| `edit_role`               | Mutated role fields (color, hoist, permissions, etc.)      | PATCH the role                                                          |
+| `move_role`               | Changed `position` on the role                             | PATCH with new position                                                 |
+| `delete_role`             | Tombstone entry for the role                               | DELETE the role                                                         |
+| `set_overwrite`           | A `PermissionOverwrite` record keyed by `channel:role`     | PUT a permission overwrite on the channel                               |
+| `remove_overwrite`        | Tombstone for the overwrite record                         | DELETE the permission overwrite                                         |
+| `batch_set_overwrite`     | Several overwrite records at once                          | Loop of PUTs (one per overwrite)                                        |
+| `add_role_to_member`      | Member's `roleIds` array extended                          | PUT member-role association                                             |
+| `remove_role_from_member` | Member's `roleIds` array reduced                           | DELETE member-role association                                          |
+| `ask_user`                | (Special — pauses the loop, no state mutation)             | (Special — emits a question SSE event and waits for the admin's answer) |
 
 ### Where the tool definitions get sent to the LLM
 
@@ -268,7 +268,7 @@ Sources: `packages/shared/src/state/fork.ts`, `state/desired-state-store.ts`.
 (For what "function calling" and "the 17 tools" actually mean, see the "Tool
 calls" section above. What follows is the runtime loop that uses them.)
 
-A `PlanningSession` is created and started in the background. It is *not*
+A `PlanningSession` is created and started in the background. It is _not_
 blocking the HTTP request — the server returns the conversation ID
 immediately, and progress flows back to the browser over Server-Sent Events:
 
@@ -284,8 +284,8 @@ The planner's loop (max 20 turns):
      `set_overwrite`, `ask_user`, etc.) with their parameters.
    - **Permission strategy** — Discord permission rules the planner must obey.
    - **Format** — how to call tools and when to stop.
-   The current `ServerState` is included as text via the formatter
-   (`bot/formatter.ts`).
+     The current `ServerState` is included as text via the formatter
+     (`bot/formatter.ts`).
 2. Call the LLM (`planning-session.ts: callLLM`). This is a raw `fetch` POST
    to an OpenAI-compatible chat-completions endpoint. No SDK is used. The
    response is streamed.
@@ -563,14 +563,14 @@ API calls, which themselves translate to the REST endpoints listed in the
 "Where the server state comes from" section. Concrete example for the
 "Support section" request:
 
-| Step (tool) | Discord effect (what a member would see) |
-|---|---|
-| `create_category { name: "Support" }` | A new channel of type Category appears in the guild. The bot's response includes the real Discord channel ID, which the engine captures into the symbol table. |
-| `create_channel { name: "help", parent_id: <real>, type: "text" }` | A new text channel is created under the Support category. Visible to anyone with view permissions. |
-| `create_role { name: "Helper", permissions: ["VIEW_CHANNEL", "READ_MESSAGE_HISTORY"] }` | A new guild role is created. Its position is set to just above the bot's own role by default. |
-| `set_overwrite { channel_id, role_id, allow: [...], deny: [...] }` | A permission overwrite is attached to the channel for that role. Members with `Helper` can now read #help. |
-| `add_role_to_member { member_id, role_id }` | The Helper role is attached to that member. |
-| `delete_channel { channel_id }` | The channel is deleted from Discord. (Used by rollback and by any "remove this channel" intent.) |
+| Step (tool)                                                                             | Discord effect (what a member would see)                                                                                                                       |
+| --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create_category { name: "Support" }`                                                   | A new channel of type Category appears in the guild. The bot's response includes the real Discord channel ID, which the engine captures into the symbol table. |
+| `create_channel { name: "help", parent_id: <real>, type: "text" }`                      | A new text channel is created under the Support category. Visible to anyone with view permissions.                                                             |
+| `create_role { name: "Helper", permissions: ["VIEW_CHANNEL", "READ_MESSAGE_HISTORY"] }` | A new guild role is created. Its position is set to just above the bot's own role by default.                                                                  |
+| `set_overwrite { channel_id, role_id, allow: [...], deny: [...] }`                      | A permission overwrite is attached to the channel for that role. Members with `Helper` can now read #help.                                                     |
+| `add_role_to_member { member_id, role_id }`                                             | The Helper role is attached to that member.                                                                                                                    |
+| `delete_channel { channel_id }`                                                         | The channel is deleted from Discord. (Used by rollback and by any "remove this channel" intent.)                                                               |
 
 Each call hits `https://discord.com/api/v10/...` through the bot's token.
 The rate limit (Discord's, not ours) is handled by retry-with-backoff inside
@@ -580,18 +580,18 @@ the execution engine.
 
 ## Safety nets
 
-| Mechanism | What it prevents | Source |
-|---|---|---|
-| **Per-guild execution lock** | Two plans running against the same guild at once | `planning/locking.ts` |
-| **Stale-hash check** | Approving/executing a plan whose view of Discord is out of date | `forkStateHash` on `conversations`, checked at approve + execute |
-| **Stage 1 validation** | Structural impossibilities — bot can't edit a role above its own, can't delete unknown IDs, can't create two channels with the same name | `planning/validation.ts` Groups A–E |
-| **Stage 2 LLM policy check** | Plans that violate the server's own written rules (e.g. "never delete #welcome") | `validateWithLLM` against the `rules` table |
-| **Pre-execution assumption checks** | Parent missing, name collision at the moment of execution, hierarchy violations | `tools/evaluate-assumptions.ts` |
-| **Diff-based rollback** | If a step fails after earlier steps already ran, the whole plan is undone by diffing live state against the before-snapshot and executing the reverse | `execution-engine.ts: rollbackFull` |
-| **Snapshot + manual rollback** | Admin can undo any completed plan after the fact | `execution_before` / `execution_after` snapshots |
-| **Drift detector** | External edits (someone reconfiguring the server via the Discord app) are surfaced to the admin | `planning/drift-detector.ts` |
-| **5-minute execution timeout** | A stuck execution is aborted, lock is released, rollback runs | `routes/plans.ts` |
-| **Bot-disconnect guard** | If the bot is gone mid-execution, skip rollback and tell the admin the state may be partially mutated | `routes/plans.ts` |
+| Mechanism                           | What it prevents                                                                                                                                      | Source                                                           |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **Per-guild execution lock**        | Two plans running against the same guild at once                                                                                                      | `planning/locking.ts`                                            |
+| **Stale-hash check**                | Approving/executing a plan whose view of Discord is out of date                                                                                       | `forkStateHash` on `conversations`, checked at approve + execute |
+| **Stage 1 validation**              | Structural impossibilities — bot can't edit a role above its own, can't delete unknown IDs, can't create two channels with the same name              | `planning/validation.ts` Groups A–E                              |
+| **Stage 2 LLM policy check**        | Plans that violate the server's own written rules (e.g. "never delete #welcome")                                                                      | `validateWithLLM` against the `rules` table                      |
+| **Pre-execution assumption checks** | Parent missing, name collision at the moment of execution, hierarchy violations                                                                       | `tools/evaluate-assumptions.ts`                                  |
+| **Diff-based rollback**             | If a step fails after earlier steps already ran, the whole plan is undone by diffing live state against the before-snapshot and executing the reverse | `execution-engine.ts: rollbackFull`                              |
+| **Snapshot + manual rollback**      | Admin can undo any completed plan after the fact                                                                                                      | `execution_before` / `execution_after` snapshots                 |
+| **Drift detector**                  | External edits (someone reconfiguring the server via the Discord app) are surfaced to the admin                                                       | `planning/drift-detector.ts`                                     |
+| **5-minute execution timeout**      | A stuck execution is aborted, lock is released, rollback runs                                                                                         | `routes/plans.ts`                                                |
+| **Bot-disconnect guard**            | If the bot is gone mid-execution, skip rollback and tell the admin the state may be partially mutated                                                 | `routes/plans.ts`                                                |
 
 ---
 
@@ -639,18 +639,18 @@ the execution engine.
 
 ## File map (for verifiability)
 
-| Stage | File(s) |
-|---|---|
-| 1. Send request | `apps/server/src/hono/routes/conversations.ts` (`POST /`) |
-| 2. Snapshot state | `apps/server/src/bot/cache.ts`, `buildServerState` in routes, `packages/shared/src/hash-server-state.ts` |
-| 3. Fork | `packages/shared/src/state/fork.ts`, `state/desired-state-store.ts` |
-| 4. Planner loop | `apps/server/src/planning/planning-session.ts`, `llm-request.ts`, `stream-parser.ts`, `tools/registry.ts` |
-| 4a. ask_user | `routes/conversations.ts` (`POST /:convId/ask-user`) |
-| 5. Approve | `routes/conversations.ts` (`POST /:convId/approve`) |
-| 6. Execute kickoff | `apps/server/src/hono/routes/plans.ts` (`POST /:planId/execute`) |
-| 7. Execution engine | `apps/server/src/planning/execution-engine.ts`, `bot/execute-context.ts` |
-| 8. After | `routes/plans.ts` (snapshot writes, drift cascade, lock release) |
-| 9. Rollback | `routes/plans.ts` (`POST /:planId/rollback`), `execution-engine.ts: rollbackFull` |
-| 10. Drift detector | `apps/server/src/planning/drift-detector.ts` |
-| Tool definitions | `packages/shared/src/tools/registry.ts` + per-category files |
+| Stage               | File(s)                                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 1. Send request     | `apps/server/src/hono/routes/conversations.ts` (`POST /`)                                                   |
+| 2. Snapshot state   | `apps/server/src/bot/cache.ts`, `buildServerState` in routes, `packages/shared/src/hash-server-state.ts`    |
+| 3. Fork             | `packages/shared/src/state/fork.ts`, `state/desired-state-store.ts`                                         |
+| 4. Planner loop     | `apps/server/src/planning/planning-session.ts`, `llm-request.ts`, `stream-parser.ts`, `tools/registry.ts`   |
+| 4a. ask_user        | `routes/conversations.ts` (`POST /:convId/ask-user`)                                                        |
+| 5. Approve          | `routes/conversations.ts` (`POST /:convId/approve`)                                                         |
+| 6. Execute kickoff  | `apps/server/src/hono/routes/plans.ts` (`POST /:planId/execute`)                                            |
+| 7. Execution engine | `apps/server/src/planning/execution-engine.ts`, `bot/execute-context.ts`                                    |
+| 8. After            | `routes/plans.ts` (snapshot writes, drift cascade, lock release)                                            |
+| 9. Rollback         | `routes/plans.ts` (`POST /:planId/rollback`), `execution-engine.ts: rollbackFull`                           |
+| 10. Drift detector  | `apps/server/src/planning/drift-detector.ts`                                                                |
+| Tool definitions    | `packages/shared/src/tools/registry.ts` + per-category files                                                |
 | Discord API surface | `apps/server/src/bot/index.ts` (gateway events), `execution-engine.ts: buildCurrentStateFromDiscord` (REST) |

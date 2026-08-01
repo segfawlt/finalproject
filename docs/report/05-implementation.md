@@ -74,11 +74,11 @@ URL, and LLM credentials are read in the server process.
 
 ### 5.1.3 Process startup and background work
 
-`apps/server/src/index.ts` composes the runtime. It starts the Hono server, runs database migrations,
-clears stale guild locks, starts snapshot and lock cleanup, starts the drift detector, registers bot
-event handlers, and logs the Discord client in. The bot exposes a `botReady` promise. Protected API
-routes await that promise before handling requests so planning cannot fork from a partially built
-guild cache.
+`apps/server/src/index.ts` composes the runtime through one awaited startup sequence. It runs database
+migrations, clears stale guild locks, marks process-local planning work interrupted by a prior
+restart, and only then starts cleanup jobs, the drift detector, the HTTP listener, and the Discord
+client. The bot exposes a `botReady` promise. Protected API routes await that promise before handling
+requests so planning cannot fork from a partially built guild cache.
 
 The server remains a monolith: API routes, active planning sessions, SSE event buses, the Discord
 client, and background jobs share one Node process. This simplifies event delivery and access to the
@@ -95,6 +95,13 @@ represents the target configuration being edited during planning. Existing resou
 Discord identifiers; new resources receive symbols such as `$cat_0`, `$ch_1`, and `$role_2`.
 Explicit channel, category, and role deletions are recorded as tombstones.
 
+An earlier design treated this desired state as a JSON document that the LLM would edit directly,
+similar to the way an agentic coding assistant modifies files in a repository. That model provided
+a simple declarative representation, but unrestricted document replacement made domain invariants
+and the meaning of individual changes implicit. The implemented design retains the declarative
+state while moving mutation behind typed tools and `DesiredStateStore`, so creation, editing,
+deletion, symbol assignment, and validation each have an explicit application-controlled boundary.
+
 All planning mutations pass through `DesiredStateStore`. Tool implementations do not edit the state
 object directly. The store checks resource existence and name uniqueness before mutation, generates
 symbols, supports snapshots and reversion, and maintains member-role and permission-overwrite state.
@@ -102,7 +109,7 @@ This produces an important failure property: if a store method rejects a tool ca
 desired state remains intact.
 
 The tool registry binds four concerns under one tool name, following the tool-selection-and-argument
-pattern studied for language-model tool use [6]:
+pattern studied for language-model tool use (Schick et al., 2023):
 
 1. the JSON-compatible parameter description sent to the LLM;
 2. Zod parsing of the received arguments;
@@ -145,7 +152,7 @@ such as `DesiredState`, LLM messages, plan data, and snapshots are stored in JSO
 foreign keys support the common guild, user, conversation, and plan lookups.
 
 Two in-process event buses bridge long-running server work to browser Server-Sent Events (SSE)
-streams [11]:
+streams (WHATWG, n.d.):
 
 - `planning-event-bus.ts` publishes events by conversation identifier; and
 - `event-bus.ts` publishes execution and rollback events by plan identifier.
@@ -265,8 +272,7 @@ return { type: "success", result };
 
 `getTool()` rejects names outside the registry, the registered wrapper parses parameters with Zod,
 and `tool.plan()` delegates mutation to the store. Errors are returned to the LLM as tool results so
-the model may correct a malformed or inconsistent proposal without leaving a partial state change
-[5].
+the model may correct a malformed or inconsistent proposal without leaving a partial state change.
 
 ### 5.3.3 Clarification, revision, and iteration persistence
 
@@ -286,12 +292,17 @@ conversation messages. This bounds request size while preserving recent tool con
 prompt contains the current guild representation, the four planning phases, permission strategy,
 and the registered tool usage rules.
 
+![Figure 5.1: Studio planning view showing streamed tool progress before a desired state is completed](screenshots/03-studio-planning-tool-progress.png)
+
+The planning log makes the plan-first boundary visible: tool calls and results are shown while the
+live Discord server remains unchanged, and approval controls do not appear until planning completes.
+
 ## 5.4 Approval, Validation, and Execution Implementation
 
 ### 5.4.1 Exact approval and execution call chain
 
 The browser's Approve action performs two API commands: it first freezes the latest desired state as
-a plan and then executes that plan, mirroring the plan-then-apply workflow used by Terraform [8]. The
+a plan and then executes that plan, mirroring the plan-then-apply workflow used by Terraform (HashiCorp, n.d.). The
 implemented call chain is:
 
 ```text
@@ -417,9 +428,9 @@ const result = await executePlan({
 
 This avoids maintaining a separate handwritten inverse for every Discord operation, following the
 same compensating-action principle used to recover long-lived transactions decomposed into smaller
-steps [10]. Rollback remains best effort: the structural snapshot cannot recreate message history or
-every external side effect,
-and the current recovery-result propagation has a flaw documented in Section 5.8.
+steps (Garcia-Molina and Salem, 1987). Rollback remains best effort: the structural snapshot cannot recreate message history or
+every external side effect, and Discord may reject a reverse operation. The implemented event path
+reports that case as `rollback_failed` instead of presenting incomplete recovery as success.
 
 ## 5.5 Implementation of Important Features
 
@@ -432,6 +443,25 @@ state. The administrator may revise through natural language, revert to a prior 
 manual edit mode. Manual edits are posted back to the conversation and stored as a new
 `manual_edit` iteration; they do not edit Discord directly.
 
+When the administrator requests rollback of a completed execution (FR-22), the system retrieves
+the before-snapshot that was persisted at execution start from the `snapshots` table. The rollback
+operation diffs the current Discord state against this retrieved before-snapshot and generates a
+reverse convergence plan using the same diff engine that produced the forward plan. This approach
+ensures that rollback coverage remains synchronized with forward execution capabilities as the
+system evolves.
+
+![Figure 5.2: Completed desired-state preview showing proposed categories, channels, and roles](screenshots/04-completed-desired-state-preview.png)
+
+The preview renders the desired state as a Discord-like interface with visual indicators for
+additions (green), modifications (yellow), and deletions (red strikethrough). The administrator
+can inspect channel permissions, role assignments, and structural organization before approval.
+
+![Figure 5.3: Iteration history modal showing previous versions of the plan](screenshots/05-iteration-history.png)
+
+The iteration history preserves every version of the desired state throughout the planning session,
+allowing the administrator to revert to any prior iteration if a revision introduces unwanted
+changes.
+
 ### 5.5.2 Confirmed re-planning after stale-state rejection
 
 Every conversation stores a hash of the Discord state from which it was forked. Execution recomputes
@@ -443,6 +473,11 @@ repair prompt from current state and failed assumptions, replaces the old system
 built from fresh state, and starts `PlanningSession` again. The repaired desired state is persisted as
 a new iteration and returns to review. The repair route does not execute Discord changes.
 
+![Figure 5.4: Studio stale-state warning after the observed Discord state changed](screenshots/08-stale-desired-state.png)
+
+The stale-state presentation prevents approval against an obsolete comparison baseline and directs
+the administrator toward a fresh fork or the confirmed AI repair flow.
+
 ### 5.5.3 Templates and guild rules
 
 Templates store reusable desired-state structures in PostgreSQL. The Studio can save a completed
@@ -450,22 +485,29 @@ desired state, browse guild templates, edit template structure, attach template 
 LLM-driven merge. A merge creates a normal planning conversation and therefore should produce a new
 reviewable desired state rather than applying the template directly.
 
+![Figure 5.5: Template library showing saved configuration templates](screenshots/06-template-library.png)
+
+The template library displays saved templates with their names, descriptions, and structural
+summaries. Templates can be attached to planning conversations to guide the LLM toward known
+working patterns.
+
+![Figure 5.6: Guild rules settings interface](screenshots/07-guild-rules-settings.png)
+
 Guild rules are edited in `SettingsTab` and stored in the `rules` table. The validation pipeline
-loads them for mandatory Stage 2 policy checking. They are not currently included in the initial
-planning system prompt, so the planner may propose a rule-conflicting state that is detected only
-when the administrator attempts execution. If the configured rules cannot be evaluated, execution
-is blocked and the existing error flow displays the availability reason.
+loads them into the retained planning prompt and reloads the current set for mandatory Stage 2
+policy checking before execution. If configured rules cannot be evaluated, execution is blocked and
+the existing error flow displays the availability reason.
 
 ### 5.5.4 Drift reporting
 
-The drift detector periodically compares the platform's custom channel and role cache with a
-projection of Discord.js's guild cache. Differences are persisted as drift events and published to
-guild subscribers. `useGuildDrift()` marks the selected guild stale and supplies the latest event to
-`DriftIndicator`. The Studio disables approval for a stale guild and offers a re-fork action rather
-than silently applying an old plan. Unlike a Kubernetes controller that reconciles divergence
-automatically [7], detected drift here only marks the guild stale and requires a human-reviewed
-re-fork or repair. The detector does not currently perform an independent REST fetch; that
-limitation is recorded in Section 5.8.
+Gateway handlers publish and persist relevant channel, role, and member-role changes as soon as
+Discord reports them. Events observed while a guild execution lock is held are treated as expected
+plan convergence rather than external drift. A periodic comparison between Discord.js's cache and
+the platform cache remains as a missed-event consistency check. `useGuildDrift()` marks the selected
+guild stale and supplies the latest event to `DriftIndicator`. The Studio disables approval for a
+stale guild and offers a re-fork action rather than silently applying an old plan. Unlike a
+Kubernetes controller that reconciles divergence automatically (Kubernetes Authors, n.d.), detected drift here only marks
+the guild stale and requires a human-reviewed re-fork or repair.
 
 ### 5.5.5 Authentication and guild isolation
 
@@ -475,10 +517,56 @@ planning-stream routes load the resource's guild before authorizing access. Bot 
 separate check: the bot must be connected to the guild and hold `ADMINISTRATOR`, while role-mutating
 plans must also pass hierarchy validation.
 
+![Figure 5.7: Discord OAuth login screen](screenshots/01-discord-oauth-login.png)
+
+The platform uses Discord OAuth2 for authentication. No separate username or password is created;
+the user's Discord identity and guild permissions directly determine access.
+
+![Figure 5.8: Authenticated guild picker showing manageable servers](screenshots/02-authenticated-guild-picker.png)
+
+After authentication, the guild picker displays only servers where the user holds the `Manage Server`
+permission and the bot is present with `Administrator` permission. Servers that do not meet these
+requirements are filtered out at the API level.
+
+### 5.5.6 Execution progress and recovery
+
+When an approved plan is executed, the system streams live progress over Server-Sent Events. Each
+step is reported as it starts, completes, or fails. If a step fails, the system automatically
+initiates structural rollback by diffing current Discord state against the before-snapshot and
+generating a reverse convergence plan.
+
+![Figure 5.9: Live execution progress showing step-by-step Discord mutations](screenshots/12-studio-execution-progress-fixed.png)
+
+The execution timeline displays each step with its status, elapsed time, and any errors. The
+administrator can monitor the operation as it progresses or abort the execution mid-flight.
+
+![Figure 5.10: Execution failure showing the Discord permission error and recovery outcome](screenshots/10-studio-execution-permission-failure.png)
+
+Failures remain part of the evidence rather than being hidden. The Studio reports the failed step,
+the actionable permission diagnosis, and the result of the automatic structural recovery attempt.
+
+![Figure 5.11: Completed execution with the manual Rollback action available](screenshots/13-studio-execution-complete-rollback-fixed.png)
+
+After successful execution, the Studio presents Rollback as an explicit administrator action. A
+failed execution follows a separate error path that reports the automatic recovery attempt and any
+residual divergence.
+
+![Figure 5.12: Manual rollback interface for completed executions](screenshots/14-studio-rollback-fixed.png)
+
+![Figure 5.13: Earlier Studio execution progress before the permission fix](screenshots/09-studio-execution-progress.png)
+
+![Figure 5.14: Earlier Studio execution progress after the permission issue](screenshots/11-studio-execution-progress-after-permission.png)
+
+![Figure 5.15: Studio rollback verification state returned to planning](screenshots/15-studio-rollback-verification-planning.png)
+
+The administrator can trigger manual rollback of a successfully completed execution. The system
+retrieves the before-snapshot, diffs current state against it, and attempts to converge Discord
+back to its pre-execution structure.
+
 ## 5.6 Technical Problems and Adopted Solutions
 
 This section records problems for which a solution is already implemented. It does not include the
-remaining flaws in Section 5.8.
+remaining operational limitations in Section 5.8.
 
 | Technical problem                                                   | Failure mode                                                                                          | Implemented solution                                                                                                               |
 | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -510,57 +598,53 @@ Chapter 6 evaluates these modules through their existing tests and records speci
 expected outputs, actual outputs, and remaining coverage gaps. This chapter does not convert the
 existence of a test file into a claim that every path has been verified.
 
-## 5.8 Remaining Implementation Flaws and Recommended Remedies
+## 5.8 Implementation Review Outcomes and Remaining Limitations
 
-The following findings were identified by tracing the current call chains. They are not presented as
-implemented solutions. Straightforward items have a clear fix direction; the policy item requires an
-explicit product decision.
+### 5.8.1 Corrected call-chain defects and continuity limits
 
-### 5.8.1 Straightforward correctness and security problems
+A call-chain review found the issues in Table 5.3. They were corrected before the final report was
+completed; the table records the adopted behavior rather than presenting already-resolved defects as
+current limitations.
 
-| Severity | Current flaw and impact                                                                                                                                                                                                                                                                                                                      | Recommended remedy                                                                                                                                                                                                                                                                                                     |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| High     | Planning starts before the browser subscribes to the in-memory SSE bus. Events are not buffered or replayed, so a fast planning turn can emit `completed` before `connectPlanningSSE()` attaches. The development mock is especially likely to leave the Studio stuck in `planning`.                                                         | Introduce a start handshake: create the conversation, open the SSE stream and receive `streaming_ready`, then issue a separate start command. Also make reconnect recovery return persisted conversation status and the latest iteration so completion never depends on one transient event.                           |
-| High     | The template-merge event handler removes the active session when planning emits `completed`, but the approve route requires that completed session. A successfully merged template can therefore reach review and then fail approval with “No active planning session”.                                                                      | Immediate surgical fix: retain the completed merge session exactly as the ordinary conversation route does and remove it after approval or cancellation. Durable fix: make approval reconstruct its contract from the persisted completed conversation and latest iteration rather than requiring process memory.      |
-| Medium   | Adding or removing template context calls `rebuildSystemPrompt()` with an empty channel, role, member, and overwrite state. The next planning turn can lose the actual guild context and reason as if the server were empty.                                                                                                                 | Retain the original/current `ServerState` as a `PlanningSession` field and rebuild the prompt from that state plus active templates. If the desired state must also be shown, include it as a separately labelled section instead of substituting it for current state.                                                |
-| High     | `onTurnComplete` persistence errors are logged and swallowed. The completed event is emitted before durable iteration persistence is known to have succeeded, so the UI and conversation row can say “completed” while the approved desired-state snapshot is absent.                                                                        | Treat iteration persistence as part of the state transition. Persist the snapshot and messages before publishing final completion; propagate failure, mark the conversation `error`, and prevent approval until a durable latest iteration exists.                                                                     |
-| High     | `rollbackFull()` emits `rollback_completed` even when its internally executed reverse plan returns `success: false`. The normal step-failure path also ignores the rollback result, so the browser can be told rollback completed although recovery was partial.                                                                             | Add a `rollback_failed` event and persisted rollback result. Emit completion only when the reverse execution succeeds, propagate the rollback error to the route, and return a combined execution-and-recovery diagnosis for manual intervention.                                                                      |
-| High     | When the fresh after-snapshot read fails, the route stores a fabricated empty guild state, hashes it, and uses that hash to mark sibling conversations stale. The plan may be labelled completed while its evidence snapshot is false.                                                                                                       | Retry the fresh read; if it still fails, record “snapshot unavailable” metadata and preserve the execution result without inventing empty resources. Do not compute stale-state decisions from a fabricated fallback; use a verified cache snapshot with provenance or defer invalidation until a fresh read succeeds. |
-| High     | Template list and detail routes require an authenticated session but do not check `userHasManageGuild()` for the requested guild. A signed-in user who knows another guild identifier can read that guild's stored template metadata and structure.                                                                                          | Apply the same guild authorization helper used by template writes and merges. Preserve access to deliberately global templates through an explicit global-template rule rather than bypassing authorization for the entire read route.                                                                                 |
-| Medium   | The API supports cancelling an active planning session and aborting an execution, but `ChatArea` exposes Cancel only after the plan is ready and exposes no Abort action while executing. The Settings header shortcut also targets a legacy redirect instead of opening `SettingsTab`.                                                      | Render Cancel during `planning` and `ask_user`, add an Abort command during `executing`, and route the Settings shortcut through the Studio tab store. Keep the existing server-side checks authoritative.                                                                                                             |
-| Medium   | Active planning sessions and ask-user timers live only in memory. A server restart leaves persisted conversations in planning or waiting states but removes the object required by resume, revise, and approval routes.                                                                                                                      | On startup, either reconstruct sessions from persisted messages and the latest iteration or mark orphaned active conversations as interrupted with a visible restart/recover action. Approval should use persisted state so a completed review survives restart.                                                       |
-| Medium   | The drift detector compares the custom guild cache with Discord.js's own in-memory guild cache rather than fetching channels and roles through REST. It can detect divergence between the two caches, but it is not an independent fresh-state poll and cannot substantiate that Discord was re-read when both caches missed the same event. | Fetch channels and roles during each drift pass, project the fetched collections, and compare that verified snapshot with the custom cache. Rate-limit and serialize the poll per guild, and suppress or classify expected differences while a locked execution is in progress.                                        |
-| Medium   | The HTTP listener and immediate snapshot cleanup are started before the asynchronous migration callback has completed. This allows jobs or early requests to touch a schema that may still be migrating, despite comments claiming migrations run before traffic.                                                                            | Refactor startup into one awaited `main()`: validate configuration, run migrations, clear stale locks, initialize jobs and bot handlers, and only then call `serve()`. Exit before binding the port when migration fails.                                                                                              |
+**Table 5.3. Implementation-review findings and adopted fixes**
 
-### 5.8.2 Remaining planning-stage policy gap
+| Finding                                                                                          | Adopted fix                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A fast planning turn could finish before the browser subscribed to SSE.                          | The planning event bus retains the latest terminal event (`ask_user`, `completed`, `error`, or `expired`) and replays it to a late subscriber. Intermediate progress remains transient.                  |
+| Template merge removed its completed session before approval.                                    | Merge now retains the completed session, and approval can also construct the contract from the persisted latest iteration after a restart.                                                               |
+| Rebuilding a prompt for template attachment discarded the original planning context.             | `PlanningSession` retains its forked `ServerState` and rebuilds the prompt from that base plus active templates.                                                                                         |
+| Completion could be emitted before iteration persistence succeeded.                              | Turn persistence is part of the state transition. Failure produces an error; `completed` is emitted only after the snapshot and messages are stored.                                                     |
+| Failed reverse execution could be reported as completed rollback.                                | A distinct `rollback_failed` event is propagated to the Studio; completion is emitted only for successful reverse convergence.                                                                           |
+| Failed after-snapshot capture fabricated an empty guild and hashed it as real state.             | No after-snapshot is stored when the fresh read fails. The response identifies that absence and all guild conversations are conservatively marked stale because no verified comparison hash exists.      |
+| Guild-scoped template reads lacked guild authorization.                                          | List and detail routes check `userHasManageGuild`; authenticated global templates remain readable and cross-guild resources remain hidden.                                                               |
+| Cancel, Abort, and Settings commands were not exposed at the appropriate Studio phase.           | Planning and clarification views expose Cancel, execution exposes Abort, and the Settings header opens `SettingsTab` directly.                                                                           |
+| Process restarts left in-memory planning statuses appearing active.                              | Startup marks interrupted planning/waiting rows as errors. Persisted completed conversations remain reviewable and approvable without an in-memory session.                                              |
+| Ordinary gateway changes could disappear when both Discord.js and application caches converged.  | Channel, role, and member-role gateway events are published and persisted at observation time; events under an execution lock are suppressed as expected plan effects.                                   |
+| Traffic and cleanup could start while migrations were still running.                             | One awaited `main()` performs migrations and recovery before binding the HTTP listener or starting background jobs.                                                                                      |
+| Saved guild rules were checked only at execution, allowing avoidable rule-conflicting proposals. | Initial, template-merge, and stale-repair sessions load authorised guild rules into the retained system-prompt context. Execution still reloads and validates current rules as the fail-closed backstop. |
 
-The policy decision is resolved as **prompt guidance plus a fail-closed execution backstop**. The
-backstop is implemented: guilds without rules remain fully deterministic, while guilds with rules
-cannot execute when rule loading or policy evaluation is unavailable. The checker has a 30-second
-request bound, validates the response shape, and returns an actionable availability blocker through
-the same error flow as other validation blockers.
+Two operational limits remain. Only terminal planning events are replayed; intermediate planning and
+execution progress missed during a disconnect is not reconstructed as a full timeline. In addition,
+an in-flight LLM turn cannot resume after a process restart: it is marked interrupted, while already
+completed iterations remain durable. These limits affect continuity and progress detail, not the
+authoritative desired state or the approval and execution safety gates.
 
-The remaining gap is earlier guidance. Natural-language guild rules are absent from the planning
-prompt, so the planner can still propose a rule-conflicting state and make the administrator wait
-until execution to discover the conflict. This is a proposal-quality and feedback-timing
-limitation, rather than an absence of enforcement: the plan can reach review, but it cannot pass
-the execution boundary when Stage 2 returns a blocker or cannot complete the check.
+### 5.8.2 Planning-stage policy guidance
 
-During informal development observation, administrators tended to express task-specific
-constraints directly in the natural-language request. This is not a controlled user study and
-cannot establish how frequently the wider user population would use persistent rules. It does,
-however, suggest a useful distinction: chat instructions are convenient for one task, while saved
-guild rules are most valuable for recurring organisational policies, multiple administrators, and
-constraints that should not depend on being repeated in every request.
+The policy design is now **prompt guidance plus a fail-closed execution backstop**. Conversation
+creation, server-side template merge, and confirmed stale-plan repair load the authorised guild's
+current rule text before constructing `PlanningSession`. The session retains that rule set and the
+shared system-prompt builder includes it after the platform's fixed planning instructions. Template
+attachment and detachment rebuild the prompt from the retained server state, rules, and active
+template context, so they no longer discard policy guidance. The planner is instructed to explain
+an unsatisfiable conflict and request clarification rather than knowingly plan a violating state.
 
-Planning-stage integration was therefore retained as future work rather than represented as a
-one-line prompt change. A complete change must load and retain the authorised guild's rule set,
-include it in initial and rebuilt prompts, cover revision, template-merge, and stale-replanning
-paths, and associate the reviewed plan with a rule version so a later rule change triggers
-re-planning or renewed review. The planner should explain unsatisfiable conflicts rather than
-quietly produce a violating state. The execution-time check should remain as the authoritative
-backstop because prompt instructions, the planner, and the human reviewer can all miss or
-misinterpret a free-text rule. Section 4.2.4 gives the complete implementation sequence.
+The prompt is advisory, not a security boundary. At execution, Stage 2 reloads current rules and
+checks the computed plan with a bounded LLM request. Guilds without rules remain deterministic;
+guilds with rules fail closed when loading or evaluation is unavailable, and blockers prevent live
+mutation. Consequently, a rule changed after planning may require revision at execution, but it
+cannot be bypassed by the session's older prompt context. A regression test verifies that rule text
+survives system-prompt rebuilding.
 
 ## 5.9 Screenshot Evidence
 
@@ -591,8 +675,8 @@ capture is included below.
 7. **Stale desired state.** `08-stale-desired-state.png` shows a stale conversation and its desired
    state, including resources marked for removal.
 8. **Confirmed re-plan.** No capture is included. The confirmed re-plan feature is implemented as
-   `POST /plans/:planId/replan` (Section 5.5.2), but the specific execution path — a stale-hash
-   failure followed by administrator confirmation — was not triggered during the demonstration
+   `POST /plans/:planId/replan` (Section 5.5.2), but the specific execution path, a stale-hash
+   failure followed by administrator confirmation, was not triggered during the demonstration
    session. The inspected stale conversation did not expose the confirmed re-plan action in the
    reachable UI, and the failed execution did not qualify for the AI-repair path. The absence of a
    capture is a gap in evidence, not a gap in implementation.
@@ -600,9 +684,10 @@ capture is included below.
    after the completed rollback, with the session returned to the planning interface and the
    pre-execution desired state available for review.
 
-All captures were reviewed to confirm that personal identifiers, tokens, private channel names, and
-unrelated member data were obscured before inclusion. Each caption identifies the requirement being
-demonstrated and does not claim a successful execution unless the corresponding run and result are
+The captures contain no tokens or secret configuration, but visible display names and numeric test
+resource identifiers should be redacted before submission if the final-report privacy policy treats
+them as personal or identifying data. Each caption should identify the requirement being
+demonstrated and should not claim a successful execution unless the corresponding run and result are
 recorded in Chapter 6.
 
 ## 5.10 Chapter Summary
@@ -615,8 +700,9 @@ only the execution context can mutate Discord. Symbols, stale-state hashes, per-
 per-step deadlines, SSE progress, snapshots, and diff-based rollback address the main technical
 risks of coordinating an LLM with an external administrative API.
 
-The implementation review also found unresolved issues in event delivery, template-merge lifecycle,
-prompt rebuilding, durable completion, rollback reporting, snapshot accuracy, template-read
-authorization, UI command exposure, restart recovery, drift freshness, and startup ordering. These
-findings limit the claims that can safely be made today. Applying the recommended remedies before
-final evaluation would strengthen both the implementation and the evidence presented in Chapter 6.
+The implementation review corrected event-delivery, template lifecycle, prompt rebuilding, durable
+completion, rollback reporting, snapshot accuracy, template authorization, command exposure,
+restart-state, drift-reporting, and startup-order defects. The principal remaining product limitation
+is continuity detail rather than authoritative-state safety: only terminal planning events are
+replayed after a disconnect, and an in-flight LLM turn cannot resume after process restart. Chapter 6
+evaluates the resulting implementation without treating unexecuted system tests as evidence.

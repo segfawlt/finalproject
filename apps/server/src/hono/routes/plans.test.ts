@@ -6,11 +6,18 @@ const plansSource = readFileSync(fileURLToPath(new URL("./plans.ts", import.meta
 
 describe("manual rollback state capture", () => {
   it("uses a fresh Discord state instead of the custom cache", () => {
-    const rollbackHandler = plansSource.slice(plansSource.indexOf('plansApp.post("/:planId/rollback"'));
+    const rollbackHandler = plansSource.slice(
+      plansSource.indexOf('plansApp.post("/:planId/rollback"')
+    );
 
     expect(rollbackHandler).toContain(
       "const currentState = await buildCurrentStateFromDiscord(guildId);"
     );
     expect(rollbackHandler).not.toContain("const currentState = buildServerState(guildId);");
+  });
+
+  it("does not fabricate an empty state when the after-snapshot read fails", () => {
+    expect(plansSource).not.toContain("channels: [],\n        roles: [],\n        overwrites: []");
+    expect(plansSource).toContain("afterSnapshotAvailable: afterState !== null");
   });
 });

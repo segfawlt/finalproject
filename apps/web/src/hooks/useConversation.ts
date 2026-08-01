@@ -109,6 +109,7 @@ export interface UseConversationResult {
   cancelPlanning: () => Promise<void>;
   approve: () => Promise<void>;
   replanWithAI: () => Promise<void>;
+  abortExecution: () => Promise<void>;
   rollback: () => Promise<void>;
   revise: (newPrompt: string) => Promise<void>;
   revert: (version: number) => Promise<void>;
@@ -695,6 +696,21 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
     beginPlanning,
   ]);
 
+  const abortExecution = useCallback(async () => {
+    if (!planId) return;
+    try {
+      const res = await apiFetch(`/api/guilds/${guildId}/plans/${planId}/abort`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string };
+        showError(data.error || "Failed to abort execution");
+      }
+    } catch (err) {
+      showError(err instanceof Error ? err.message : String(err));
+    }
+  }, [guildId, planId, showError]);
+
   const rollback = useCallback(async () => {
     if (!planId) return;
     if (enterInFlight()) return;
@@ -843,6 +859,7 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
     cancelPlanning,
     approve,
     replanWithAI,
+    abortExecution,
     rollback,
     revise,
     revert,

@@ -2,7 +2,7 @@
 
 ## Planning Loop
 
-The planning loop is a state machine, not a simple while-loop. It can pause (ask_user), keep state in server memory, and resume from memory. The conversation's prompt and messages are logged to the database. On server restart, in-memory state is lost — the user starts a new conversation from the current server state.
+The planning loop is a state machine, not a simple while-loop. It can pause (ask_user), keep state in server memory, and resume from memory. The conversation's prompt, messages, and completed iterations are logged to the database. On server restart, in-flight work is marked interrupted; a completed persisted iteration remains reviewable and approvable, while further planning starts from current server state.
 
 ```
                     ┌──────────────────────────┐
@@ -204,7 +204,7 @@ WITHIN A TURN:                    BETWEEN TURNS:
        ▼
   store.snapshot() → DB
 
-On server restart: load latest iteration from DB → restore into DesiredStateStore → resume.
+On server restart: mark in-flight planning as interrupted; retain completed iterations for review and approval.
 ```
 
 ### Validation During Planning
@@ -323,12 +323,12 @@ symbols (members use Discord IDs), but role params may contain symbols
 
 ### Retry Strategy
 
-| Error Type                      | Action                                                                                         |
-| ------------------------------- | ---------------------------------------------------------------------------------------------- |
-| 429 Rate Limit                  | Handled automatically by Discord.js REST manager                                               |
-| 500/502/503/timeout             | Retry step up to 3 times, exponential backoff (1s→2s→4s, ±25% jitter)                          |
-| 403/404/400 (known)             | Diagnose via hardcoded fix map in `diagnoseError()`, fail step, rollback                       |
-| Unknown errors                  | Fail step, full rollback, offer re-plan with fresh state — **never ask the LLM for diagnosis** |
+| Error Type                      | Action                                                                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 429 Rate Limit                  | Handled automatically by Discord.js REST manager                                                                                                 |
+| 500/502/503/timeout             | Retry step up to 3 times, exponential backoff (1s→2s→4s, ±25% jitter)                                                                            |
+| 403/404/400 (known)             | Diagnose via hardcoded fix map in `diagnoseError()`, fail step, rollback                                                                         |
+| Unknown errors                  | Fail step, full rollback, offer re-plan with fresh state — **never ask the LLM for diagnosis**                                                   |
 | Permanent failure after retries | Full rollback via `rollbackFull()` — diff current Discord state against the before-snapshot and execute the reverse diff. No partial state left. |
 
 ### How Tool Results Feed the LLM
@@ -367,7 +367,7 @@ Conversations are the top-level planning session. The database stores the prompt
 - When any conversation is executed, Discord state changes — all sibling conversations whose `forkStateHash` no longer matches are marked as stale (view-only, not workable).
 - The `plan_iterations` table persists DesiredState snapshots across LLM turns and manual edits. Iterations survive server restarts — the user can view history and revert to past versions.
 - Browser disconnect (closing a tab) is a non-event. Server memory persists. On reconnect, the client sees everything as it was.
-- Server restart destroys in-memory state (LLM messages, active loop context). Plan iterations survive. The user starts a new conversation from the current server state.
+- Server restart destroys the active loop context. Planning or waiting rows are marked interrupted; completed iterations survive and can still be approved from persistence. A new planning turn starts from current server state.
 - Plans belong to conversations via `conversationId` FK. This links execution output back to the conversation that produced it.
 - No cross-conversation context needed (server state is enough).
 - Future idea: smart stale detection — compare which items the plan touches against actual changes, not full server hash (ignore irrelevant changes like bitrate settings). Future idea: rollback to a conversation's fork point to re-enable stale conversations.

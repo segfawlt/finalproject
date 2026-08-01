@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, FileText, Settings } from "lucide-react";
 import { useGuildName } from "../../hooks/useGuildName";
+import { makeTab, useStudioStore } from "../../stores/studioStore";
 
 /**
  * Contextual header for the Studio route. Renders below the top-level
@@ -9,6 +10,7 @@ import { useGuildName } from "../../hooks/useGuildName";
 export default function StudioHeader() {
   const { guildId } = useParams<{ guildId: string }>();
   const guildName = useGuildName(guildId);
+  const openTab = useStudioStore((state) => state.openTab);
 
   return (
     <div className="h-12 shrink-0 border-b border-shell-border bg-shell-surface flex items-center px-4 gap-3">
@@ -44,13 +46,14 @@ export default function StudioHeader() {
             <FileText size={13} />
             Templates
           </Link>
-          <Link
-            to={`/dashboard/${guildId}`}
+          <button
+            type="button"
+            onClick={() => openTab(makeTab("settings"))}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-shell-text-muted hover:text-shell-text hover:bg-shell-surface2 rounded text-xs transition-colors"
           >
             <Settings size={13} />
             Settings
-          </Link>
+          </button>
         </div>
       )}
     </div>

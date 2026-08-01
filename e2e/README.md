@@ -37,13 +37,35 @@ pnpm e2e            # runs the chromium project, reusing the saved session
 pnpm e2e:report     # open the HTML report (traces + screenshots)
 ```
 
+### Manual Discord scenarios
+
+ST-08 creates a draft plan tied to a conversation's fork state, then waits up
+to five minutes for you to rename or move any existing channel directly in
+Discord. Once the running app's cached state changes, it verifies that execution
+is rejected as stale. It does not need an LLM provider.
+
+```bash
+RUN_MANUAL_DISCORD_TESTS=1 pnpm exec playwright test e2e/st-planning.spec.ts \
+  --project=chromium --headed -g "external Discord edit"
+```
+
+The test is skipped during normal `pnpm e2e` runs, so it never waits for a
+manual action in CI or a routine evidence run.
+
+ST-14 subscribes to the drift SSE before the same type of manual channel edit.
+
+```bash
+RUN_MANUAL_DISCORD_TESTS=1 pnpm exec playwright test e2e/st-persistence.spec.ts \
+  --project=chromium --headed -g "direct channel edit"
+```
+
 ## Files
 
-| File                    | Purpose                                                        |
-| ----------------------- | -------------------------------------------------------------- |
-| `../playwright.config.ts` | projects: `setup` (login capture) → `chromium` (scenarios)   |
-| `auth.setup.ts`         | interactive OAuth capture → `.auth/user.json`; reuses if valid |
-| `smoke.spec.ts`         | pipeline sanity: auth reuse, routing, ST-01 no-password check  |
+| File                      | Purpose                                                        |
+| ------------------------- | -------------------------------------------------------------- |
+| `../playwright.config.ts` | projects: `setup` (login capture) → `chromium` (scenarios)     |
+| `auth.setup.ts`           | interactive OAuth capture → `.auth/user.json`; reuses if valid |
+| `smoke.spec.ts`           | pipeline sanity: auth reuse, routing, ST-01 no-password check  |
 
 Scenario specs (`ST-*`, `PF-*`) are added once the smoke run is green against
 the live DOM.

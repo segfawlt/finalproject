@@ -1,11 +1,14 @@
 import { Events } from "discord.js";
-import { botClient } from "./client";
-import { initGuildCache, guildCache } from "./cache";
-import { botHasAdministrator } from "./permissions";
-import { bitfieldToPermissionNames } from "@repo/shared";
-import { db, guilds } from "@repo/db";
 import { eq } from "drizzle-orm";
+import { db, driftEvents, guilds } from "@repo/db";
+import { bitfieldToPermissionNames } from "@repo/shared";
+import { guildCache, initGuildCache } from "./cache";
+import { botClient } from "./client";
+import { botHasAdministrator } from "./permissions";
+import { emitDriftEvent } from "../planning/drift-detector";
+import { isGuildLocked } from "../planning/locking";
 import { logger } from "../utils/logger";
+import type { DriftEvent } from "../planning/drift-detector";
 
 /**
  * Resolves after the first ClientReady event finishes rebuilding the
@@ -101,6 +104,26 @@ function syncChannelPermissions(
   }
 }
 
+async function reportGatewayDrift(event: DriftEvent): Promise<void> {
+  try {
+    // Gateway events caused by the active execution are expected convergence,
+    // not external drift. The execution route holds this lock until its final
+    // state capture and bookkeeping complete.
+    if (await isGuildLocked(event.guildId)) return;
+
+    emitDriftEvent(event);
+    await db.insert(driftEvents).values({
+      guildId: event.guildId,
+      severity: event.severity,
+      kind: event.kind,
+      summary: event.summary,
+      details: event.details,
+    });
+  } catch (err) {
+    logger.error(err, "[bot] failed to publish gateway drift event");
+  }
+}
+
 export function setupBotEvents() {
   const rebuildCache = async (client: typeof botClient) => {
     const adminMissing: string[] = [];
@@ -177,9 +200,19 @@ export function setupBotEvents() {
       position: (channel as { position?: number }).position ?? 0,
       lockPermissions: channel.permissionsLocked ?? undefined,
     });
+    syncChannelPermissions(channel.guildId, channel);
+
+    void reportGatewayDrift({
+      guildId: channel.guildId,
+      severity: "warning",
+      kind: "channel_created",
+      summary: `Channel "${channel.name}" was created directly in Discord.`,
+      details: { channelId: channel.id, name: channel.name, type: channel.type },
+      detectedAt: new Date().toISOString(),
+    });
   });
 
-  botClient.on(Events.ChannelUpdate, (_oldChannel, newChannel) => {
+  botClient.on(Events.ChannelUpdate, (oldChannel, newChannel) => {
     if (newChannel.isDMBased()) return;
     const cache = guildCache.get(newChannel.guildId);
     if (!cache) return;
@@ -194,6 +227,28 @@ export function setupBotEvents() {
     });
 
     syncChannelPermissions(newChannel.guildId, newChannel);
+
+    const old = oldChannel as {
+      name: string;
+      parentId: string | null;
+      position?: number;
+    };
+    const changedFields = [
+      ...(old.name !== newChannel.name ? ["name"] : []),
+      ...(old.parentId !== newChannel.parentId ? ["parentId"] : []),
+      ...(old.position !== newChannel.position ? ["position"] : []),
+    ];
+
+    if (changedFields.length > 0) {
+      void reportGatewayDrift({
+        guildId: newChannel.guildId,
+        severity: "warning",
+        kind: "channel_updated",
+        summary: `Channel "${newChannel.name}" changed directly in Discord.`,
+        details: { channelId: newChannel.id, fields: changedFields },
+        detectedAt: new Date().toISOString(),
+      });
+    }
   });
 
   botClient.on(Events.ChannelDelete, (channel) => {
@@ -207,6 +262,15 @@ export function setupBotEvents() {
         }
       }
     }
+
+    void reportGatewayDrift({
+      guildId: channel.guildId,
+      severity: "warning",
+      kind: "channel_deleted",
+      summary: `Channel "${channel.name}" was deleted directly in Discord.`,
+      details: { channelId: channel.id, name: channel.name, type: channel.type },
+      detectedAt: new Date().toISOString(),
+    });
   });
 
   botClient.on(Events.GuildRoleCreate, (role) => {
@@ -214,13 +278,39 @@ export function setupBotEvents() {
     if (!cache) return;
 
     cache.roles.set(role.id, buildRoleCacheEntry(role, role.guild));
+
+    void reportGatewayDrift({
+      guildId: role.guild.id,
+      severity: "warning",
+      kind: "role_created",
+      summary: `Role "${role.name}" was created directly in Discord.`,
+      details: { roleId: role.id, name: role.name, position: role.position },
+      detectedAt: new Date().toISOString(),
+    });
   });
 
-  botClient.on(Events.GuildRoleUpdate, (_oldRole, newRole) => {
+  botClient.on(Events.GuildRoleUpdate, (oldRole, newRole) => {
     const cache = guildCache.get(newRole.guild.id);
     if (!cache) return;
 
     cache.roles.set(newRole.id, buildRoleCacheEntry(newRole, newRole.guild));
+
+    const changedFields = [
+      ...(oldRole.name !== newRole.name ? ["name"] : []),
+      ...(oldRole.position !== newRole.position ? ["position"] : []),
+      ...(oldRole.permissions.bitfield !== newRole.permissions.bitfield ? ["permissions"] : []),
+    ];
+
+    if (changedFields.length > 0) {
+      void reportGatewayDrift({
+        guildId: newRole.guild.id,
+        severity: "warning",
+        kind: "role_updated",
+        summary: `Role "${newRole.name}" changed directly in Discord.`,
+        details: { roleId: newRole.id, fields: changedFields },
+        detectedAt: new Date().toISOString(),
+      });
+    }
   });
 
   botClient.on(Events.GuildRoleDelete, (role) => {
@@ -228,6 +318,15 @@ export function setupBotEvents() {
     if (!cache) return;
 
     cache.roles.delete(role.id);
+
+    void reportGatewayDrift({
+      guildId: role.guild.id,
+      severity: "warning",
+      kind: "role_deleted",
+      summary: `Role "${role.name}" was deleted directly in Discord.`,
+      details: { roleId: role.id, name: role.name, position: role.position },
+      detectedAt: new Date().toISOString(),
+    });
   });
 
   botClient.on(Events.GuildMemberAdd, (member) => {
@@ -292,6 +391,19 @@ export function setupBotEvents() {
           entry.memberCount = (entry.memberCount ?? 0) + 1;
         }
       }
+    }
+
+    const addedRoleIds = [...newRoles].filter((roleId) => !oldRoles.has(roleId));
+    const removedRoleIds = [...oldRoles].filter((roleId) => !newRoles.has(roleId));
+    if (addedRoleIds.length > 0 || removedRoleIds.length > 0) {
+      void reportGatewayDrift({
+        guildId: newMember.guild.id,
+        severity: "warning",
+        kind: "member_roles_updated",
+        summary: `Roles for member "${newMember.user.username}" changed directly in Discord.`,
+        details: { memberId: newMember.id, addedRoleIds, removedRoleIds },
+        detectedAt: new Date().toISOString(),
+      });
     }
   });
 

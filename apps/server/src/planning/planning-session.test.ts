@@ -37,6 +37,58 @@ describe("PlanningSession repair context", () => {
       ])
     );
   });
+
+  it("retains the forked server context when template context rebuilds the prompt", () => {
+    const session = new PlanningSession({
+      guildId: "guild-1",
+      conversationId: "conversation-template-context",
+      userPrompt: "Create a community space",
+      forkStateHash: "state-hash",
+      serverState: {
+        guildId: "guild-1",
+        guildName: "Community",
+        memberCount: 42,
+        channels: [],
+        roles: [],
+        overwrites: [],
+      },
+      emit: async () => {},
+    });
+
+    session.addTemplate({ id: "template-1", name: "Staff", summary: "Private staff area" });
+
+    expect(session.getMessages()[0]?.content).toContain("Server: Community (42 members)");
+    expect(session.getMessages()[0]?.content).toContain("Staff: Private staff area");
+  });
+
+  it("keeps guild rules in the initial and rebuilt planning prompts", () => {
+    const session = new PlanningSession({
+      guildId: "guild-1",
+      conversationId: "conversation-rule-context",
+      userPrompt: "Create a community space",
+      forkStateHash: "state-hash",
+      serverState: {
+        guildId: "guild-1",
+        guildName: "Community",
+        memberCount: 42,
+        channels: [],
+        roles: [],
+        overwrites: [],
+      },
+      guildRules: ["Never delete the announcements channel."],
+      emit: async () => {},
+    });
+
+    expect(session.getMessages()[0]?.content).toContain(
+      "1. Never delete the announcements channel."
+    );
+
+    session.addTemplate({ id: "template-1", name: "Staff", summary: "Private staff area" });
+
+    expect(session.getMessages()[0]?.content).toContain(
+      "1. Never delete the announcements channel."
+    );
+  });
 });
 
 describe("PlanningSession planning-only tools", () => {
@@ -111,6 +163,41 @@ describe("PlanningSession planning-only tools", () => {
       allow: ["VIEW_CHANNEL"],
       deny: [],
     });
+  });
+
+  it("does not announce completion when iteration persistence fails", async () => {
+    vi.stubEnv("LLM_API_KEY", "test-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => createSseResponse([{ content: "Done." }]))
+    );
+
+    const events: string[] = [];
+    const session = new PlanningSession({
+      guildId: "guild-1",
+      conversationId: "conversation-persistence-failure",
+      userPrompt: "Create a channel",
+      forkStateHash: "state-hash",
+      serverState: {
+        guildId: "guild-1",
+        guildName: "Community",
+        memberCount: 1,
+        channels: [],
+        roles: [],
+        overwrites: [],
+      },
+      emit: async (event) => {
+        events.push(event.type);
+      },
+      onTurnComplete: async () => {
+        throw new Error("database unavailable");
+      },
+    });
+
+    await expect(session.start()).rejects.toThrow("database unavailable");
+    expect(session.status).toBe("error");
+    expect(events).toContain("error");
+    expect(events).not.toContain("completed");
   });
 });
 

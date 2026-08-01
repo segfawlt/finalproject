@@ -8,6 +8,7 @@ import { requireUser } from "../../auth/middleware";
 import type { AppVariables } from "../../types";
 import { hashServerState } from "@repo/shared";
 import { PlanningSession } from "../../planning/planning-session";
+import { loadGuildRuleTexts } from "../../planning/guild-rules";
 import {
   getSession,
   setSession,
@@ -228,6 +229,7 @@ templatesApp.post("/:templateId/merge", async (c) => {
   // Build server state and compute fork hash
   const serverState = buildServerState(guildId);
   const forkStateHash = hashServerState(serverState as unknown as Record<string, unknown>);
+  const guildRules = await loadGuildRuleTexts(guildId);
 
   // Insert conversation
   const [conversation] = await db
@@ -251,6 +253,7 @@ templatesApp.post("/:templateId/merge", async (c) => {
     userPrompt,
     serverState,
     forkStateHash,
+    guildRules,
     emit: async (event) => {
       emitConversationEvent(conversation.id, event);
 

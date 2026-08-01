@@ -16,12 +16,23 @@ interface Subscriber {
 }
 
 const subscribers = new Map<string, Set<Subscriber>>();
+const terminalEvents = new Map<string, PlanningEvent>();
+const MAX_REPLAYED_CONVERSATIONS = 1_000;
+
+function isReplayable(event: PlanningEvent): boolean {
+  return ["ask_user", "completed", "error", "expired"].includes(event.type);
+}
 
 export function subscribeToConversation(conversationId: string, callback: Subscriber): () => void {
   if (!subscribers.has(conversationId)) {
     subscribers.set(conversationId, new Set());
   }
   subscribers.get(conversationId)!.add(callback);
+
+  const terminalEvent = terminalEvents.get(conversationId);
+  if (terminalEvent) {
+    callback(terminalEvent);
+  }
 
   return () => {
     subscribers.get(conversationId)?.delete(callback);
@@ -32,6 +43,16 @@ export function subscribeToConversation(conversationId: string, callback: Subscr
 }
 
 export function emitConversationEvent(conversationId: string, event: PlanningEvent): void {
+  if (isReplayable(event)) {
+    if (!terminalEvents.has(conversationId) && terminalEvents.size >= MAX_REPLAYED_CONVERSATIONS) {
+      const oldestConversationId = terminalEvents.keys().next().value;
+      if (oldestConversationId) terminalEvents.delete(oldestConversationId);
+    }
+    terminalEvents.set(conversationId, event);
+  } else if (event.type === "turn_started") {
+    terminalEvents.delete(conversationId);
+  }
+
   const subs = subscribers.get(conversationId);
   if (subs) {
     for (const callback of subs) {
@@ -43,4 +64,8 @@ export function emitConversationEvent(conversationId: string, event: PlanningEve
       }
     }
   }
+}
+
+export function clearConversationEvents(conversationId: string): void {
+  terminalEvents.delete(conversationId);
 }
