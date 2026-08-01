@@ -96,3 +96,13 @@ Available: <https://www.postgresql.org/docs/16/datatype-json.html>. [Accessed: J
 
 [30] Vitest Team, "Getting Started," _Vitest Documentation_. [Online]. Available:
 <https://vitest.dev/guide/>. [Accessed: Jul. 29, 2026].
+
+[31] Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on
+the Protection of Natural Persons with Regard to the Processing of Personal Data and on the Free
+Movement of Such Data (General Data Protection Regulation), _Official Journal of the European
+Union_, L 119, May 4, 2016. [Online]. Available:
+<https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng>. [Accessed: Jul. 29, 2026].
+
+[32] BCS, The Chartered Institute for IT, _Code of Conduct for BCS Members_, version 8, Jun. 8,
+2022. [Online]. Available: <https://www.bcs.org/media/2211/bcs-code-of-conduct.pdf>. [Accessed:
+Jul. 29, 2026].

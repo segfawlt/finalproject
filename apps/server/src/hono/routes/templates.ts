@@ -38,13 +38,19 @@ const createSchema = z.object({
 });
 
 templatesApp.get("/", zValidator("query", listQuerySchema), async (c) => {
+  const user = requireUser(c);
   const query = c.req.valid("query");
   const guildId = c.req.param("guildId")!;
 
-  let result = await db
-    .select()
-    .from(templates)
-    .where(or(eq(templates.guildId, guildId), eq(templates.guildId, null as unknown as string)));
+  // Guild-scoped templates require manage access; global templates (null guildId)
+  // stay readable by any authenticated user.
+  const hasAccess = await userHasManageGuild(user.id, guildId);
+
+  const where = hasAccess
+    ? or(eq(templates.guildId, guildId), eq(templates.guildId, null as unknown as string))
+    : eq(templates.guildId, null as unknown as string);
+
+  let result = await db.select().from(templates).where(where);
 
   if (query.category) {
     result = result.filter((t) => t.category === query.category);
@@ -63,6 +69,7 @@ templatesApp.get("/", zValidator("query", listQuerySchema), async (c) => {
 });
 
 templatesApp.get("/:templateId", async (c) => {
+  const user = requireUser(c);
   const guildId = c.req.param("guildId")!;
   const templateId = c.req.param("templateId")!;
 
@@ -74,6 +81,15 @@ templatesApp.get("/:templateId", async (c) => {
 
   if (template.guildId && template.guildId !== guildId) {
     return c.json({ error: "Template not found" }, 404);
+  }
+
+  // Guild-scoped templates require manage access; global templates (null guildId)
+  // stay readable by any authenticated user.
+  if (template.guildId) {
+    const hasAccess = await userHasManageGuild(user.id, guildId);
+    if (!hasAccess) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
   }
 
   return c.json(template);
@@ -262,7 +278,8 @@ templatesApp.post("/:templateId/merge", async (c) => {
       }
 
       if (event.type === "completed") {
-        removeSession(conversation.id);
+        // Keep the session alive after planning completes so the user can
+        // review, iterate, and execute the resulting plan (matches POST /conversations).
         await db
           .update(conversations)
           .set({ status: "completed", updatedAt: new Date() })

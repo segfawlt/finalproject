@@ -697,6 +697,7 @@ entity "guilds" as guilds {
   * id : text <<PK>>
   --
   name : text
+  icon : text
   serverType : text
   settings : jsonb
   currentPlanId : uuid
@@ -810,7 +811,15 @@ standard and are not detailed here.
   `lockAcquiredBy`, `lockLastHeartbeatAt` — so that "acquire the lock" is a
   single conditional `UPDATE … WHERE current_plan_id IS NULL` that PostgreSQL
   serialises for us (NFR-3). `settings` and `serverType` are per-guild
-  configuration; `subscriptionTier` exists but is currently unused.
+  configuration; `subscriptionTier` exists but is currently unused. `icon`
+  stores the Discord CDN icon URL captured from the bot's `Guild` object when
+  the row is first created (`GuildCreate`, Section 4.2.6) and is not refreshed
+  if the server's icon changes afterward. The guild-list and guild-detail
+  routes include it in their JSON response, but the currently routed Studio
+  guild picker (Section 4.5.1) renders only the guild name and member count —
+  the icon-as-avatar rendering exists only in the retired, unrouted Dashboard
+  and Setup pages, so the column is populated and exposed by the API without
+  a live consumer today.
 - **`conversations`.** The top-level planning unit and the LLM audit log. It
   stores the originating `userPrompt`, the full `messages` array as `jsonb`, a
   `status` (`active`, `waiting_for_user`, `cancelled`, `expired`, …), and the
@@ -841,10 +850,14 @@ standard and are not detailed here.
   `status`). Attachable to a conversation and mergeable into a plan (FR-14,
   FR-26).
 - **`drift_events`.** The persisted output of the drift detector: `severity`,
-  `kind`, `summary`, `details`, and a `resolvedAt` that distinguishes open from
-  resolved drift. Indexed by `(guildId, createdAt)` for history and by
-  `(guildId, resolvedAt)` for the unresolved-drift lookup that gates the Studio
-  indicator (FR-24).
+  `kind`, `summary`, and `details`, indexed by `(guildId, createdAt)` for
+  history. The table also defines a `resolvedAt` column and a
+  `(guildId, resolvedAt)` index intended for an open/resolved distinction, but
+  no code path currently writes or reads `resolvedAt` — the live Studio drift
+  toast (Section 4.5.4) is driven entirely by the in-memory SSE event the
+  drift detector emits, not by a database query. The column is schema-defined
+  groundwork for future drift-resolution tracking, not a wired-up feature
+  (FR-24).
 
 ### 4.3.3 Design choices worth noting
 
@@ -864,10 +877,12 @@ B-tree index on a normalized column, or a separate extraction step that
 materializes the fields of interest. This is a deliberate limitation logged as a
 Phase-2 item (making `planData` queryable), not a defect: the product has no
 analytics surface today, and where a table genuinely does need to be filtered by
-its contents — `drift_events`, indexed by guild, creation time, and resolution
-status — the schema already uses normalized, indexed columns rather than burying
-those fields in `jsonb`. The document-oriented choice is therefore applied only
-where the value is consumed as a whole.
+its contents — `drift_events`, indexed by guild and creation time — the schema
+already uses normalized, indexed columns rather than burying those fields in
+`jsonb`. `drift_events` also carries a `resolvedAt` column and index for a
+resolution-status filter, but that filter is not yet queried by any route; see
+Section 4.3.2. The document-oriented choice is therefore applied only where the
+value is consumed as a whole.
 
 Second, **the four Better Auth tables are owned by the auth library, not by
 application code.** They follow Better Auth's expected shape (a `password`
@@ -955,8 +970,9 @@ signal to clear auth state and redirect to `/login`. Because that behaviour live
 in the wrapper, no individual component has to handle session expiry.
 
 The table below summarises the surface. HTTP verbs are grouped per resource; the
-two `stream` endpoints are Server-Sent Event streams rather than ordinary
-responses, covered in 4.4.4.
+three `stream` endpoints are Server-Sent Event streams rather than ordinary
+responses. The plan and conversation streams are covered in 4.4.4; the drift
+stream is covered in Section 4.2.7.
 
 | Resource / endpoint | Methods | Purpose |
 | --- | --- | --- |
@@ -967,6 +983,7 @@ responses, covered in 4.4.4.
 | `/api/guilds` | GET (list), GET `/:id`, PATCH `/:id` | Guilds the user manages; server type & settings |
 | `/api/guilds/:g/rules` | GET, POST, PUT `/:id`, DELETE `/:id` | Server policy rules (Stage 2 input) |
 | `/api/guilds/:g/state` etc. | GET `/state`, `/channels`, `/roles` | Read the cached current server state |
+| `/api/guilds/:g/drift/stream` | GET (SSE) | Live external-change (drift) notifications for the guild |
 | `/api/guilds/:g/plans` | GET, GET `/:id`, POST | List / read / create a plan |
 | `/api/guilds/:g/plans/:id/*` | POST `execute`, `abort`, `rollback`, `replan` | Execution lifecycle commands |
 | `/api/guilds/:g/conversations` | GET, GET `/:id`, POST | List / read / start a planning conversation |
@@ -1668,6 +1685,31 @@ also contains `role` and `subscriptionTier` fields, but neither participates in
 authorization; they are currently informational and the platform has no local
 RBAC or subscription gates.
 
+This boot-time validation is also where least-privilege secret handling
+(NFR-12) is enforced. `BETTER_AUTH_SECRET`, `DISCORD_BOT_TOKEN`, and
+`DISCORD_CLIENT_SECRET` are parsed once by `env.ts` into the `validatedEnv`
+singleton (`env-validated.ts`), and the modules that need them — Better Auth's
+config, the bot login call — import that singleton rather than re-reading
+`process.env`. The `LLM_API_KEY` is the one exception to that single-path
+pattern: `planning-session.ts` reads `process.env.LLM_API_KEY` directly rather
+than through `validatedEnv`, because it is optional and gates the mock-planner
+fallback in development; this is a minor inconsistency in an otherwise
+centralised scheme, not a leak, since the value still never leaves the server
+process. None of these credentials ever crosses the client/server boundary:
+the web app's own `VITE_API_URL` is the only environment value bundled into
+the browser build (Vite only exposes `VITE_`-prefixed variables), and no
+server route echoes a credential value back in a JSON response — the
+`DISCORD_CLIENT_ID` returned by the bot-invite endpoint is a public OAuth
+application identifier, not a secret. Logging follows the same discipline —
+the reviewed `logger.*` call sites around configuration (for example, the
+missing-bot-token warning in `index.ts` and the missing-LLM-key error in
+`validation.ts`) log that a credential is absent, never its value. `.env` and
+its variants are excluded from version control (`.gitignore`), so secrets are
+not committed alongside the code that consumes them. The one credential the
+design does not encrypt at rest is the Discord OAuth access/refresh token pair
+Better Auth persists in the `accounts` table in plaintext; that residual risk
+is scoped in Section 4.6.6 rather than claimed as covered here.
+
 ### 4.6.2 Guild authorization and tenant isolation
 
 Authorization is derived from Discord, not from an application-admin table.
@@ -1826,7 +1868,11 @@ snapshots are persisted as PostgreSQL rows, several as `jsonb` documents. The
 application does not add field-level encryption or a detailed audit-log table;
 database, cookie, secret, and LLM-provider protection remain deployment
 responsibilities. Detailed audit logging, application-level RBAC, and
-subscription/tier enforcement are explicitly outside the current scope. These
-limits do not remove the plan-first safety gates, but they bound what can be
-claimed about forensic traceability and multi-instance security in the current
-build.
+subscription/tier enforcement are explicitly outside the current scope. One
+gap in the least-privilege secret handling discussed in 4.6.1 is that Better
+Auth stores the Discord OAuth access and refresh tokens it manages as
+plaintext columns in the `accounts` table rather than encrypted at rest, so a
+database compromise on the self-hosted, single-host deployment (C-6) would
+expose them; this is an open risk rather than a covered control. These limits
+do not remove the plan-first safety gates, but they bound what can be claimed
+about forensic traceability and multi-instance security in the current build.

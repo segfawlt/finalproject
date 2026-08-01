@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-07-31
+Last updated: 2026-08-01
 
 Source of truth for what is actually built in this codebase. When a design doc,
 issue doc, or comment disagrees with code, this file wins. Update after major
@@ -167,7 +167,7 @@ together; none of them fetch on their own unless noted.
 
 ### Tests
 
-24 test files across the monorepo. Highest-value targets per `AGENTS.md` testing strategy:
+26 test files across the monorepo. Highest-value targets per `AGENTS.md` testing strategy:
 
 - `done` `apps/server/src/planning/diff-engine.test.ts` — 3-phase diff algorithm, edge cases
 - `done` `apps/server/src/planning/validation.test.ts` — bot hierarchy, member tools, overwrite consolidation, symbol-type matching, bitrate constraint
@@ -180,6 +180,8 @@ together; none of them fetch on their own unless noted.
 - `done` `apps/server/src/planning/drift-detector.test.ts` — periodic poll + persistence
 - `done` `apps/server/src/planning/planning-session.test.ts` — mocked LLM flow
 - `done` `apps/server/src/planning/repair-context.test.ts` — repair-context assembly
+- `done` `apps/server/src/planning/rollback-reporting.test.ts` — rollback success/failure event emission (conflict-blocked and step-failure paths)
+- `done` `apps/server/src/hono/routes/templates.test.ts` — template read authorization (global vs guild-scoped access)
 - `done` `apps/server/src/bot/formatter.test.ts` — guild cache → LLM text
 - `done` `packages/shared/src/state/desired-state-store.test.ts` — CRUD, validation, symbol generation
 - `done` `packages/shared/src/state/desired-state-store-member.test.ts` — member-specific CRUD/validation
@@ -196,7 +198,7 @@ together; none of them fetch on their own unless noted.
 - `gap` `packages/shared/src/tools/registry.test.ts` — registry invariants
 - `gap` `packages/shared/src/tools/categories.ts`, `interaction.ts`, `roles.ts` — no test files yet
 - `gap` `packages/shared/src/zod-schemas.test.ts` — schema parse/safeParse
-- `gap` `apps/server/src/hono/routes/*.test.ts` — Hono route tests (all 6 route files untested)
+- `partial` `apps/server/src/hono/routes/*.test.ts` — Hono route tests (`templates.test.ts` covers read authorization; the other 5 route files remain untested)
 - `gap` `apps/web/src/**/*.test.tsx` — no jsdom component-render tests exist; the 3 `done` web tests above cover store/lib logic, not rendered components
 
 ## Known Gaps
@@ -205,7 +207,7 @@ together; none of them fetch on their own unless noted.
 - `stashed` **Setup page** — `routes/Setup.tsx` retired (no route). Guided server-configuration wizard to be rebuilt later; bot-invite handling now lives in the Studio guild picker.
 - `partial` **`shared` package tests** — `packages/shared` covers state, constants, and most tools, but `hash-server-state.ts`, `tools/registry.ts`, `tools/categories.ts`, `tools/interaction.ts`, `tools/roles.ts`, and `zod-schemas.ts` still have no test files.
 - `partial` **React component tests** — `apps/web` tests cover Zustand stores and lib helpers (`studioStore`, `group-conversations`, `diff-utils`), but no component has a rendered jsdom test. AGENTS.md marks priority 4. The new studio components are not yet covered.
-- `partial` **Hono route tests** — Thin orchestrators, lower priority per AGENTS.md, but still gap.
+- `partial` **Hono route tests** — Thin orchestrators, lower priority per AGENTS.md. `templates.ts` now has read-authorization tests; the other 5 route files remain untested.
 
 ## Deferred (Phase 2+)
 
@@ -217,6 +219,9 @@ See `docs/issues/open-design-issues.md` for the full log.
 
 ## Recently resolved (since May 28, 2026)
 
+- `done` **Rollback failure reporting** — `rollbackFull` and the step-failure/conflict-blocked paths in `execution-engine.ts` now emit a distinct `rollback_failed` event (added to the `ExecutionEvent` union) instead of silently reporting `plan_failed`. The web client (`useConversation.ts` SSE listener + `ChatArea.tsx` render branch and step badge) surfaces the failed-rollback state to the user. Covered by `rollback-reporting.test.ts`.
+- `done` **Template read authorization** — `GET /api/guilds/:guildId/templates` (list) and `GET /:templateId` now require manage access for guild-scoped templates; global templates (`guildId === null`) stay readable by any authenticated user, and cross-guild template reads return 404. Covered by `templates.test.ts`.
+- `done` **Post-planning session survival** — the SSE merge handler no longer removes the planning session on `completed`, so the approve/execute path can still retrieve a `completed` session (matches `POST /conversations`).
 - `done` **Fail-closed guild-rule enforcement** — Stage 2 now loads rules before deciding whether an LLM call is needed. Guilds without rules skip the call; guilds with rules block execution when rules cannot be loaded, no LLM key is configured, the provider fails or exceeds 30 seconds, or the response is empty/malformed. Valid policy blockers and warnings retain their severities.
 - `done` **Template features (full set)** — (1) Save-as-template from a completed plan (`SaveTemplateModal`, stores `desiredState.active`); (2) Merge surfaced in the right-panel `TemplatesTab`, attaching via `useConversation.beginPlanning`; (3) real in-panel template browser replacing the redirect stub; (4) editable template structure in `TemplateEditor` (was read-only) via the shared `useDesiredStateEdit` hook + `DesiredStateView` `editing` mode.
 - `done` **Route consolidation** — Studio is the sole hub. `/setup` removed; `/dashboard`, `/dashboard/:guildId`, and bare `/templates` redirect to `/studio`. `Dashboard.tsx` and `Setup.tsx` kept on disk (stashed, unrouted) for a later rebuild. Bot-invite handling moved into the Studio guild picker.
@@ -240,7 +245,7 @@ See `docs/issues/open-design-issues.md` for the full log.
 ## Drift between docs and code
 
 - `docs/issues/remaining-fixes.md` lists 5 fixes — **all five are now done** in code, but the doc wasn't updated. This file is the corrected view.
-- `docs/issues/remaining-fixes.md` says "Zero test files" — **24 test files exist** (see Tests section above).
+- `docs/issues/remaining-fixes.md` says "Zero test files" — **26 test files exist** (see Tests section above).
 - `docs/issues/channel-role-gaps.md` Gap 7 (lockPermissions) status was "IN DESIGN" — **now implemented**, see Recently resolved.
 - `AGENTS.md` env vars table (line 236) lists `OPENROUTER_API_KEY`/`OPENROUTER_MODEL` — code uses `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL` (see `.env.example`).
 - `docs/design/overview.md` mentions `apps/docs/` (Astro SSG) — directory exists but is empty; no Astro app was ever built there.

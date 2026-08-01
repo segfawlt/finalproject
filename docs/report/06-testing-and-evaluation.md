@@ -122,7 +122,7 @@ environment:
 The suite was run with `NODE_ENV=test`, synthetic local authentication configuration, and
 `pnpm test:run`. Configuration values are not included because credentials are not test evidence
 and must not be written into the report. Without the mandatory database, authentication-secret, and
-application-URL variables, two server suites fail during module import before their assertions are
+application-URL variables, three server suites fail during module import before their assertions are
 collected. Supplying valid non-secret test values produced the result in Table 6.1.
 
 **Table 6.1. Automated test result by repository layer**
@@ -130,9 +130,9 @@ collected. Supplying valid non-secret test values produced the result in Table 6
 | Layer                    | Test files | Test cases |  Passed | Failed |
 | ------------------------ | ---------: | ---------: | ------: | -----: |
 | Shared domain package    |          8 |         63 |      63 |      0 |
-| Server and planning code |         13 |         94 |      94 |      0 |
+| Server and planning code |         15 |        104 |     104 |      0 |
 | Web stores and utilities |          3 |         35 |      35 |      0 |
-| **Total**                |     **24** |    **192** | **192** |  **0** |
+| **Total**                |     **26** |    **202** | **202** |  **0** |
 
 The executable inventory and fresh result are used here. The full result summary is stored in
 `testing/automated-test-results.csv`, with the selected detailed records in
@@ -194,7 +194,7 @@ However, the suite cannot by itself support a claim that the platform has passed
 8. The suite was created alongside the implementation and no mutation score or independent
    fault-seeding result has yet been recorded.
 
-Accordingly, “192 passed” is reported as an automated regression result, not as 100% requirement
+Accordingly, “202 passed” is reported as an automated regression result, not as 100% requirement
 coverage or proof that all production flows are correct.
 
 ## 6.4 Recorded Live Demonstration
@@ -408,7 +408,7 @@ demonstrated.
 | Architecture and validation (NFR-18–NFR-20)     | Declarative state, registered-tool, schema, diff, and validation tests                          | Partial — public API boundaries and unregistered-model-call rejection need broader tests    |
 | Compatibility and deployment (NFR-21–NFR-23)    | Discord.js and configurable LLM adapter implementation                                          | Not demonstrated against two providers or a clean deployment record                         |
 
-The strongest current result is deterministic component behavior: all 192 collected automated
+The strongest current result is deterministic component behavior: all 202 collected automated
 cases pass. The weakest areas are the boundaries carrying the greatest real-world risk:
 authorization, browser-to-SSE lifecycle, PostgreSQL persistence, live Discord convergence, rollback
 reporting, provider failure, performance, and user comprehension.
@@ -464,7 +464,7 @@ removed from the dataset.
 ## 6.9 Chapter Summary
 
 This chapter evaluated the project using requirement-derived criteria and a deliberately cautious
-evidence model. A reproducible Vitest run collected 192 passing cases across 24 files. These cases
+evidence model. A reproducible Vitest run [30] collected 202 passing cases across 26 files. These cases
 provide credible regression evidence for desired-state manipulation, registered planning tools,
 selected diff and validation rules, locks, stream parsing, deadline and abort handling, drift
 comparison, and client-side state logic. They do not exercise most production boundaries.

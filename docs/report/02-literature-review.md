@@ -263,7 +263,7 @@ version lacks the capability; it means the capability cannot be credited from th
 | Xenon                           | Slash commands, backups, and templates                    | Yes                          | Documentation recommends post-load review rather than a full minimal-diff contract     | Snapshot/backup loading                                                      | Stronger backup and content-preservation scope; less focused on conversational intent [13], [14]                |
 | BuildMyDiscord                  | Natural-language builder and live AI editor               | Yes                          | Initial generated structure is reviewable; destructive live edits require confirmation | Comparable automatic failure rollback is not documented on the reviewed page | Closest functional competitor; broader management-bot scope, different execution controls [15]                  |
 | AiGuild                         | Prompt through Discord slash commands                     | Generates/configures a guild | Not documented in the public listing                                                   | Not documented in the public listing                                         | Lightweight in-Discord generation; less publicly documented planning and recovery detail [16]                   |
-| Discord Platform (this project) | Natural-language Studio plus manual desired-state editing | Yes                          | Full desired-state and diff review before every structural execution                   | Before-snapshot, automatic best-effort compensation, and requested rollback  | Narrower than all-in-one management bots; deeper emphasis on plan integrity, validation, stale state, and drift |
+| Discord Platform (this project) | Natural-language Studio plus manual desired-state editing | Yes                          | Full desired-state and diff review before every structural execution                   | Before-snapshot, automatic best-effort compensation, and requested rollback, with the outcome (success or failure) reported rather than assumed  | Narrower than all-in-one management bots; deeper emphasis on plan integrity, validation, stale state, and drift |
 
 The comparison shows that the project should not be evaluated as a replacement for every Discord
 administration product. It does not attempt Xenon's message-level archival, BuildMyDiscord's
@@ -346,7 +346,8 @@ on an existing Discord guild:
 - deterministic structural validation and LLM-assisted guild-rule checking;
 - explicit approval, stale-state rejection, and per-guild execution locking;
 - ordered Discord execution with progress events and transient retries;
-- automatic and requested best-effort structural rollback; and
+- automatic and requested best-effort structural rollback, with the outcome — success
+  or failure — reported rather than assumed; and
 - detection of external drift.
 
 The following areas are deliberately outside the project scope:
@@ -355,8 +356,11 @@ The following areas are deliberately outside the project scope:
 - general moderation, ticketing, leveling, welcome, music, or engagement-bot features;
 - subscription, billing, and enterprise organization management;
 - a public marketplace for globally shared templates;
-- replacement of Discord's native client or permission model; and
-- a continuously autonomous controller that changes a guild without renewed human approval.
+- replacement of Discord's native client or permission model;
+- a continuously autonomous controller that changes a guild without renewed human approval;
+- an Astro-based landing or documentation site for the platform;
+- detailed audit logs of administrative actions; and
+- full administrator and user account management.
 
 This boundary positions the project between native manual administration and direct AI automation.
 Compared with native settings, it reduces the effort of coordinating many related changes. Compared

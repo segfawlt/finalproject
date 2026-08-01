@@ -34,7 +34,8 @@ export interface ExecutionEvent {
     | "plan_completed"
     | "plan_failed"
     | "rollback_started"
-    | "rollback_completed";
+    | "rollback_completed"
+    | "rollback_failed";
   stepIndex?: number;
   planId?: string;
   error?: string;
@@ -405,6 +406,7 @@ export async function rollbackFull(
       { planId, conflicts: diffResult.conflicts },
       "[execution-engine] rollback blocked"
     );
+    await emit({ type: "rollback_failed", planId, error });
     return { success: false, completedSteps: [], error };
   }
 
@@ -432,7 +434,15 @@ export async function rollbackFull(
     "[execution-engine] rollback finished"
   );
 
-  await emit({ type: "rollback_completed", planId });
+  if (result.success) {
+    await emit({ type: "rollback_completed", planId });
+  } else {
+    await emit({
+      type: "rollback_failed",
+      planId,
+      error: result.error ?? "Rollback failed",
+    });
+  }
   return result;
 }
 
@@ -605,7 +615,18 @@ export async function executePlan(options: ExecutionOptions): Promise<ExecutionR
           { planId, completedCount: completedSteps.length },
           "[execution-engine] starting rollback"
         );
-        await rollbackFull(beforeSnapshot, planId, ctx, emit);
+        const rollbackResult = await rollbackFull(beforeSnapshot, planId, ctx, emit);
+        if (!rollbackResult.success) {
+          const error = `Step failed and rollback failed: ${rollbackResult.error ?? "unknown rollback error"}`;
+          await emit({ type: "plan_failed", planId, error });
+          logger.error({ planId, error }, "[execution-engine] plan failed (rollback failed)");
+          return {
+            success: false,
+            completedSteps,
+            failedStep: step,
+            error,
+          };
+        }
       }
 
       await emit({ type: "plan_failed", planId, error: lastError?.message });

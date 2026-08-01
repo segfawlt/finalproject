@@ -38,7 +38,8 @@ export type ExecEvent =
   | { type: "step_failed"; stepIndex?: number; error?: string }
   | { type: "step_retry"; stepIndex?: number; error?: string }
   | { type: "rollback_started" }
-  | { type: "rollback_completed" };
+  | { type: "rollback_completed" }
+  | { type: "rollback_failed"; error?: string };
 
 export interface AskUserData {
   question: string;
@@ -348,6 +349,11 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
 
       es.addEventListener("rollback_completed", () => {
         setExecEvents((prev) => [...prev, { type: "rollback_completed" }]);
+      });
+
+      es.addEventListener("rollback_failed", (e) => {
+        const data = parseSseData<{ error?: string }>(e);
+        setExecEvents((prev) => [...prev, { type: "rollback_failed", error: data?.error }]);
       });
 
       es.addEventListener("plan_failed", (e) => {

@@ -101,7 +101,8 @@ symbols, supports snapshots and reversion, and maintains member-role and permiss
 This produces an important failure property: if a store method rejects a tool call, the previous
 desired state remains intact.
 
-The tool registry binds four concerns under one tool name:
+The tool registry binds four concerns under one tool name, following the tool-selection-and-argument
+pattern studied for language-model tool use [6]:
 
 1. the JSON-compatible parameter description sent to the LLM;
 2. Zod parsing of the received arguments;
@@ -143,7 +144,8 @@ approved plans, execution snapshots, rules, templates, and drift events. Large s
 such as `DesiredState`, LLM messages, plan data, and snapshots are stored in JSONB columns. Indexed
 foreign keys support the common guild, user, conversation, and plan lookups.
 
-Two in-process event buses bridge long-running server work to browser SSE streams:
+Two in-process event buses bridge long-running server work to browser Server-Sent Events (SSE)
+streams [11]:
 
 - `planning-event-bus.ts` publishes events by conversation identifier; and
 - `event-bus.ts` publishes execution and rollback events by plan identifier.
@@ -263,7 +265,8 @@ return { type: "success", result };
 
 `getTool()` rejects names outside the registry, the registered wrapper parses parameters with Zod,
 and `tool.plan()` delegates mutation to the store. Errors are returned to the LLM as tool results so
-the model may correct a malformed or inconsistent proposal without leaving a partial state change.
+the model may correct a malformed or inconsistent proposal without leaving a partial state change
+[5].
 
 ### 5.3.3 Clarification, revision, and iteration persistence
 
@@ -288,7 +291,8 @@ and the registered tool usage rules.
 ### 5.4.1 Exact approval and execution call chain
 
 The browser's Approve action performs two API commands: it first freezes the latest desired state as
-a plan and then executes that plan. The implemented call chain is:
+a plan and then executes that plan, mirroring the plan-then-apply workflow used by Terraform [8]. The
+implemented call chain is:
 
 ```text
 ChatArea Approve button
@@ -411,8 +415,10 @@ const result = await executePlan({
 });
 ```
 
-This avoids maintaining a separate handwritten inverse for every Discord operation. Rollback remains
-best effort: the structural snapshot cannot recreate message history or every external side effect,
+This avoids maintaining a separate handwritten inverse for every Discord operation, following the
+same compensating-action principle used to recover long-lived transactions decomposed into smaller
+steps [10]. Rollback remains best effort: the structural snapshot cannot recreate message history or
+every external side effect,
 and the current recovery-result propagation has a flaw documented in Section 5.8.
 
 ## 5.5 Implementation of Important Features
@@ -456,8 +462,10 @@ The drift detector periodically compares the platform's custom channel and role 
 projection of Discord.js's guild cache. Differences are persisted as drift events and published to
 guild subscribers. `useGuildDrift()` marks the selected guild stale and supplies the latest event to
 `DriftIndicator`. The Studio disables approval for a stale guild and offers a re-fork action rather
-than silently applying an old plan. The detector does not currently perform an independent REST
-fetch; that limitation is recorded in Section 5.8.
+than silently applying an old plan. Unlike a Kubernetes controller that reconciles divergence
+automatically [7], detected drift here only marks the guild stale and requires a human-reviewed
+re-fork or repair. The detector does not currently perform an independent REST fetch; that
+limitation is recorded in Section 5.8.
 
 ### 5.5.5 Authentication and guild isolation
 
@@ -583,7 +591,7 @@ capture is included below.
 7. **Stale desired state.** `08-stale-desired-state.png` shows a stale conversation and its desired
    state, including resources marked for removal.
 8. **Confirmed re-plan.** No capture is included. The confirmed re-plan feature is implemented as
-   `POST /plans/:planId/replan` (Section 5.3.5), but the specific execution path — a stale-hash
+   `POST /plans/:planId/replan` (Section 5.5.2), but the specific execution path — a stale-hash
    failure followed by administrator confirmation — was not triggered during the demonstration
    session. The inspected stale conversation did not expose the confirmed re-plan action in the
    reachable UI, and the failed execution did not qualify for the AI-repair path. The absence of a

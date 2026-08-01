@@ -1,6 +1,7 @@
 area,test_file,test_cases,passed,failed,result,evidence_boundary,run_date,revision
 server,apps/server/src/bot/formatter.test.ts,6,6,0,Pass,in-memory formatter input,2026-07-31,working-tree-after-d82824d
 server,apps/server/src/hono/routes/plans.test.ts,1,1,0,Pass,source-text inspection only,2026-07-31,working-tree-after-d82824d
+server,apps/server/src/hono/routes/templates.test.ts,6,6,0,Pass,mocked db and auth helper,2026-08-01,working-tree-after-rollback-and-template-authz-tests
 server,apps/server/src/planning/diff-engine.test.ts,17,17,0,Pass,in-memory states,2026-07-31,working-tree-after-d82824d
 server,apps/server/src/planning/drift-detector.test.ts,13,13,0,Pass,in-memory cache projections and event bus,2026-07-31,working-tree-after-d82824d
 server,apps/server/src/planning/execution-engine.test.ts,4,4,0,Pass,mocked execute context,2026-07-31,working-tree-after-d82824d
@@ -10,6 +11,7 @@ server,apps/server/src/planning/locking.test.ts,8,8,0,Pass,handwritten fake data
 server,apps/server/src/planning/planning-session.test.ts,2,2,0,Pass,mocked fetch and constructed SSE,2026-07-31,working-tree-after-d82824d
 server,apps/server/src/planning/policy-validation.test.ts,13,13,0,Pass,mocked database configuration and provider boundaries,2026-07-31,working-tree-after-d82824d
 server,apps/server/src/planning/repair-context.test.ts,1,1,0,Pass,in-memory prompt construction,2026-07-31,working-tree-after-d82824d
+server,apps/server/src/planning/rollback-reporting.test.ts,4,4,0,Pass,mocked bot client and diff engine,2026-08-01,working-tree-after-rollback-and-template-authz-tests
 server,apps/server/src/planning/stream-parser.test.ts,4,4,0,Pass,constructed SSE stream,2026-07-31,working-tree-after-d82824d
 server,apps/server/src/planning/validation.test.ts,15,15,0,Pass,mocked bot permissions and cache,2026-07-31,working-tree-after-d82824d
 web,apps/web/src/components/desired-state/diff-utils.test.ts,14,14,0,Pass,pure utility without rendered component,2026-07-31,working-tree-after-d82824d
@@ -23,4 +25,4 @@ shared,packages/shared/src/tools/channels.test.ts,17,17,0,Pass,in-memory store a
 shared,packages/shared/src/tools/evaluate-assumptions.test.ts,8,8,0,Pass,in-memory server state,2026-07-31,working-tree-after-d82824d
 shared,packages/shared/src/tools/members.test.ts,11,11,0,Pass,in-memory store and mocked execute context,2026-07-31,working-tree-after-d82824d
 shared,packages/shared/src/tools/permissions.test.ts,7,7,0,Pass,in-memory desired state,2026-07-31,working-tree-after-d82824d
-total,all test files,192,192,0,Pass,automated regression only,2026-07-31,working-tree-after-d82824d
+total,all test files,202,202,0,Pass,automated regression only,2026-08-01,working-tree-after-rollback-and-template-authz-tests

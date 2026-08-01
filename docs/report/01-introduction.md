@@ -144,9 +144,12 @@ The following are deliberately outside the project's scope:
   flows, music, or engagement;
 - subscription, billing, and organization management;
 - a public marketplace for globally shared templates;
-- replacement of Discord's native client or permission model; and
+- replacement of Discord's native client or permission model;
 - a continuously autonomous controller that changes a guild without renewed human
-  approval.
+  approval;
+- an Astro-based landing or documentation site for the platform;
+- detailed audit logs of administrative actions; and
+- full administrator and user account management.
 
 Section 2.5 positions this scope against comparable systems in more detail.
 

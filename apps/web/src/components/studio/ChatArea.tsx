@@ -425,6 +425,11 @@ function ExecutionLog({ events }: { events: ExecEvent[] }) {
               )}
               {ev.type === "rollback_started" && "Rolling back…"}
               {ev.type === "rollback_completed" && "Rollback complete"}
+              {ev.type === "rollback_failed" && (
+                <span className="text-error">
+                  Rollback failed{ev.error ? `: ${ev.error}` : ""}
+                </span>
+              )}
             </span>
           </li>
         ))}
@@ -441,6 +446,7 @@ function StepBadge({ type }: { type: ExecEvent["type"] }) {
     step_retry: { char: "↻", cls: "text-warning" },
     rollback_started: { char: "↶", cls: "text-shell-text-muted" },
     rollback_completed: { char: "↺", cls: "text-shell-text-muted" },
+    rollback_failed: { char: "⚠", cls: "text-error" },
   };
   const m = map[type];
   return <span className={m ? `${m.cls} w-3 text-center` : ""}>{m?.char}</span>;
