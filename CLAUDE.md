@@ -159,18 +159,24 @@ Follow the patterns listed below. These are **descriptive** (what the codebase a
 
 ### Error Handling
 
-Three patterns are used, context-dependent. Match the surrounding code:
+Three patterns are used, mapped to layer. Match the surrounding code:
 
 ```ts
-// 1. Discriminated union — for validation, permission checks
+// 1. Discriminated union — Hono routes, validation, permission checks
 function checkSomething(id: string): { ok: true } | { ok: false; status: 404; error: string }
 
-// 2. Try/catch — for bot startup, plan execution, external calls
+// 2. Try/catch — bot startup, plan execution, external calls
 try { ... } catch (err) { /* handle */ }
 
-// 3. Throw-on-error — for planning validation, tool dispatch, state store invariants
+// 3. Throw-on-error — planning validation, tool dispatch, state store invariants
 throw new Error(`A channel named "${name}" already exists`);
 ```
+
+| Layer                                                       | Pattern              |
+| ------------------------------------------------------------ | --------------------- |
+| Hono route handlers, validation, permission checks           | Discriminated union   |
+| Bot startup, plan execution, external API calls              | Try/catch             |
+| Planning validation, tool dispatch, state store invariants    | Throw-on-error        |
 
 ### TypeScript
 
