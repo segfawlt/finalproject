@@ -1,10 +1,203 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Geist:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
   margin: 0;
-  font-family: "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  background-color: #313338;
-  color: #dcddde;
+  font-family: "Geist", sans-serif;
+  background-color: #000;
+  color: #f5f5f5;
+}
+
+@property --border-beam-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.border-beam {
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--border-beam-radius, 24px);
+}
+
+.border-beam::before {
+  position: absolute;
+  z-index: -1;
+  inset: -2px;
+  padding: 2px;
+  content: "";
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--border-beam-angle),
+    transparent 0deg 285deg,
+    #fff 326deg,
+    #bfc3cc 344deg,
+    transparent 360deg
+  );
+  border-radius: calc(var(--border-beam-radius, 24px) + 2px);
+  opacity: 0;
+  filter: drop-shadow(0 0 5px #fff) drop-shadow(0 0 13px #c9ced8);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.border-beam[data-border-beam-active="true"]::before {
+  opacity: 1;
+  animation: border-beam-travel var(--border-beam-duration, 2.2s) linear infinite;
+}
+
+@keyframes border-beam-travel {
+  to {
+    --border-beam-angle: 360deg;
+  }
+}
+
+.studio-guild-picker-page {
+  min-height: 100vh;
+  padding: 3rem 1.5rem;
+  background: #050507;
+}
+
+.studio-guild-picker-content {
+  display: grid;
+  gap: 1.5rem;
+  width: min(100%, 40rem);
+  margin: 0 auto;
+}
+
+.studio-guild-picker-account {
+  color: #77748c;
+  font-size: 0.75rem;
+}
+
+@property --studio-guild-picker-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.studio-guild-picker-list {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.studio-guild-picker-row {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 4.5rem;
+  padding: 0.875rem 1rem;
+  overflow: hidden;
+  color: #f5f5f5;
+  background: #08080b;
+  border: 1px solid #202027;
+  border-radius: 0.75rem;
+  text-decoration: none;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.studio-guild-picker-row::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  padding: 1px;
+  content: "";
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--studio-guild-picker-angle),
+    transparent 0deg 285deg,
+    #8174ff 320deg,
+    #c4b5fd 350deg,
+    transparent 360deg
+  );
+  border-radius: inherit;
+  opacity: 0;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.studio-guild-picker-row > * {
+  position: relative;
+  z-index: 1;
+}
+
+.studio-guild-picker-row:hover,
+.studio-guild-picker-row:focus-visible {
+  background: #0d0d13;
+  border-color: #443d70;
+  box-shadow: 0 0 22px rgb(99 102 241 / 18%);
+  outline: none;
+}
+
+.studio-guild-picker-row[data-state="selecting"]::before {
+  opacity: 1;
+  animation: studio-guild-picker-sweep 700ms ease-out 1;
+}
+
+.studio-guild-picker-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  border-radius: 0.625rem;
+  object-fit: cover;
+}
+
+.studio-guild-picker-arrow {
+  flex: 0 0 auto;
+  color: #77748c;
+  transition:
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.studio-guild-picker-row:hover .studio-guild-picker-arrow,
+.studio-guild-picker-row:focus-visible .studio-guild-picker-arrow {
+  color: #a5b4fc;
+  transform: translate(1px, -1px);
+}
+
+@keyframes studio-guild-picker-sweep {
+  from {
+    --studio-guild-picker-angle: 0deg;
+  }
+  to {
+    --studio-guild-picker-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-guild-picker-row,
+  .studio-guild-picker-arrow {
+    transition: none;
+  }
+
+  .studio-guild-picker-row[data-state="selecting"]::before {
+    animation: none;
+    background: #8174ff;
+    opacity: 1;
+  }
+
+  .border-beam[data-border-beam-active="true"]::before {
+    animation: none;
+  }
 }

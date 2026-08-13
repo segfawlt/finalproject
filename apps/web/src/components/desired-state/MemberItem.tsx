@@ -7,6 +7,7 @@ interface MemberItemProps {
   /** Optional id → name lookup for nicer rendering. */
   roleNames?: Record<string, string>;
   diffStatus?: DiffStatus;
+  diffVersion?: number;
   /**
    * Read-only in v1. When true, an explicit "read-only" badge is shown so
    * users know the editor is intentionally not letting them change it.
@@ -18,6 +19,7 @@ export default function MemberItem({
   assignment,
   roleNames,
   diffStatus,
+  diffVersion,
   editing,
 }: MemberItemProps) {
   const names =
@@ -38,7 +40,7 @@ export default function MemberItem({
               read-only
             </span>
           )}
-          {diffStatus && <DiffBadge status={diffStatus} />}
+          {diffStatus && <DiffBadge status={diffStatus} version={diffVersion} />}
         </div>
         {names.length > 0 && (
           <div className="text-shell-text-muted text-xs mt-1">{names.join(", ")}</div>

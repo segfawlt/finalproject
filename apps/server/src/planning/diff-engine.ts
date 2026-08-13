@@ -79,6 +79,24 @@ function generateChannelSteps(
       if (ch.lockPermissions !== undefined) {
         params.lock_permissions = ch.lockPermissions;
       }
+      if (ch.bitrate !== undefined) params.bitrate = ch.bitrate;
+      if (ch.userLimit !== undefined) params.user_limit = ch.userLimit;
+      if (ch.nsfw !== undefined) params.nsfw = ch.nsfw;
+      if (ch.rateLimitPerUser !== undefined) {
+        params.rate_limit_per_user = ch.rateLimitPerUser;
+      }
+      if (ch.availableTags !== undefined) params.available_tags = ch.availableTags;
+      if (ch.defaultReactionEmoji !== undefined) {
+        params.default_reaction_emoji = ch.defaultReactionEmoji;
+      }
+      if (ch.defaultSortOrder !== undefined) params.default_sort_order = ch.defaultSortOrder;
+      if (ch.defaultForumLayout !== undefined) {
+        params.default_forum_layout = ch.defaultForumLayout;
+      }
+      if (ch.defaultThreadRateLimitPerUser !== undefined) {
+        params.default_thread_rate_limit_per_user = ch.defaultThreadRateLimitPerUser;
+      }
+      if (ch.flags !== undefined) params.flags = ch.flags;
 
       steps.push({
         toolName: ch.type === 4 ? "create_category" : "create_channel",
@@ -107,6 +125,28 @@ function generateChannelSteps(
       if ((ch as { topic?: string }).topic !== (realCh as { topic?: string }).topic) {
         editDiff.topic = (ch as { topic?: string }).topic;
       }
+      if (ch.bitrate !== realCh.bitrate) editDiff.bitrate = ch.bitrate;
+      if (ch.userLimit !== realCh.userLimit) editDiff.user_limit = ch.userLimit;
+      if (ch.nsfw !== realCh.nsfw) editDiff.nsfw = ch.nsfw;
+      if (ch.rateLimitPerUser !== realCh.rateLimitPerUser) {
+        editDiff.rate_limit_per_user = ch.rateLimitPerUser;
+      }
+      if (JSON.stringify(ch.availableTags) !== JSON.stringify(realCh.availableTags)) {
+        editDiff.available_tags = ch.availableTags;
+      }
+      if (JSON.stringify(ch.defaultReactionEmoji) !== JSON.stringify(realCh.defaultReactionEmoji)) {
+        editDiff.default_reaction_emoji = ch.defaultReactionEmoji;
+      }
+      if (ch.defaultSortOrder !== realCh.defaultSortOrder) {
+        editDiff.default_sort_order = ch.defaultSortOrder;
+      }
+      if (ch.defaultForumLayout !== realCh.defaultForumLayout) {
+        editDiff.default_forum_layout = ch.defaultForumLayout;
+      }
+      if (ch.defaultThreadRateLimitPerUser !== realCh.defaultThreadRateLimitPerUser) {
+        editDiff.default_thread_rate_limit_per_user = ch.defaultThreadRateLimitPerUser;
+      }
+      if (ch.flags !== realCh.flags) editDiff.flags = ch.flags;
       if (ch.lockPermissions !== realCh.lockPermissions) {
         editDiff.lock_permissions = ch.lockPermissions;
       }

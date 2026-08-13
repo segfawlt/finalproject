@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, it, expect, beforeEach } from "vitest";
 import { useStudioStore, makeTab, type StudioPhase } from "./studioStore";
 
@@ -19,6 +21,7 @@ function resetStore() {
 describe("useStudioStore", () => {
   beforeEach(() => {
     resetStore();
+    window.localStorage.clear();
   });
 
   describe("tab state", () => {
@@ -122,6 +125,17 @@ describe("useStudioStore", () => {
       expect(state.phase).toBe("input");
       expect(state.error).toBe("");
       expect(state.activeTemplates).toEqual([]);
+    });
+  });
+
+  describe("guild selection", () => {
+    it("persists the active guild and removes it when cleared", () => {
+      useStudioStore.getState().setSelectedGuild("guild-1");
+      expect(useStudioStore.getState().selectedGuild).toBe("guild-1");
+      expect(window.localStorage.getItem("active-guild-id")).toBe("guild-1");
+
+      useStudioStore.getState().setSelectedGuild(null);
+      expect(window.localStorage.getItem("active-guild-id")).toBeNull();
     });
   });
 

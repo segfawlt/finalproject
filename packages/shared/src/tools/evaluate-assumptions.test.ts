@@ -211,3 +211,32 @@ describe("evaluateAssumptions — unique_name with excludeId", () => {
     expect(results[0].passed).toBe(false);
   });
 });
+
+describe("evaluateAssumptions — planned symbols", () => {
+  it("accepts a resource symbol that will be created earlier in the plan", () => {
+    const results = evaluateAssumptions(
+      [
+        {
+          type: "exists",
+          value: "$category-0",
+          resourceType: "category",
+          checked: false,
+          status: "pending",
+        },
+      ],
+      {
+        guildId: "g1",
+        guildName: "Test",
+        memberCount: 0,
+        channels: [],
+        roles: [],
+        overwrites: [],
+      },
+      new Set(["$category-0"])
+    );
+
+    expect(results).toEqual([
+      { passed: true, message: 'Planned symbol "$category-0" will be created' },
+    ]);
+  });
+});

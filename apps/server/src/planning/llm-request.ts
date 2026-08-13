@@ -4,6 +4,7 @@ export interface LLMRequestInput {
   model: string;
   messages: unknown[];
   functions: unknown[];
+  reasoning?: { effort?: string; maxTokens?: number };
   webAppUrl?: string;
   abortSignal?: AbortSignal;
 }
@@ -52,6 +53,11 @@ export function buildLLMRequest(input: LLMRequestInput): LLMRequest {
         temperature: 0.1,
         max_tokens: 4096,
         stream: true,
+        ...(input.reasoning?.effort
+          ? { reasoning: { effort: input.reasoning.effort } }
+          : input.reasoning?.maxTokens
+            ? { reasoning: { max_tokens: input.reasoning.maxTokens } }
+            : {}),
       }),
       signal: input.abortSignal,
     },

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Declarative Discord Management · 01</title>
+  <style>
+    :root { --bg:#080b10; --panel:#10161e; --panel-2:#151d27; --ink:#f2f5f7; --muted:#8b99a7; --line:#283440; --cyan:#63e6df; --amber:#ffc857; --red:#ff6b6b; --violet:#a78bfa; }
+    * { box-sizing:border-box; }
+    html,body { margin:0; width:100%; min-height:100%; overflow-x:hidden; overflow-y:auto; background:var(--bg); color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    body { background-image:radial-gradient(circle at 75% 15%, #12212a 0, transparent 33%), linear-gradient(135deg,#080b10 0%,#0b1118 100%); }
+    .deck { min-height:100vh; position:relative; }
+    .slide { display:none; min-height:100vh; padding:7vh 8vw 9vh; position:relative; }
+    .slide.active { display:flex; flex-direction:column; justify-content:center; }
+    .slide::before { content:""; position:absolute; left:8vw; top:5vh; width:34px; height:3px; background:var(--cyan); box-shadow:44px 0 0 var(--line); }
+    .kicker { color:var(--cyan); font:700 .72rem/1.2 ui-monospace,SFMono-Regular,monospace; letter-spacing:.16em; text-transform:uppercase; margin:0 0 1.3rem; }
+    h1,h2,h3,p { margin-top:0; }
+    h1 { max-width:1000px; font-size:clamp(3.3rem,7.8vw,8.5rem); line-height:.94; letter-spacing:-.075em; margin-bottom:2rem; }
+    h2 { max-width:980px; font-size:clamp(2.4rem,5vw,5.4rem); line-height:.98; letter-spacing:-.06em; margin-bottom:1.3rem; }
+    h3 { font-size:1.1rem; letter-spacing:-.02em; margin-bottom:.45rem; }
+    p { color:var(--muted); max-width:720px; font-size:clamp(1rem,1.5vw,1.35rem); line-height:1.5; }
+    .subtitle { font-size:clamp(1.1rem,2vw,1.65rem); color:#b9c5cf; max-width:620px; }
+    .note { color:var(--cyan); border-left:2px solid var(--cyan); padding-left:1rem; font-size:clamp(1.1rem,1.8vw,1.65rem); line-height:1.35; max-width:800px; }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-top:2rem; max-width:1100px; }
+    .grid.two { grid-template-columns:repeat(2,1fr); }
+    .card { background:color-mix(in srgb,var(--panel) 92%,transparent); border:1px solid var(--line); padding:1.35rem; min-height:120px; }
+    .card strong { display:block; color:var(--ink); font-size:1.15rem; margin-bottom:.5rem; }
+    .card span { color:var(--muted); line-height:1.4; }
+    .tag { display:inline-block; border:1px solid var(--line); color:var(--muted); padding:.35rem .55rem; font:600 .72rem ui-monospace,monospace; text-transform:uppercase; letter-spacing:.08em; }
+    .accent { color:var(--cyan); } .warn { color:var(--amber); } .danger { color:var(--red); } .violet { color:var(--violet); }
+    .pipeline { display:flex; align-items:stretch; gap:0; max-width:1180px; margin-top:2.5rem; flex-wrap:wrap; }
+    .pipeline .node { flex:1 1 130px; min-width:120px; padding:1.15rem .8rem; border:1px solid var(--line); background:var(--panel); position:relative; text-align:center; font-weight:700; }
+    .pipeline .node:not(:last-child)::after { content:"→"; position:absolute; right:-.55rem; top:50%; transform:translateY(-50%); color:var(--cyan); z-index:2; background:var(--bg); padding:.1rem; }
+    .pipeline small { display:block; color:var(--muted); font-weight:400; margin-top:.5rem; font-size:.72rem; }
+    .architecture { display:grid; grid-template-columns:1fr 1.25fr 1fr; gap:1rem; align-items:center; max-width:1150px; margin-top:2rem; }
+    .arch-box { padding:1.5rem; border:1px solid var(--line); background:var(--panel); min-height:145px; }
+    .arch-box.main { border-color:var(--cyan); background:linear-gradient(150deg,#10252a,#10161e); }
+    .arch-box ul { color:var(--muted); padding-left:1.1rem; line-height:1.8; margin-bottom:0; }
+    .boundary { display:grid; grid-template-columns:repeat(4,1fr); gap:.6rem; max-width:1050px; margin-top:2rem; padding:1rem; border:1px solid var(--cyan); background:#0d1b20; }
+    .boundary div { border:1px solid #30434a; padding:.9rem; color:#d5e6e8; font-size:.9rem; }
+    .boundary::before { content:"INPUT PLAN"; grid-column:1/-1; color:var(--cyan); font:700 .7rem ui-monospace,monospace; letter-spacing:.14em; }
+    .steps { display:grid; grid-template-columns:repeat(2,1fr); gap:.75rem; max-width:900px; margin-top:1.6rem; counter-reset:step; }
+    .steps div { counter-increment:step; display:flex; gap:1rem; align-items:center; border-bottom:1px solid var(--line); padding:.8rem 0; color:#d9e0e5; }
+    .steps div::before { content:counter(step,decimal-leading-zero); color:var(--cyan); font:700 .8rem ui-monospace,monospace; }
+    .discord-ui { display:grid; grid-template-columns:42px 190px 1fr 150px; max-width:1160px; min-height:390px; margin-top:1.5rem; border:1px solid #3b4653; border-radius:8px; overflow:hidden; background:#313338; box-shadow:0 18px 50px #0008; font-family:ui-sans-serif,system-ui,sans-serif; }
+    .discord-servers { background:#1e1f22; padding:.7rem .45rem; display:flex; flex-direction:column; gap:.65rem; align-items:center; }
+    .discord-server-icon { width:30px; height:30px; border-radius:10px; display:grid; place-items:center; color:#dfe1e5; background:#5865f2; font-size:.62rem; font-weight:800; }
+    .discord-server-icon.muted { background:#36393f; color:#9da1a8; }
+    .discord-divider { height:1px; width:22px; background:#3b3d42; }
+    .discord-sidebar { background:#2b2d31; color:#949ba4; padding-bottom:.75rem; }
+    .discord-server-name { height:43px; padding:.8rem .85rem; color:#f2f3f5; font-size:.78rem; font-weight:700; border-bottom:1px solid #202225; box-shadow:0 1px 2px #0003; }
+    .discord-category { margin:1rem .65rem .25rem; color:#969da6; font-size:.58rem; font-weight:800; letter-spacing:.08em; }
+    .discord-channel { margin:.1rem .45rem; padding:.35rem .45rem; border-radius:4px; font-size:.74rem; display:flex; gap:.4rem; align-items:center; }
+    .discord-channel.selected { color:#f2f3f5; background:#404249; }
+    .discord-channel .hash { color:#8e9299; font-size:1rem; }
+    .discord-user { margin-top:auto; padding:.65rem .6rem; display:flex; gap:.5rem; align-items:center; background:#232428; color:#f2f3f5; font-size:.66rem; }
+    .discord-avatar { width:24px; height:24px; border-radius:50%; display:grid; place-items:center; background:#e5a64b; color:#2b2d31; font-weight:800; font-size:.58rem; }
+    .discord-chat { background:#313338; color:#dbdee1; display:flex; flex-direction:column; min-width:0; }
+    .discord-chat-head { height:43px; display:flex; align-items:center; gap:.45rem; padding:0 .9rem; border-bottom:1px solid #26272b; color:#f2f3f5; font-size:.8rem; font-weight:700; }
+    .discord-chat-head small { color:#949ba4; font-weight:400; margin-left:.35rem; }
+    .discord-messages { padding:1.2rem 1rem .9rem; display:flex; flex:1; flex-direction:column; justify-content:flex-end; gap:.85rem; }
+    .discord-message { display:grid; grid-template-columns:30px 1fr; gap:.55rem; font-size:.68rem; line-height:1.35; }
+    .discord-message strong { color:#f2f3f5; margin-right:.45rem; font-size:.7rem; }
+    .discord-message time { color:#72767d; font-size:.55rem; }
+    .discord-message p { color:#dbdee1; font-size:.68rem; line-height:1.35; margin:.15rem 0 0; }
+    .discord-members { background:#2b2d31; padding:.8rem .65rem; color:#949ba4; }
+    .discord-members h4 { color:#949ba4; font-size:.58rem; letter-spacing:.08em; margin:0 0 .7rem; }
+    .discord-member { display:flex; align-items:center; gap:.45rem; color:#dbdee1; font-size:.65rem; margin:.55rem 0; }
+    .discord-member .discord-avatar { width:22px; height:22px; font-size:.52rem; }
+    .permission-callout { display:flex; gap:.65rem; align-items:center; max-width:1160px; margin-top:.75rem; padding:.65rem .85rem; border:1px solid #466a70; background:#10252a; color:#c5e5e5; font-size:.78rem; line-height:1.35; }
+    .permission-callout b { color:var(--cyan); white-space:nowrap; }
+    .footer { position:absolute; left:8vw; right:8vw; bottom:5rem; display:flex; justify-content:space-between; color:#b0bcc6; font:600 .7rem ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
+    .controls { position:fixed; right:3vw; bottom:1rem; display:flex; gap:.5rem; z-index:10; }
+    button { border:1px solid var(--line); color:var(--ink); background:#111923; width:2.5rem; height:2.5rem; cursor:pointer; font-size:1.1rem; }
+    button:hover { border-color:var(--cyan); color:var(--cyan); }
+    .progress { position:fixed; top:0; left:0; height:3px; width:6.66%; background:var(--cyan); z-index:20; transition:width .25s ease; }
+    @media (max-width:700px), (max-height:700px) {
+      .slide { padding:8vh 7vw 8rem; }
+      .slide.active { justify-content:flex-start; }
+      .footer { left:7vw; right:7vw; bottom:4.5rem; }
+      .grid,.grid.two,.architecture,.discord-ui,.boundary,.steps { grid-template-columns:1fr; }
+      .discord-ui { min-height:0; }
+      .discord-servers { flex-direction:row; padding:.5rem; }
+      .discord-sidebar { min-height:260px; }
+      .discord-members { min-height:170px; }
+      .pipeline .node { flex-basis:100%; text-align:left; }
+      .pipeline .node:not(:last-child)::after { content:"↓"; right:auto; left:1rem; top:auto; bottom:-.75rem; }
+      h1 { font-size:3.4rem; }
+    }
+    @media print {
+      @page { margin:0; size:landscape; }
+      :root { --bg:#fff; --panel:#fff; --panel-2:#f5f5f5; --ink:#111827; --muted:#374151; --line:#6b7280; --cyan:#005a64; --amber:#8a4b00; --red:#991b1b; --violet:#5b21b6; }
+      html,body { width:auto; height:auto; min-height:0; overflow:visible; background:#fff; background-image:none; color:var(--ink); }
+      .deck { min-height:0; }
+      .slide, .slide.active { display:flex !important; min-height:100vh; page-break-after:always; break-after:page; }
+      .slide:last-child { page-break-after:auto; break-after:auto; }
+      .slide::before { background:var(--cyan); box-shadow:44px 0 0 var(--line); }
+      p, .card span, .pipeline small, .arch-box ul, .footer, .steps div, .boundary div { color:var(--muted); }
+      .subtitle { color:var(--muted); }
+      .card, .pipeline .node, .arch-box { background:#fff; border-color:var(--line); }
+      .arch-box.main { background:#fff; border-color:var(--cyan); }
+      .boundary { background:#fff; border-color:var(--cyan); }
+      .boundary div { border-color:var(--line); }
+      .pipeline .node:not(:last-child)::after { background:#fff; color:var(--cyan); }
+      .tag { border-color:var(--line); color:var(--muted); }
+      .discord-ui { background:#fff; border-color:var(--line); box-shadow:none; }
+      .discord-servers, .discord-sidebar, .discord-members { background:#f3f4f6; color:var(--muted); }
+      .discord-chat { background:#fff; color:var(--ink); }
+      .discord-server-name, .discord-chat-head, .discord-channel.selected, .discord-member { color:var(--ink); }
+      .discord-channel.selected { background:#e5e7eb; }
+      .discord-chat-head, .discord-user { border-color:var(--line); background:#f3f4f6; }
+      .discord-message strong, .discord-message p { color:var(--ink); }
+      .discord-chat-head small, .discord-message time, .discord-members h4, .discord-channel, .discord-category { color:var(--muted); }
+      .permission-callout { background:#effafa; border-color:var(--cyan); color:var(--ink); }
+      .controls, .progress { display:none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck" aria-live="polite">
+    <div class="progress" id="progress"></div>
+    <section class="slide active"><p class="kicker">Discord platform / 2026</p><h1>AI-driven<br><span class="accent">declarative</span><br>server management.</h1><p class="subtitle">From natural-language intent to a safe, inspectable configuration plan.</p><div class="footer"><span>Project presentation</span><span>01 / 15</span></div></section>
+    <section class="slide"><p class="kicker">01 — Discord foundations</p><h2>A Discord server is a structured workspace.</h2><div class="discord-ui"><aside class="discord-servers"><div class="discord-server-icon">D</div><div class="discord-divider"></div><div class="discord-server-icon muted">+</div><div class="discord-server-icon muted">...</div></aside><aside class="discord-sidebar"><div class="discord-server-name">Northstar Community⌄</div><div class="discord-category">INFORMATION</div><div class="discord-channel"><span class="hash">#</span> announcements</div><div class="discord-channel"><span class="hash">#</span> rules</div><div class="discord-category">COMMUNITY</div><div class="discord-channel selected"><span class="hash">#</span> private-support</div><div class="discord-channel"><span class="hash">#</span> general</div><div class="discord-category">VOICE</div><div class="discord-channel"><span class="hash">◖</span> Lounge</div><div class="discord-user"><span class="discord-avatar">A</span><span>alex<br><small style="color:#949ba4">online</small></span></div></aside><main class="discord-chat"><div class="discord-chat-head"><span class="hash">#</span> private-support <small>Support conversations</small></div><div class="discord-messages"><div class="discord-message"><span class="discord-avatar">M</span><div><strong>moderator</strong><time>Today at 10:14</time><p>Welcome to the private support channel.</p></div></div><div class="discord-message"><span class="discord-avatar" style="background:#63e6df">A</span><div><strong>alex</strong><time>Today at 10:15</time><p>Only the support team should be able to read this.</p></div></div></div></main><aside class="discord-members"><h4>MEMBERS — 4</h4><div class="discord-member"><span class="discord-avatar">M</span> moderator</div><div class="discord-member"><span class="discord-avatar" style="background:#63e6df">A</span> alex</div><div class="discord-member"><span class="discord-avatar" style="background:#8e7cc3">S</span> support-bot</div><div class="discord-member"><span class="discord-avatar" style="background:#72767d">J</span> jordan</div></aside></div><div class="permission-callout"><b>What the UI represents:</b><span>one server → categories and channels → members and roles → channel-specific access.</span></div><div class="footer"><span>What is Discord?</span><span>02 / 15</span></div></section>
+    <section class="slide"><p class="kicker">02 — Discord foundations</p><h2>Permissions are layered, not local.</h2><div class="permission-flow"><div class="card"><span class="tag">Server</span><strong style="margin-top:1rem">Roles are defined here</strong><span>For example: Admin, Moderator, Member, or Guest.</span></div><div class="card"><span class="tag">Members</span><strong style="margin-top:1rem">Receive one or more roles</strong><span>A member's access begins with the permissions granted by their server roles.</span></div><div class="card" style="border-color:var(--cyan)"><span class="tag" style="color:var(--cyan);border-color:var(--cyan)">Channels</span><strong style="margin-top:1rem">Can override access</strong><span>Channel permission overwrites refine access for a role or an individual member.</span></div></div><p class="note" style="margin-top:2rem">Channels do not own roles. They apply rules to server roles and members, which makes access deep and interdependent.</p><div class="footer"><span>Roles, members, and overwrites</span><span>03 / 15</span></div></section>
+    <section class="slide"><p class="kicker">03 — The problem</p><h2>Server administration is operational work disguised as clicking.</h2><div class="grid"><div class="card"><strong>Repetitive setup</strong><span>Rebuild the same structures for every community, team, or environment.</span></div><div class="card"><strong>Costly mistakes</strong><span>One permission error can expose channels or lock out the people who need them.</span></div><div class="card"><strong>Difficult review</strong><span>Intent is scattered across messages, UI state, and undocumented decisions.</span></div><div class="card"><strong>Repeatable configuration</strong><span>Organisations need a reliable baseline.</span></div><div class="card"><strong>Policy enforcement</strong><span>Rules should be checked before they reach Discord.</span></div><div class="card"><strong>Audit trail</strong><span>Every meaningful change should be explainable.</span></div></div><p class="note" style="margin-top:1.8rem">The platform turns natural-language intent into a safe, reviewable configuration plan.</p><div class="footer"><span>Why this matters</span><span>04 / 15</span></div></section>
+    <section class="slide"><p class="kicker">04 — Failure mode</p><h2>A structured AI response is still not a safe plan.</h2><div class="grid three"><div class="card"><strong class="warn">Ambiguous intent</strong><span>“Make support private” still needs exact roles, members, channels, and permission decisions.</span></div><div class="card"><strong class="danger">JSON is not a contract</strong><span>Valid-looking output can omit fields, reference the wrong resource, or conflict with live state.</span></div><div class="card"><strong class="violet">No feedback loop</strong><span>A one-shot response cannot ask for clarification or update its plan after a failed assumption.</span></div></div><p class="note" style="margin-top:2.5rem"><b>The solution:</b> typed tool calls build DesiredState step by step, like a coding AI agent.</p><div class="footer"><span>Why not parse direct output?</span><span>05 / 15</span></div></section>
+    <section class="slide"><p class="kicker">05 — The operating model</p><h2>Plan before execution.</h2><div class="pipeline"><div class="node">Prompt<small>natural language</small></div><div class="node">DesiredState<small>target model</small></div><div class="node">Diff<small>minimal operations</small></div><div class="node">Validation<small>policy boundary</small></div><div class="node">Approval<small>human review</small></div><div class="node">Execution<small>controlled writes</small></div></div><p style="margin-top:2.5rem">The system makes each transition explicit, inspectable, and reversible.</p><div class="footer"><span>Plan-first architecture</span><span>06 / 15</span></div></section>
+    <section class="slide"><p class="kicker">06 — DesiredState</p><h2>Describe the target.<br><span class="accent">Not the clicks.</span></h2><div class="grid two"><div class="card"><span class="tag">Imperative</span><strong style="margin-top:1rem">Do A, then B, then C</strong><span>Blind API sequence. Fragile when the live server differs from expectation.</span></div><div class="card" style="border-color:var(--cyan)"><span class="tag" style="color:var(--cyan);border-color:var(--cyan)">Declarative</span><strong style="margin-top:1rem">This is the desired server</strong><span>Configuration is a stable target that can be compared, validated, and reapplied.</span></div></div><p class="note" style="margin-top:2rem">DesiredState is the shared language between user intent, AI planning, diffing, and execution.</p><div class="footer"><span>Core abstraction</span><span>07 / 15</span></div></section>
+    <section class="slide"><p class="kicker">07 — System shape and AI boundary</p><h2>Application code owns safety and side effects.</h2><div class="architecture"><div class="arch-box"><h3>Client</h3><ul><li>React / Vite</li><li>Studio + preview</li><li>SSE updates</li></ul></div><div class="arch-box main"><h3 class="accent">Planning services</h3><ul><li>Hono API</li><li>Constrained tool calls</li><li>`ask_user` clarification</li></ul></div><div class="arch-box"><h3>State & providers</h3><ul><li>PostgreSQL / Drizzle</li><li>Discord.js</li><li>OpenRouter-compatible LLM</li></ul></div></div><p style="margin-top:2rem">The model proposes typed DesiredState changes; it does not receive free-form Discord API power.</p><div class="footer"><span>Controlled AI planning</span><span>08 / 15</span></div></section>
+    <section class="slide"><p class="kicker">08 — Diff engine</p><h2>Deterministic diff.<br><span class="accent">Minimal change.</span></h2><div class="grid"><div class="card"><strong>Ordered operations</strong><span>Dependencies determine a stable, executable sequence.</span></div><div class="card"><strong>Resource coverage</strong><span>Categories, channels, roles, permissions, and member roles.</span></div><div class="card"><strong>Noise removal</strong><span>Equivalent state produces no unnecessary operation.</span></div></div><div class="pipeline"><div class="node">Current state</div><div class="node">Normalize</div><div class="node" style="border-color:var(--cyan)">Compare</div><div class="node">Ordered diff</div><div class="node">Review</div></div><div class="footer"><span>Predictable changes</span><span>09 / 15</span></div></section>
+    <section class="slide"><p class="kicker">09 — Validation boundary</p><h2>Every plan passes through a hard boundary.</h2><div class="boundary"><div>Structural</div><div>Permissions</div><div>Hierarchy</div><div>Dependencies</div><div>Duplicates</div><div>Channel constraints</div><div>Guild rules</div><div class="danger">Reject on failure</div></div><p class="note" style="margin-top:2rem">Validation is not a warning layer. It is the last place a plan can be changed without touching Discord.</p><div class="footer"><span>Policy before side effects</span><span>10 / 15</span></div></section>
+    <section class="slide"><p class="kicker">10 — Fail closed</p><h2>Configured safety rules block by default.</h2><div class="steps"><div>Unavailable rule or dependency</div><div>Malformed policy or input</div><div>Provider failure</div><div>Timeout</div></div><p class="note" style="margin-top:2rem"><span class="danger">No silent pass.</span> Uncertainty is surfaced to the reviewer and the plan remains unexecutable.</p><div class="footer"><span>Failure is a state</span><span>11 / 15</span></div></section>
+    <section class="slide"><p class="kicker">11 — Execution safeguards</p><h2>Execution is guarded, observable, and recoverable.</h2><div class="grid"><div class="card"><strong>Lock</strong><span>Per-guild locks prevent competing plans.</span></div><div class="card"><strong>Preconditions</strong><span>Verify the world has not changed under the plan.</span></div><div class="card"><strong>Symbols</strong><span>Resolve newly created resources safely.</span></div><div class="card"><strong>Retry + timeout</strong><span>Backoff transient failures; bound every wait.</span></div><div class="card"><strong>Snapshots</strong><span>Record a known recovery point.</span></div><div class="card"><strong>Diff rollback</strong><span>Undo through explicit inverse operations.</span></div></div><div class="footer"><span>Safe execution / recovery</span><span>12 / 15</span></div></section>
+    <section class="slide"><p class="kicker">12 — Drift</p><h2>The server can change outside the platform.</h2><div class="pipeline"><div class="node">Discord edit</div><div class="node">Persist + stream</div><div class="node">Current state</div><div class="node" style="border-color:var(--amber)">Stale plan</div><div class="node">AI re-plan</div></div><p class="note" style="margin-top:2.5rem">A plan is never allowed to pretend the world is still the one it inspected. External edits force a fresh comparison.</p><div class="footer"><span>Drift-aware planning</span><span>13 / 15</span></div></section>
+    <section class="slide"><p class="kicker">13 — Supporting workflows</p><h2>Review where administrators already think.</h2><div class="grid two"><div class="card" style="min-height:190px"><span class="tag">Studio</span><strong style="margin-top:1rem">Conversational review</strong><span>Discuss intent, inspect DesiredState, understand the diff, and approve from one workspace.</span></div><div class="card" style="min-height:190px"><span class="tag">Templates</span><strong style="margin-top:1rem">Reusable context</strong><span>Carry structures and assumptions between servers. Useful support for repeatability, not the centre of the model.</span></div></div><p style="margin-top:2rem">A Discord-like preview turns abstract configuration into something people can recognise.</p><div class="footer"><span>Human-facing workflows</span><span>14 / 15</span></div></section>
+    <section class="slide"><p class="kicker">14 — Outcome / handoff</p><h2>Safer intent.<br><span class="accent">Inspectable configuration.</span></h2><div class="grid three"><div class="card"><strong>Identity</strong><span>Discord OAuth, guild access checks, and rate limiting.</span></div><div class="card"><strong>Traceability</strong><span>Persisted conversations, plans, snapshots, audit, and SSE progress.</span></div><div class="card"><strong>Verification</strong><span>49 Vitest files cover core planning, safety, and interface paths.</span></div></div><p class="note" style="margin-top:2rem">Live demo → Studio conversation → DesiredState → diff → validation → approval.</p><div class="footer"><span>Engineering quality / live demo</span><span>15 / 15</span></div></section>
+  </main>
+  <nav class="controls" aria-label="Slide navigation"><button id="prev" aria-label="Previous slide">←</button><button id="next" aria-label="Next slide">→</button></nav>
+  <script>
+    (() => {
+      const slides = [...document.querySelectorAll(".slide")];
+      const progress = document.getElementById("progress");
+      let current = 0;
+      const show = (index) => {
+        current = Math.max(0, Math.min(slides.length - 1, index));
+        slides.forEach((slide, i) => slide.classList.toggle("active", i === current));
+        const number = String(current + 1).padStart(2, "0");
+        document.title = `Declarative Discord Management · ${number}`;
+        progress.style.width = `${((current + 1) / slides.length) * 100}%`;
+      };
+      document.getElementById("next").addEventListener("click", () => show(current + 1));
+      document.getElementById("prev").addEventListener("click", () => show(current - 1));
+      document.addEventListener("keydown", (event) => {
+        if (event.key === " " && event.target instanceof Element && event.target.closest("button, a, input, select, textarea, [contenteditable='true']")) return;
+        const forward = ["ArrowRight", " ", "PageDown"].includes(event.key);
+        const backward = ["ArrowLeft", "PageUp"].includes(event.key);
+        if (forward || backward || event.key === "Home" || event.key === "End") event.preventDefault();
+        if (forward) show(current + 1);
+        if (backward) show(current - 1);
+        if (event.key === "Home") show(0);
+        if (event.key === "End") show(slides.length - 1);
+      });
+      show(0);
+    })();
+  </script>
+</body>
+</html>

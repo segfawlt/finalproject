@@ -11,6 +11,7 @@ interface ChannelListProps {
   diffs?: Map<string, DiffStatus>;
   /** Fallback diff status for items not present in `diffs`. */
   defaultDiffStatus?: DiffStatus;
+  diffVersion?: number;
   editing?: boolean;
   onChange?: (id: string, next: ChannelBase) => void;
   onDelete?: (id: string) => void;
@@ -24,6 +25,7 @@ export default function ChannelList({
   categoryNames,
   diffs,
   defaultDiffStatus,
+  diffVersion,
   editing,
   onChange,
   onDelete,
@@ -52,7 +54,10 @@ export default function ChannelList({
               key={c.id}
               channel={c}
               parentName={c.parentId ? (categoryNames[c.parentId] ?? null) : null}
-              diffStatus={diffs?.get(c.id) ?? defaultDiffStatus}
+              diffStatus={
+                diffs?.get(c.id) ?? defaultDiffStatus ?? (c.id.startsWith("$") ? "new" : undefined)
+              }
+              diffVersion={diffVersion}
               editing={editing}
               onChange={onChange ? (next) => onChange(c.id, next) : undefined}
               onDelete={onDelete ? () => onDelete(c.id) : undefined}

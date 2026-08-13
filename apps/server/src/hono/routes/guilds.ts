@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { db, guilds } from "@repo/db";
-import { eq } from "drizzle-orm";
+import { db, guilds, conversations } from "@repo/db";
+import { desc, eq, inArray } from "drizzle-orm";
 import { guildCache } from "../../bot/cache";
 import { botClient } from "../../bot/client";
 import { userHasManageGuild } from "../../auth/helpers";
@@ -24,6 +24,7 @@ guildsApp.get("/", async (c) => {
     name: string;
     icon: string | null;
     memberCount: number;
+    latestConversation: { prompt: string; updatedAt: Date } | null;
   }> = [];
 
   if (!botClient.isReady()) {
@@ -43,7 +44,37 @@ guildsApp.get("/", async (c) => {
       name: guild?.name ?? guildId,
       icon: guild?.iconURL() ?? null,
       memberCount: guild?.memberCount ?? 0,
+      latestConversation: null,
     });
+  }
+
+  if (result.length > 0) {
+    const latest = await db
+      .select({
+        guildId: conversations.guildId,
+        userPrompt: conversations.userPrompt,
+        updatedAt: conversations.updatedAt,
+      })
+      .from(conversations)
+      .where(
+        inArray(
+          conversations.guildId,
+          result.map((guild) => guild.id)
+        )
+      )
+      .orderBy(desc(conversations.updatedAt));
+    const seen = new Set<string>();
+    for (const conversation of latest) {
+      if (seen.has(conversation.guildId)) continue;
+      seen.add(conversation.guildId);
+      const guild = result.find((item) => item.id === conversation.guildId);
+      if (guild) {
+        guild.latestConversation = {
+          prompt: conversation.userPrompt,
+          updatedAt: conversation.updatedAt,
+        };
+      }
+    }
   }
 
   return c.json(result);

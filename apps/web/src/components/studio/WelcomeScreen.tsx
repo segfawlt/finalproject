@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Sparkles, ArrowRight } from "lucide-react";
 
 /**
@@ -48,12 +48,14 @@ interface WelcomeScreenProps {
   guildName: string;
   onPromptSelect: (prompt: string) => void;
   disabled?: boolean;
+  modelControls?: ReactNode;
 }
 
 export default function WelcomeScreen({
   guildName,
   onPromptSelect,
   disabled = false,
+  modelControls,
 }: WelcomeScreenProps) {
   const [customPrompt, setCustomPrompt] = useState("");
 
@@ -64,13 +66,13 @@ export default function WelcomeScreen({
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-8 space-y-8">
+    <div className="max-w-3xl mx-auto px-8 py-16 space-y-12">
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-shell-text-muted">
-          <Sparkles size={14} className="text-agent-thinking" />
-          <span className="text-xs uppercase tracking-wider font-semibold">Welcome</span>
+          <Sparkles size={14} className="text-shell-text-muted" />
+          <span className="text-xs font-semibold">Welcome to Studio</span>
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight text-shell-text">
+        <h1 className="text-4xl font-light tracking-[-0.04em] text-shell-text sm:text-5xl">
           Configure {guildName}
         </h1>
         <p className="text-shell-text-muted text-sm leading-relaxed">
@@ -80,16 +82,14 @@ export default function WelcomeScreen({
       </div>
 
       <div>
-        <div className="text-[10px] uppercase tracking-wider font-semibold text-shell-text-subtle mb-3">
-          Suggestions
-        </div>
+        <div className="text-xs font-semibold text-shell-text-subtle mb-3">Suggestions</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {WELCOME_PROMPTS.map((p) => (
             <button
               key={p.title}
               onClick={() => onPromptSelect(p.prompt)}
               disabled={disabled}
-              className="text-left p-4 bg-shell-surface border border-shell-border rounded-lg hover:border-shell-border-strong hover:bg-shell-surface2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors group"
+              className="text-left p-5 bg-shell-surface border border-shell-border rounded hover:border-shell-border-strong hover:bg-shell-surface2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors group"
             >
               <div className="text-shell-text font-medium text-sm mb-1">{p.title}</div>
               <div className="text-shell-text-muted text-xs leading-relaxed">{p.description}</div>
@@ -99,21 +99,22 @@ export default function WelcomeScreen({
       </div>
 
       <div>
-        <div className="text-[10px] uppercase tracking-wider font-semibold text-shell-text-subtle mb-3">
+        <div className="text-xs font-semibold text-shell-text-subtle mb-3">
           Or describe what you want
         </div>
+        {modelControls && <div className="mb-3">{modelControls}</div>}
         <textarea
           value={customPrompt}
           onChange={(e) => setCustomPrompt(e.target.value)}
           placeholder="e.g., Create a staff channel and a moderator role..."
           rows={3}
           disabled={disabled}
-          className="w-full p-3 rounded bg-shell-surface text-shell-text border border-shell-border focus:border-shell-accent focus:outline-none focus:ring-1 focus:ring-shell-accent/30 disabled:opacity-50 text-sm transition-colors resize-none"
+          className="w-full p-4 rounded bg-shell-surface text-shell-text border border-shell-border focus:border-shell-accent-focus focus:outline-none focus:ring-1 focus:ring-shell-accent-focus/30 disabled:opacity-50 text-sm transition-colors resize-none"
         />
         <button
           onClick={handleCustomSubmit}
           disabled={disabled || !customPrompt.trim()}
-          className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-shell-accent text-shell-accent-fg rounded text-sm font-medium hover:bg-shell-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="mt-3 inline-flex items-center gap-2 px-5 py-3 bg-shell-accent text-shell-accent-fg rounded text-sm font-medium hover:bg-shell-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           Create & Plan
           <ArrowRight size={14} />

@@ -6,7 +6,6 @@ import type { DesiredState } from "../desired-state/types";
 interface SaveTemplateModalProps {
   open: boolean;
   onClose: () => void;
-  guildId: string;
   desiredState: DesiredState;
 }
 
@@ -16,12 +15,7 @@ interface SaveTemplateModalProps {
  * roles, overwrites, member roles) — the same shape the merge flow feeds
  * back to the planner.
  */
-export default function SaveTemplateModal({
-  open,
-  onClose,
-  guildId,
-  desiredState,
-}: SaveTemplateModalProps) {
+export default function SaveTemplateModal({ open, onClose, desiredState }: SaveTemplateModalProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -38,11 +32,9 @@ export default function SaveTemplateModal({
     setSaving(true);
     setError("");
     try {
-      const id = `${guildId}-${slugify(trimmedName)}-${Date.now()}`;
-      const res = await apiFetch(`/api/guilds/${guildId}/templates`, {
+      const res = await apiFetch("/api/templates", {
         method: "POST",
         body: {
-          id,
           name: trimmedName,
           description: trimmedDesc,
           structure: desiredState.active,
@@ -162,16 +154,6 @@ export default function SaveTemplateModal({
         )}
       </div>
     </div>
-  );
-}
-
-function slugify(s: string): string {
-  return (
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "template"
   );
 }
 

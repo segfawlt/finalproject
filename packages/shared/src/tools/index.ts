@@ -94,7 +94,7 @@ export type { CreateMemberRoleParams, RemoveMemberRoleParams } from "./members";
 export { askUserSchema, planAskUser } from "./interaction";
 export type { AskUserParams, AskUserResult } from "./interaction";
 
-export { TOOL_REGISTRY, getTool, getOpenAIFunctionDefinitions } from "./registry";
+export { TOOL_REGISTRY, TEMPLATE_TOOL_NAMES, getTool, getOpenAIFunctionDefinitions } from "./registry";
 export type { ToolDefinition } from "./registry";
 export { evaluateAssumptions } from "./evaluate-assumptions";
 export type { AssumptionResult } from "./evaluate-assumptions";

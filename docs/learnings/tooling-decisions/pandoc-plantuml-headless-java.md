@@ -42,4 +42,4 @@ when the Pandoc diagram filter invokes Java-based PlantUML.
 
 ## References
 
-0
+1

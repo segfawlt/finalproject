@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Library, Search, GitMerge, Hash, Shield } from "lucide-react";
+import { Library, Search, Hash, Shield, ExternalLink } from "lucide-react";
 import { apiFetch } from "../../lib/api";
 
 interface TemplatesTabProps {
   guildId: string;
-  /** Opens the planning session the server starts for a merge. */
-  onMerge: (conversationId: string) => void;
+  conversationId: string | null;
+  activeTemplates: Array<{ id: string; name: string }>;
+  onActiveTemplatesChange: (next: Array<{ id: string; name: string }>) => void;
 }
 
 interface TemplateSummary {
@@ -26,15 +27,19 @@ interface TemplateSummary {
 
 /**
  * In-panel template browser: search the per-server library, preview
- * each template's shape, and merge one into a fresh planning
- * conversation (the server spins up the session, we open its stream).
+ * each template's shape and attach it to the active planning conversation.
  */
-export default function TemplatesTab({ guildId, onMerge }: TemplatesTabProps) {
+export default function TemplatesTab({
+  guildId,
+  conversationId,
+  activeTemplates,
+  onActiveTemplatesChange,
+}: TemplatesTabProps) {
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
-  const [merging, setMerging] = useState<string | null>(null);
+  const [updating, setUpdating] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,28 +61,6 @@ export default function TemplatesTab({ guildId, onMerge }: TemplatesTabProps) {
     };
   }, [guildId]);
 
-  async function mergeTemplate(t: TemplateSummary) {
-    if (merging) return;
-    setMerging(t.id);
-    setError("");
-    try {
-      const res = await apiFetch(`/api/guilds/${guildId}/templates/${t.id}/merge`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const data = (await res.json()) as { error: string };
-        setError(data.error || `Failed to merge template (${res.status})`);
-        return;
-      }
-      const { conversationId } = (await res.json()) as { conversationId: string };
-      onMerge(conversationId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setMerging(null);
-    }
-  }
-
   const filtered = templates.filter((t) => {
     if (!search.trim()) return true;
     const s = search.toLowerCase();
@@ -88,6 +71,50 @@ export default function TemplatesTab({ guildId, onMerge }: TemplatesTabProps) {
     );
   });
 
+  const activeIds = new Set(activeTemplates.map((template) => template.id));
+
+  async function toggleTemplate(template: TemplateSummary) {
+    if (updating) return;
+    const active = activeIds.has(template.id);
+
+    if (!conversationId) {
+      onActiveTemplatesChange(
+        active
+          ? activeTemplates.filter((item) => item.id !== template.id)
+          : [...activeTemplates, { id: template.id, name: template.name }]
+      );
+      return;
+    }
+
+    setUpdating(template.id);
+    setError("");
+    try {
+      const response = await apiFetch(
+        `/api/guilds/${guildId}/conversations/${conversationId}/templates${active ? `/${template.id}` : ""}`,
+        active
+          ? { method: "DELETE" }
+          : {
+              method: "POST",
+              body: { templateId: template.id },
+            }
+      );
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string };
+        setError(data.error || `Failed to ${active ? "stop using" : "use"} template`);
+        return;
+      }
+      onActiveTemplatesChange(
+        active
+          ? activeTemplates.filter((item) => item.id !== template.id)
+          : [...activeTemplates, { id: template.id, name: template.name }]
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUpdating(null);
+    }
+  }
+
   return (
     <div className="p-4 space-y-3">
       <header className="flex items-start justify-between gap-2">
@@ -97,15 +124,9 @@ export default function TemplatesTab({ guildId, onMerge }: TemplatesTabProps) {
             Templates
           </h2>
           <p className="text-shell-text-muted text-xs">
-            Merge a saved template into a new planning conversation.
+            Add reusable template context to the current conversation.
           </p>
         </div>
-        <Link
-          to={`/templates/${guildId}`}
-          className="text-shell-text-link text-xs hover:underline shrink-0 mt-0.5"
-        >
-          Manage →
-        </Link>
       </header>
 
       <div className="relative">
@@ -140,7 +161,6 @@ export default function TemplatesTab({ guildId, onMerge }: TemplatesTabProps) {
           {filtered.map((t) => {
             const channelCount = Object.keys(t.structure?.channels ?? {}).length;
             const roleCount = Object.keys(t.structure?.roles ?? {}).length;
-            const isMerging = merging === t.id;
             return (
               <li
                 key={t.id}
@@ -169,13 +189,21 @@ export default function TemplatesTab({ guildId, onMerge }: TemplatesTabProps) {
                   {t.category && <span>· {t.category}</span>}
                 </div>
                 <div className="mt-2 flex justify-end">
-                  <button
-                    onClick={() => mergeTemplate(t)}
-                    disabled={merging !== null}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-shell-accent hover:bg-shell-accent-hover text-shell-accent-fg text-xs transition-colors disabled:opacity-60"
+                  <Link
+                    to={`/templates/${t.id}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-shell-surface3 text-shell-text text-xs transition-colors hover:bg-shell-border-strong"
                   >
-                    <GitMerge size={12} />
-                    {isMerging ? "Merging…" : "Merge"}
+                    <ExternalLink size={12} />
+                    View template
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => toggleTemplate(t)}
+                    disabled={updating !== null}
+                    aria-label={activeIds.has(t.id) ? `Stop using ${t.name}` : `Use ${t.name}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-shell-accent text-shell-accent-fg text-xs transition-colors hover:bg-shell-accent-hover disabled:opacity-60"
+                  >
+                    {updating === t.id ? "Updating…" : activeIds.has(t.id) ? "Stop using" : "Use"}
                   </button>
                 </div>
               </li>

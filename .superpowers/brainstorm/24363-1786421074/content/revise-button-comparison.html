@@ -1,0 +1,35 @@
+<h2>Choose the revision action style</h2>
+<p class="subtitle">Both keep the existing composer behavior; only the submit control changes.</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Current · labeled action</div>
+    <div class="mockup-body" style="background:#17191d; padding:32px 20px;">
+      <div style="display:flex; align-items:flex-end; gap:10px; padding:8px; border:1px solid #3b3f48; border-radius:16px; background:#24272d;">
+        <div style="flex:1; color:#9b9fa9; font:14px system-ui; padding:10px 8px;">Ask for a revision…</div>
+        <div style="display:flex; align-items:center; gap:6px; padding:11px 15px; border-radius:12px; background:#f4f4f5; color:#17191d; font:600 13px system-ui;">➤ <span>Revise</span></div>
+      </div>
+    </div>
+    <div class="card-body"><h3>Large footprint</h3><p>Clear, but visually heavier than the message composer.</p></div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Option · circular send arrow</div>
+    <div class="mockup-body" style="background:#17191d; padding:32px 20px;">
+      <div style="display:flex; align-items:flex-end; gap:10px; padding:8px; border:1px solid #3b3f48; border-radius:16px; background:#24272d;">
+        <div style="flex:1; color:#9b9fa9; font:14px system-ui; padding:10px 8px;">Ask for a revision…</div>
+        <div style="display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:999px; background:#f4f4f5; color:#17191d; font:600 18px system-ui;">➤</div>
+      </div>
+    </div>
+    <div class="card-body"><h3>Compact and familiar</h3><p>Matches common chatbot composers and leaves the prompt as the focus.</p></div>
+  </div>
+</div>
+
+<div class="options" style="margin-top:20px;">
+  <div class="option" data-choice="circular-arrow" onclick="toggleSelect(this)">
+    <div class="letter">✓</div><div class="content"><h3>Use the circular arrow</h3><p>Icon-only button, with an accessible label and tooltip.</p></div>
+  </div>
+  <div class="option" data-choice="keep-label" onclick="toggleSelect(this)">
+    <div class="letter">×</div><div class="content"><h3>Keep the label</h3><p>Retain the current text button for maximum explicitness.</p></div>
+  </div>
+</div>

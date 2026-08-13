@@ -3,22 +3,24 @@ import type { DiffStatus } from "./types";
 
 interface DiffBadgeProps {
   status: DiffStatus;
+  version?: number;
 }
 
 /**
  * Tiny colored badge indicating whether a desired-state item will be created,
  * modified, deleted, or left unchanged when the plan runs.
  */
-export default function DiffBadge({ status }: DiffBadgeProps) {
+export default function DiffBadge({ status, version }: DiffBadgeProps) {
   if (status === "unchanged") return null;
   const { Icon, className, label } = styleFor(status);
   return (
     <span
       className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide font-medium ${className}`}
-      title={label}
+      title={version !== undefined ? `${label} in version ${version}` : label}
     >
       <Icon size={10} />
       {label}
+      {version !== undefined && status === "new" ? ` in v${version}` : ""}
     </span>
   );
 }
@@ -33,7 +35,7 @@ function styleFor(status: DiffStatus): {
       return {
         Icon: Plus,
         className: "bg-green-900/50 text-green-300 border border-green-700/50",
-        label: "new",
+        label: "added",
       };
     case "modified":
       return {

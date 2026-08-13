@@ -1,25 +1,30 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { db, templates, conversations, planIterations } from "@repo/db";
-import { eq, or } from "drizzle-orm";
-import { userHasManageGuild } from "../../auth/helpers";
+import { randomUUID } from "node:crypto";
+import { and, desc, eq } from "drizzle-orm";
+import { db, templateAuthoringTurns, templateVersions, templates } from "@repo/db";
 import { requireUser } from "../../auth/middleware";
 import type { AppVariables } from "../../types";
-import { hashServerState } from "@repo/shared";
-import { PlanningSession } from "../../planning/planning-session";
-import { loadGuildRuleTexts } from "../../planning/guild-rules";
 import {
-  getSession,
-  setSession,
-  removeSession,
-  setSessionTimeout,
-} from "../../planning/session-manager";
-import { emitConversationEvent } from "../../planning/planning-event-bus";
-import { logger } from "../../utils/logger";
-import { guildCache } from "../../bot/cache";
-import { botClient } from "../../bot/client";
-import type { ServerState } from "@repo/shared";
+  commitTemplateStructure,
+  createTemplate,
+  forkTemplate,
+  revertTemplateVersion,
+  TemplateVersionConflictError,
+  updateTemplateMetadata,
+} from "../../templates/template-version-service";
+import { toTemplateDesiredState, fromTemplateDesiredState } from "../../templates/template-state";
+import { TemplateSession } from "../../planning/template-session";
+import { resolveDeploymentModelConfig } from "../../planning/deployment-model-config";
+import type { ConversationModelConfig } from "../../planning/model-config";
+import {
+  getTemplateSession,
+  removeTemplateSession,
+  setTemplateSession,
+} from "../../planning/template-session-manager";
+import { emitTemplateEvent, subscribeToTemplate } from "../../planning/template-event-bus";
 
 const templatesApp = new Hono<{ Variables: AppVariables }>();
 
@@ -28,306 +33,437 @@ const listQuerySchema = z.object({
   search: z.string().optional(),
 });
 
-const createSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string().min(1),
-  structure: z.record(z.unknown()),
-  validationRules: z.array(z.record(z.unknown())).optional().default([]),
-  category: z.string().optional(),
-  tags: z.array(z.string()).optional().default([]),
+const createTemplateSchema = z.object({
+  name: z.string().trim().min(1).default("Untitled template"),
+  description: z.string().default(""),
+  category: z.string().trim().optional(),
+  structure: z.record(z.unknown()).optional(),
 });
+
+const metadataSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  description: z.string().optional(),
+  category: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+const structureSchema = z.object({
+  structure: z.record(z.unknown()),
+  expectedVersion: z.number().int().positive(),
+});
+
+const revertSchema = z.object({ expectedVersion: z.number().int().positive() });
+const versionParamSchema = z.object({ version: z.coerce.number().int().positive() });
+const answerSchema = z.object({ answer: z.string().min(1) });
+const modelConfigSchema = z.object({
+  modelId: z.string().min(1),
+  reasoning: z
+    .object({
+      effort: z.string().min(1).optional(),
+      maxTokens: z.number().int().positive().optional(),
+    })
+    .optional(),
+});
+const authoringTurnSchema = z.object({
+  prompt: z.string().min(1),
+  modelConfig: modelConfigSchema.optional(),
+});
+
+async function ownedTemplate(id: string, authorId: string) {
+  const [template] = await db
+    .select()
+    .from(templates)
+    .where(and(eq(templates.id, id), eq(templates.authorId, authorId)));
+  return template;
+}
+
+async function ownedTurn(templateId: string, turnId: string, authorId: string) {
+  const [turn] = await db
+    .select()
+    .from(templateAuthoringTurns)
+    .where(
+      and(
+        eq(templateAuthoringTurns.id, turnId),
+        eq(templateAuthoringTurns.templateId, templateId),
+        eq(templateAuthoringTurns.authorId, authorId)
+      )
+    );
+  return turn;
+}
+
+async function persistTurn(turnId: string, session: TemplateSession, status: string, extra = {}) {
+  await db
+    .update(templateAuthoringTurns)
+    .set({
+      status,
+      messages: session.getMessages() as unknown as Record<string, unknown>[],
+      updatedAt: new Date(),
+      ...extra,
+    })
+    .where(eq(templateAuthoringTurns.id, turnId));
+}
+
+import type { Context } from "hono";
+
+function conflictResponse(c: Context<{ Variables: AppVariables }>, error: unknown) {
+  if (error instanceof TemplateVersionConflictError) {
+    return c.json(
+      { error: "Template version conflict", currentVersion: error.currentVersion },
+      409
+    );
+  }
+  throw error;
+}
 
 templatesApp.get("/", zValidator("query", listQuerySchema), async (c) => {
   const user = requireUser(c);
   const query = c.req.valid("query");
-  const guildId = c.req.param("guildId")!;
-
-  // Guild-scoped templates require manage access; global templates (null guildId)
-  // stay readable by any authenticated user.
-  const hasAccess = await userHasManageGuild(user.id, guildId);
-
-  const where = hasAccess
-    ? or(eq(templates.guildId, guildId), eq(templates.guildId, null as unknown as string))
-    : eq(templates.guildId, null as unknown as string);
-
-  let result = await db.select().from(templates).where(where);
-
-  if (query.category) {
-    result = result.filter((t) => t.category === query.category);
-  }
-
+  let result = await db.select().from(templates).where(eq(templates.authorId, user.id));
+  if (query.category) result = result.filter((template) => template.category === query.category);
   if (query.search) {
-    const searchLower = query.search.toLowerCase();
+    const search = query.search.toLowerCase();
     result = result.filter(
-      (t) =>
-        t.name.toLowerCase().includes(searchLower) ||
-        t.description.toLowerCase().includes(searchLower)
+      (template) =>
+        template.name.toLowerCase().includes(search) ||
+        template.description.toLowerCase().includes(search)
     );
   }
-
   return c.json(result);
 });
 
-templatesApp.get("/:templateId", async (c) => {
+templatesApp.post("/", zValidator("json", createTemplateSchema), async (c) => {
+  if (c.req.param("guildId")) return c.json({ error: "Template not found" }, 404);
   const user = requireUser(c);
-  const guildId = c.req.param("guildId")!;
-  const templateId = c.req.param("templateId")!;
-
-  const [template] = await db.select().from(templates).where(eq(templates.id, templateId));
-
-  if (!template) {
-    return c.json({ error: "Template not found" }, 404);
-  }
-
-  if (template.guildId && template.guildId !== guildId) {
-    return c.json({ error: "Template not found" }, 404);
-  }
-
-  // Guild-scoped templates require manage access; global templates (null guildId)
-  // stay readable by any authenticated user.
-  if (template.guildId) {
-    const hasAccess = await userHasManageGuild(user.id, guildId);
-    if (!hasAccess) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
-  }
-
-  return c.json(template);
-});
-
-templatesApp.post("/", zValidator("json", createSchema), async (c) => {
-  const user = requireUser(c);
-  const guildId = c.req.param("guildId")!;
   const body = c.req.valid("json");
-
-  const hasAccess = await userHasManageGuild(user.id, guildId);
-  if (!hasAccess) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
-
-  const data = {
-    ...body,
-    guildId,
-    authorId: user.id,
-    status: "draft" as const,
-  };
-
-  const [template] = await db.insert(templates).values(data).returning();
+  const template = await createTemplate({ ...body, id: randomUUID(), authorId: user.id });
   return c.json(template, 201);
 });
 
-templatesApp.put("/:templateId", zValidator("json", createSchema.partial()), async (c) => {
+templatesApp.get("/:templateId", async (c) => {
+  const template = await ownedTemplate(c.req.param("templateId"), requireUser(c).id);
+  return template ? c.json(template) : c.json({ error: "Template not found" }, 404);
+});
+
+templatesApp.patch("/:templateId", zValidator("json", metadataSchema), async (c) => {
+  if (c.req.param("guildId")) return c.json({ error: "Template not found" }, 404);
   const user = requireUser(c);
-  const guildId = c.req.param("guildId")!;
-  const templateId = c.req.param("templateId")!;
-  const body = c.req.valid("json");
-
-  const [existing] = await db.select().from(templates).where(eq(templates.id, templateId));
-
-  if (!existing) {
-    return c.json({ error: "Template not found" }, 404);
-  }
-
-  if (existing.guildId !== guildId) {
-    return c.json({ error: "Template not found" }, 404);
-  }
-
-  if (existing.authorId !== user.id) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
-
-  const updateData = {
-    ...body,
-    version: (existing.version ?? 0) + 1,
-    updatedAt: new Date(),
-  };
-
-  const [updated] = await db
-    .update(templates)
-    .set(updateData)
-    .where(eq(templates.id, templateId))
-    .returning();
-
-  return c.json(updated);
+  const template = await updateTemplateMetadata(
+    c.req.param("templateId"),
+    user.id,
+    c.req.valid("json")
+  );
+  return template ? c.json(template) : c.json({ error: "Template not found" }, 404);
 });
 
 templatesApp.delete("/:templateId", async (c) => {
+  if (c.req.param("guildId")) return c.json({ error: "Template not found" }, 404);
   const user = requireUser(c);
-  const guildId = c.req.param("guildId")!;
-  const templateId = c.req.param("templateId")!;
-
-  const [existing] = await db.select().from(templates).where(eq(templates.id, templateId));
-
-  if (!existing) {
-    return c.json({ error: "Template not found" }, 404);
-  }
-
-  if (existing.guildId !== guildId) {
-    return c.json({ error: "Template not found" }, 404);
-  }
-
-  if (existing.authorId !== user.id) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
-
-  await db.delete(templates).where(eq(templates.id, templateId));
-
-  return c.json({ deleted: true });
+  const template = await ownedTemplate(c.req.param("templateId"), user.id);
+  if (!template) return c.json({ error: "Template not found" }, 404);
+  await db.delete(templates).where(eq(templates.id, template.id));
+  return c.body(null, 204);
 });
 
-function buildServerState(guildId: string): ServerState {
-  const cache = guildCache.get(guildId);
-  const guild = botClient.guilds.cache.get(guildId);
-  return {
-    guildId,
-    guildName: guild?.name ?? guildId,
-    memberCount: guild?.memberCount ?? 0,
-    channels: cache ? Array.from(cache.channels.values()) : [],
-    roles: cache ? Array.from(cache.roles.values()) : [],
-    overwrites: cache ? Array.from(cache.permissions.values()) : [],
-    memberRoles: cache
-      ? Array.from(cache.members.values()).map((m) => ({
-          memberId: m.id,
-          roleIds: m.roleIds,
-        }))
-      : [],
-  };
-}
-
-templatesApp.post("/:templateId/merge", async (c) => {
+templatesApp.post("/:templateId/fork", async (c) => {
+  if (c.req.param("guildId")) return c.json({ error: "Template not found" }, 404);
   const user = requireUser(c);
-  const guildId = c.req.param("guildId")!;
-  const templateId = c.req.param("templateId")!;
+  const template = await forkTemplate({
+    templateId: c.req.param("templateId"),
+    authorId: user.id,
+    id: randomUUID(),
+  });
+  return template ? c.json(template, 201) : c.json({ error: "Template not found" }, 404);
+});
 
-  const hasAccess = await userHasManageGuild(user.id, guildId);
-  if (!hasAccess) {
-    return c.json({ error: "Forbidden" }, 403);
+templatesApp.get("/:templateId/versions", async (c) => {
+  const template = await ownedTemplate(c.req.param("templateId"), requireUser(c).id);
+  if (!template) return c.json({ error: "Template not found" }, 404);
+  return c.json(
+    await db
+      .select()
+      .from(templateVersions)
+      .where(eq(templateVersions.templateId, template.id))
+      .orderBy(desc(templateVersions.version))
+  );
+});
+
+templatesApp.get("/:templateId/versions/:version", async (c) => {
+  const parsedVersion = versionParamSchema.safeParse({ version: c.req.param("version") });
+  if (!parsedVersion.success) return c.json({ error: "Invalid template version" }, 400);
+  const template = await ownedTemplate(c.req.param("templateId"), requireUser(c).id);
+  if (!template) return c.json({ error: "Template not found" }, 404);
+  const [version] = await db
+    .select()
+    .from(templateVersions)
+    .where(
+      and(
+        eq(templateVersions.templateId, template.id),
+        eq(templateVersions.version, parsedVersion.data.version)
+      )
+    );
+  return version ? c.json(version) : c.json({ error: "Template version not found" }, 404);
+});
+
+templatesApp.post("/:templateId/versions", zValidator("json", structureSchema), async (c) => {
+  if (c.req.param("guildId")) return c.json({ error: "Template not found" }, 404);
+  const user = requireUser(c);
+  try {
+    const template = await commitTemplateStructure({
+      templateId: c.req.param("templateId"),
+      authorId: user.id,
+      source: "manual",
+      ...c.req.valid("json"),
+    });
+    return template ? c.json(template) : c.json({ error: "Template not found" }, 404);
+  } catch (error) {
+    return conflictResponse(c, error);
   }
+});
 
-  // Load template
-  const [template] = await db.select().from(templates).where(eq(templates.id, templateId));
-
-  if (!template) {
-    return c.json({ error: "Template not found" }, 404);
+templatesApp.post(
+  "/:templateId/versions/:version/revert",
+  zValidator("json", revertSchema),
+  async (c) => {
+    if (c.req.param("guildId")) return c.json({ error: "Template not found" }, 404);
+    const parsedVersion = versionParamSchema.safeParse({ version: c.req.param("version") });
+    if (!parsedVersion.success) return c.json({ error: "Invalid template version" }, 400);
+    const user = requireUser(c);
+    try {
+      const template = await revertTemplateVersion({
+        templateId: c.req.param("templateId"),
+        authorId: user.id,
+        version: parsedVersion.data.version,
+        ...c.req.valid("json"),
+      });
+      return template ? c.json(template) : c.json({ error: "Template not found" }, 404);
+    } catch (error) {
+      return conflictResponse(c, error);
+    }
   }
+);
 
-  // Build prompt from template data
-  const structureText = JSON.stringify(template.structure, null, 2);
-  const userPrompt =
-    `Apply the "${template.name}" template to this server.\n\n` +
-    `Template description: ${template.description}\n\n` +
-    `Template structure:\n${structureText}\n\n` +
-    "Instructions:\n" +
-    "- Compare the template against the current server state\n" +
-    "- Adapt the template: rename items if names conflict, skip items " +
-    "that already exist with the right configuration\n" +
-    "- Use ask_user if you need clarification about which existing " +
-    "resources to reuse or rename\n" +
-    "- Preserve the template's intent even if exact names differ";
+templatesApp.get("/:templateId/turns", async (c) => {
+  const template = await ownedTemplate(c.req.param("templateId"), requireUser(c).id);
+  if (!template) return c.json({ error: "Template not found" }, 404);
+  return c.json(
+    await db
+      .select()
+      .from(templateAuthoringTurns)
+      .where(
+        and(
+          eq(templateAuthoringTurns.templateId, template.id),
+          eq(templateAuthoringTurns.authorId, template.authorId)
+        )
+      )
+      .orderBy(desc(templateAuthoringTurns.createdAt))
+  );
+});
 
-  // Build server state and compute fork hash
-  const serverState = buildServerState(guildId);
-  const forkStateHash = hashServerState(serverState as unknown as Record<string, unknown>);
-  const guildRules = await loadGuildRuleTexts(guildId);
-
-  // Insert conversation
-  const [conversation] = await db
-    .insert(conversations)
+templatesApp.post("/:templateId/turns", zValidator("json", authoringTurnSchema), async (c) => {
+  const user = requireUser(c);
+  const template = await ownedTemplate(c.req.param("templateId"), user.id);
+  if (!template) return c.json({ error: "Template not found" }, 404);
+  const body = c.req.valid("json");
+  let modelConfig: ConversationModelConfig | undefined;
+  if (body.modelConfig) {
+    try {
+      modelConfig = await resolveDeploymentModelConfig(body.modelConfig);
+    } catch (error) {
+      return c.json(
+        { error: error instanceof Error ? error.message : "Invalid model configuration" },
+        400
+      );
+    }
+  }
+  const [latest] = await db
+    .select()
+    .from(templateAuthoringTurns)
+    .where(
+      and(
+        eq(templateAuthoringTurns.templateId, template.id),
+        eq(templateAuthoringTurns.authorId, user.id)
+      )
+    )
+    .orderBy(desc(templateAuthoringTurns.createdAt));
+  const turnId = randomUUID();
+  const [turn] = await db
+    .insert(templateAuthoringTurns)
     .values({
-      guildId,
-      userId: user.id,
+      id: turnId,
+      templateId: template.id,
+      authorId: user.id,
+      prompt: body.prompt,
+      baseVersion: template.version,
+      messages: [
+        ...((latest?.messages ?? []) as Record<string, unknown>[]),
+        { role: "user", content: body.prompt },
+      ],
       status: "planning",
-      userPrompt,
-      messages: [],
-      forkStateHash,
     })
     .returning();
-
-  // Create planning session (same pattern as POST /conversations)
-  const ASK_USER_TIMEOUT_MS = 2 * 60 * 1000;
-
-  const session = new PlanningSession({
-    guildId,
-    conversationId: conversation.id,
-    userPrompt,
-    serverState,
-    forkStateHash,
-    guildRules,
+  const initialState = toTemplateDesiredState(
+    template.id,
+    template.name,
+    template.version,
+    template.structure
+  );
+  const session = new TemplateSession({
+    templateId: template.id,
+    turnId,
+    creatorId: user.id,
+    prompt: body.prompt,
+    initialState,
+    modelConfig,
+    messages: (latest?.messages ?? []) as never,
     emit: async (event) => {
-      emitConversationEvent(conversation.id, event);
-
-      if (event.type === "ask_user") {
-        const timeout = setTimeout(async () => {
-          const s = getSession(conversation.id);
-          if (s) {
-            s.cancel();
-            removeSession(conversation.id);
-            emitConversationEvent(conversation.id, {
-              type: "expired",
-              error: "Ask user response timed out after 2 minutes",
-            });
-            await db
-              .update(conversations)
-              .set({ status: "expired", updatedAt: new Date() })
-              .where(eq(conversations.id, conversation.id));
-          }
-        }, ASK_USER_TIMEOUT_MS);
-        setSessionTimeout(conversation.id, timeout);
-        await db
-          .update(conversations)
-          .set({ status: "waiting_for_user", updatedAt: new Date() })
-          .where(eq(conversations.id, conversation.id));
-      }
-
-      if (event.type === "completed") {
-        // Keep the session alive after planning completes so the user can
-        // review, iterate, and execute the resulting plan (matches POST /conversations).
-        await db
-          .update(conversations)
-          .set({ status: "completed", updatedAt: new Date() })
-          .where(eq(conversations.id, conversation.id));
-      }
-
+      if (event.type === "ask_user") await persistTurn(turnId, session, "waiting_for_user");
       if (event.type === "error") {
-        removeSession(conversation.id);
-        await db
-          .update(conversations)
-          .set({ status: "error", updatedAt: new Date() })
-          .where(eq(conversations.id, conversation.id));
+        await persistTurn(turnId, session, "error", { error: event.error });
       }
+      emitTemplateEvent(turnId, event);
     },
-    onTurnComplete: async (sess) => {
-      const snapshot = sess.store.snapshot();
-      const version = sess.store.getState().version;
-
-      await db.insert(planIterations).values({
-        conversationId: conversation.id,
-        version,
-        type: "llm_generated",
-        desiredState: snapshot as unknown as Record<string, unknown>,
+    onStateChange: async (current) => {
+      await persistTurn(turnId, current, current.status);
+    },
+    onComplete: async (current, changed) => {
+      if (changed) {
+        await commitTemplateStructure({
+          templateId: template.id,
+          authorId: user.id,
+          structure: fromTemplateDesiredState(current.getDesiredState()),
+          expectedVersion: template.version,
+          source: "ai",
+          authoringTurnId: turnId,
+        });
+      }
+      await persistTurn(turnId, current, "completed", {
+        summary: current.lastSummary,
+        error: null,
       });
-
-      sess.store.getState().version += 1;
-
-      await db
-        .update(conversations)
-        .set({
-          messages: sess.getMessages() as unknown as Record<string, unknown>[],
-          updatedAt: new Date(),
-        })
-        .where(eq(conversations.id, conversation.id));
     },
   });
-
-  setSession(conversation.id, session);
-
-  session.start().catch((err) => {
-    logger.error(err, "[templates] Planning session error");
-    removeSession(conversation.id);
-  });
-
-  return c.json({ conversationId: conversation.id }, 201);
+  setTemplateSession(turnId, user.id, template.id, session);
+  void session
+    .start()
+    .catch(() => undefined)
+    .finally(() => {
+      if (["completed", "error", "cancelled"].includes(session.status)) {
+        removeTemplateSession(turnId, user.id, template.id);
+      }
+    });
+  return c.json(turn, 202);
 });
+
+templatesApp.get("/:templateId/turns/:turnId/stream", async (c) => {
+  const user = requireUser(c);
+  const turn = await ownedTurn(c.req.param("templateId"), c.req.param("turnId"), user.id);
+  if (!turn) return c.json({ error: "Template turn not found" }, 404);
+  return streamSSE(c, async (stream) => {
+    const turnId = turn.id;
+    let terminalDelivered = false;
+    await stream.writeSSE({
+      event: "status",
+      data: JSON.stringify({ turnId, status: "streaming_ready" }),
+    });
+    const unsubscribe = subscribeToTemplate(turnId, (event) => {
+      if (["completed", "error", "cancelled", "expired"].includes(event.type)) {
+        terminalDelivered = true;
+      }
+      void stream.writeSSE({
+        event: event.type,
+        data: JSON.stringify({
+          turnId,
+          toolName: event.toolName,
+          params: event.params,
+          result: event.result,
+          question: event.question,
+          options: event.options,
+          multiSelect: event.multiSelect,
+          allowCustom: event.allowCustom,
+          summary: event.summary,
+          error: event.error,
+        }),
+      });
+    });
+    if (!terminalDelivered) {
+      const terminalEvent = persistedTerminalEvent(turn);
+      if (terminalEvent) {
+        await stream.writeSSE({
+          event: terminalEvent.type,
+          data: JSON.stringify({ turnId, ...terminalEvent }),
+        });
+      }
+    }
+    stream.onAbort(unsubscribe);
+    while (!stream.aborted) {
+      await stream.sleep(30000);
+      await stream.writeSSE({
+        event: "heartbeat",
+        data: JSON.stringify({ timestamp: Date.now() }),
+      });
+    }
+    unsubscribe();
+  });
+});
+
+templatesApp.post(
+  "/:templateId/turns/:turnId/answer",
+  zValidator("json", answerSchema),
+  async (c) => {
+    const user = requireUser(c);
+    const templateId = c.req.param("templateId");
+    const turnId = c.req.param("turnId");
+    const turn = await ownedTurn(templateId, turnId, user.id);
+    if (!turn) return c.json({ error: "Template turn not found" }, 404);
+    const session = getTemplateSession(turnId, user.id, templateId);
+    if (!session) return c.json({ error: "Template turn is not active" }, 404);
+    await db
+      .update(templateAuthoringTurns)
+      .set({ status: "planning", updatedAt: new Date() })
+      .where(eq(templateAuthoringTurns.id, turnId));
+    await session.resume(c.req.valid("json").answer);
+    return c.json({ resumed: true });
+  }
+);
+
+function persistedTerminalEvent(turn: {
+  status: string;
+  summary?: string | null;
+  error?: string | null;
+}) {
+  if (turn.status === "completed")
+    return { type: "completed" as const, summary: turn.summary ?? "" };
+  if (turn.status === "error")
+    return { type: "error" as const, error: turn.error ?? "Template planning failed" };
+  if (turn.status === "cancelled") return { type: "cancelled" as const };
+  if (turn.status === "expired") return { type: "expired" as const };
+  return undefined;
+}
+
+templatesApp.post("/:templateId/turns/:turnId/cancel", async (c) => {
+  const user = requireUser(c);
+  const templateId = c.req.param("templateId");
+  const turnId = c.req.param("turnId");
+  const turn = await ownedTurn(templateId, turnId, user.id);
+  if (!turn) return c.json({ error: "Template turn not found" }, 404);
+  const session = getTemplateSession(turnId, user.id, templateId);
+  if (session) {
+    session.cancel();
+    await persistTurn(turnId, session, "cancelled");
+    emitTemplateEvent(turnId, { type: "cancelled" });
+    removeTemplateSession(turnId, user.id, templateId);
+  } else {
+    await db
+      .update(templateAuthoringTurns)
+      .set({ status: "cancelled", updatedAt: new Date() })
+      .where(eq(templateAuthoringTurns.id, turnId));
+    emitTemplateEvent(turnId, { type: "cancelled" });
+  }
+  return c.json({ cancelled: true });
+});
+
+templatesApp.post("/:templateId/merge", (c) =>
+  c.json({ error: "Template merge is no longer supported." }, 410)
+);
 
 export default templatesApp;

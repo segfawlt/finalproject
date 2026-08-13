@@ -28,6 +28,8 @@ import { logger } from "../../utils/logger";
 import type { AppVariables } from "../../types";
 import type { ServerState, PlanData, DesiredState } from "@repo/shared";
 import { hashServerState, getTool, evaluateAssumptions, fork } from "@repo/shared";
+import type { ConversationModelConfig } from "../../planning/model-config";
+import { resolveDeploymentModelConfig } from "../../planning/deployment-model-config";
 
 const plansApp = new Hono<{ Variables: AppVariables }>();
 
@@ -37,6 +39,22 @@ const plansApp = new Hono<{ Variables: AppVariables }>();
 const SNAPSHOT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 const executionAbortControllers = new Map<string, AbortController>();
+
+async function getPersistedConversationModelConfig(
+  conversationId: string
+): Promise<ConversationModelConfig> {
+  const [conversation] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, conversationId));
+  if (conversation?.modelId) {
+    return resolveDeploymentModelConfig({
+      modelId: conversation.modelId,
+      reasoning: (conversation.reasoning ?? undefined) as ConversationModelConfig["reasoning"],
+    });
+  }
+  return resolveDeploymentModelConfig();
+}
 
 function buildServerState(guildId: string): ServerState {
   const cache = guildCache.get(guildId);
@@ -206,11 +224,13 @@ plansApp.post("/:planId/execute", async (c) => {
   }
 
   // 2. Stale detection — compare conversation forkStateHash against current state
+  let conversation: typeof conversations.$inferSelect | undefined;
   if (plan.conversationId) {
     const [conv] = await db
       .select()
       .from(conversations)
       .where(eq(conversations.id, plan.conversationId));
+    conversation = conv;
     if (conv) {
       const freshState = buildServerState(guildId);
       const currentHash = hashServerState(freshState as unknown as Record<string, unknown>);
@@ -275,7 +295,12 @@ plansApp.post("/:planId/execute", async (c) => {
     })
     .flat();
 
-  const assumptionResults = evaluateAssumptions(allAssumptions, serverState);
+  const plannedSymbols = new Set(
+    Object.entries(diffResult.symbolTable)
+      .filter(([, entry]) => entry.definingStepIndex >= 0)
+      .map(([symbol]) => symbol)
+  );
+  const assumptionResults = evaluateAssumptions(allAssumptions, serverState, plannedSymbols);
   const failedAssumptions = assumptionResults.filter((r) => !r.passed);
 
   if (failedAssumptions.length > 0) {
@@ -305,6 +330,12 @@ plansApp.post("/:planId/execute", async (c) => {
     desiredState,
     guildId,
     status: plan.status as "draft" | "validated" | "approved",
+    modelConfig: conversation?.modelId
+      ? {
+          modelId: conversation.modelId,
+          reasoning: (conversation.reasoning ?? undefined) as ConversationModelConfig["reasoning"],
+        }
+      : undefined,
   });
 
   if (!validationResult.passed) {
@@ -552,7 +583,12 @@ plansApp.post("/:planId/replan", async (c) => {
     const tool = getTool(step.toolName);
     return tool.getAssumptions ? tool.getAssumptions(step.params) : [];
   });
-  const failedAssumptions = evaluateAssumptions(assumptions, currentState)
+  const plannedSymbols = new Set(
+    Object.entries(diffResult.symbolTable)
+      .filter(([, entry]) => entry.definingStepIndex >= 0)
+      .map(([symbol]) => symbol)
+  );
+  const failedAssumptions = evaluateAssumptions(assumptions, currentState, plannedSymbols)
     .filter((result) => !result.passed)
     .map((result) => result.message);
   const conflicts = buildConflictDetails(diffResult.conflicts, failedAssumptions);
@@ -587,6 +623,7 @@ plansApp.post("/:planId/replan", async (c) => {
     messages: conversation.messages as unknown as LLMMessage[],
     repairPrompt,
     guildRules,
+    getModelConfig: () => getPersistedConversationModelConfig(conversation.id),
     emit: async (event) => {
       emitConversationEvent(conversation.id, event);
       if (event.type === "ask_user") {

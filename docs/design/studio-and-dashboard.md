@@ -2,145 +2,99 @@
 
 ## Studio (Chat-Native Web Clone)
 
-A React-based Discord-like UI focused on server configuration (not messaging).
-Client-side SPA (Vite + React), no SSR needed.
+The React SPA is a Discord-like configuration UI, not a messaging client. Server
+Studio lets the user describe a server change in natural language, inspect the
+declarative desired state, revise it, and approve execution.
 
-The Studio is built around a **chat-native** layout: a collapsible history
-sidebar on the left, a chat area in the middle, and a tabbed preview panel
-on the right. The user types a prompt, the LLM builds the desired state, and
-the Discord clone in the right panel updates live. The user decides depth:
-click Approve immediately for quick execution, or iterate with more
-prompts and manual edits before approving.
+Server Studio and Template Studio share a three-column shell:
 
-### Layout (3-column)
-
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
-│ Top header: guild name, back-to-picker, Templates / Settings │
-├──────────┬──────────────────────────┬─────────────────────────┤
-│ History  │  Chat conversation       │ Right panel (tabs):     │
-│ sidebar  │                          │ [Server][Desired][+...]  │
-│ (collapse│  Welcome OR messages     │                         │
-│ -ible)   │  + docked input          │  Closable tabs:         │
-│          │                          │  Channel detail, Roles, │
-│ [+ New   │  Inline action buttons   │  Members, Templates,    │
-│   chat]  │  on the assistant's      │  Drift                  │
-│          │  final message.          │                         │
-│ Today    │                          │  (overflow › if many)    │
-│ ── conv1 │                          │                         │
-└──────────┴──────────────────────────┴─────────────────────────┘
+│ Contextual header: route identity and panel controls         │
+├──────────────┬────────────────────────┬──────────────────────┤
+│ Workspace    │ Route content          │ Server/template       │
+│ navigation   │ chat or authoring      │ preview               │
+│ + history    │ composer and transcript│                      │
+└──────────────┴────────────────────────┴──────────────────────┘
 ```
 
-- The **history sidebar** (`ConversationSidebar`) lists past conversations
-  grouped by Today / Yesterday / Earlier, with a New Chat button at the top.
-- The **chat area** (`ChatArea`) renders the conversation as a stream of
-  bubbles: user prompt (right-aligned accent), assistant planning bubble
-  (with a collapsed planning log), ask_user bubble (with options + custom
-  input), completed bubble (summary + DesiredStateView + inline Approve /
-  Edit / Cancel actions), executing bubble (live step log), executed
-  bubble (Rollback / New plan), execute_failed bubble. A Revise input is
-  docked at the bottom when the plan is ready.
-- The **right panel** (`RightPanel`) is a VSCode-style tab system. The
-  Server tab is always present and shows the current Discord state. The
-  Desired tab appears when the active conversation has produced a desired
-  state. The "+" popover adds closable tabs (Roles, Members, Templates).
-  Clicking a channel in the Server tab opens a `channel:<id>` tab with the
-  channel detail (settings + permission overwrites table).
+### Persistent Workspace Navigation
 
-### Welcome state
+`WorkspaceSidebar` is shared across Studio routes. It contains product navigation,
+an active-state `Studio` link, a `Templates` link, and a prominent `New chat` action.
+For an active server it loads `Recent conversations`, grouped as Today, Yesterday,
+and Earlier. Without an active server it keeps the section heading and shows an
+empty state rather than using another guild's history.
 
-When there's no active conversation, the chat area shows `WelcomeScreen`:
-curated suggestion cards (staff channels, gaming layout, foundational
-roles, channel permission fix, audit) plus a freeform textarea. Clicking a
-suggestion or sending custom text calls `createConversation(prompt)`.
+The active server identity is pinned in the footer and opens the server picker.
+Authenticated account access and sign-out remain in that footer area. The active
+server selection is retained locally so New chat can return to its fresh composer.
 
-### Plan Preview
+### Shared Resizable Shell
 
-The right panel's Desired tab is the live preview. The Discord clone
-renders categories / channels / roles with visual diff highlighting
-against the current Discord state. The user can click into any channel
-to see its full settings + permission overwrites.
+The left navigation and right preview panels resize independently through draggable,
+keyboard-accessible separators. Each width is clamped so the flexible center remains
+usable. Each panel also has its own hide/show control; hiding removes its column,
+while a restore control remains in the center header. Double-clicking a separator
+restores that panel's default width.
 
-During planning, the chat shows:
+Panel widths and visibility are persisted in `localStorage` under the shared Studio
+shell key. Invalid stored preferences fall back to defaults. On narrow screens,
+separators are disabled and the panels become independent route-appropriate overlays;
+desktop preferences are retained for later desktop use.
 
-- **Planning bubble** with a left-border accent and a collapsed
-  `<details>` listing every tool call as it streams in. The bubble label
-  is "Planning…" while the LLM thinks, "Planned" after completion.
+### Server Studio Content
 
-### Inline actions (Cursor-style)
+The center chat area shows the welcome state or a conversation transcript with user,
+assistant planning, `ask_user`, completed, executing, executed, and failure states.
+The shared composer starts a fresh conversation or revises a ready plan. The right
+panel contains the current Server view, desired-state diff, channel details, roles,
+members, and template context tabs.
 
-When the plan is ready, the assistant's "Plan ready" bubble carries
-inline action buttons at the bottom:
+When a plan is ready, Approve executes it unless drift has made the plan stale. Edit
+creates a manual desired-state iteration and Cancel stops planning. Execution offers
+Rollback or New plan. Iteration history is available in a modal, and external Discord
+changes appear through the drift indicator with a Re-fork action.
 
-- **Approve** — executes the plan. Disabled when the server has changed
-  externally since planning started (drift lockout, see below).
-- **Edit** — enters the manual-edit mode (inline inputs on the desired
-  state rows).
-- **Cancel** — cancels the planning session.
+### Templates in Server Studio
 
-When execution finishes, the "Execution complete" bubble carries
-**Rollback** and **New plan**. The execute_failed bubble carries a
-**Start over** button.
+`TemplatesTab` browses the creator's available global templates with search and
+structure counts. `Use` and `Stop using` attach or detach conversation context, and
+links point to the canonical template viewer. `TemplatePanel` provides the same
+in-conversation context management. No Merge action is presented.
 
-The docked Revise input at the bottom of the chat area is always present
-when the plan is ready. Sending a new prompt there continues the
-conversation with a new iteration.
+## Template Studio
 
-### Iteration history popout
+Template Studio is at `/templates/:templateId/studio`. It uses the same persistent
+workspace navigation and independent shell panels. The center contains template
+metadata, the natural-language authoring transcript, status/error messages, and the
+composer. The right panel shows the live category/channel and role structure.
 
-A small "History (N)" button in the chat toolbar opens
-`IterationHistoryModal` — a focused modal with a vertical timeline of
-every iteration (version, type badge, timestamp). Click an iteration to
-preview its DesiredState, Revert to make it current, or close the modal.
+Natural-language authoring is planning-only and auto-commits a changed result as one
+immutable AI version. It cannot execute against Discord. Direct structure editing is
+explicit: edit creates a local draft, Save structure creates one manual version, and
+Cancel discards it. Historical versions are read-only previews; Revert creates a new
+revert version. Dirty drafts block actions that would replace them until the user
+saves, discards, or stays.
 
-### Drift detection
-
-The studio subscribes to `/api/guilds/:guildId/drift/stream`. When the
-server changes externally (e.g. someone edits Discord directly), a
-`DriftIndicator` toast surfaces in the top-right with a "Re-fork" button
-and flips a per-guild `stale` flag in the store. While `stale` is true, the
-Approve button is disabled (with a tooltip) and the server enforces the
-same on its end (returns 409 on stale approve).
-
-### Manual edit mode
-
-When the user clicks Edit on the completed bubble, the DesiredStateView
-swaps read-only rows for inline inputs. Save posts to
-`/conversations/:id/edit-state` and re-fetches the iteration list (a new
-"manual_edit" iteration is appended). Cancel discards the working copy.
-
-## Templates
-
-Templates are browsable in three places, all backed by the same API:
-
-- **`TemplatesTab`** — a real in-panel browser in the Studio right panel
-  (closable tab). Lists templates with search, channel/role counts, and a
-  Merge button that injects the template's structure into the current
-  desired state. Save-as-template from a completed plan lives here too
-  (`SaveTemplateModal`).
-- **`TemplatePanel`** — the in-conversation toolbar UI for in-context
-  template injection: browse, add to context, remove.
-- **`/templates/:guildId`** (`routes/Templates.tsx`) + editor
-  (`routes/TemplateEditor.tsx`) — the standalone library page, with an
-  editable template structure in the editor (Fork & Edit, Save).
+The global library is `/templates` and the read-only viewer is
+`/templates/:templateId`. The viewer supports creator-only Edit in Template Studio,
+Fork, and Delete actions. Blank creation, fork, metadata editing, version history,
+and immediate deletion are global template lifecycle operations.
 
 ## Settings
 
-Server settings live in the Studio right panel via `SettingsTab` (closable
-tab), not a separate Dashboard:
+Server rules and deployment model configuration are available through the Studio
+settings dialog. Plan history and rollback are reached from the conversation's
+iteration history.
 
-- Server rules management (per-guild CRUD via `/api/guilds/:guildId/rules`)
-- Basic bot settings (intents, permissions, preview server)
-
-Plan history + rollback is reachable from the chat's iteration history.
-
-**Deferred (not Phase 1):**
+## Deferred
 
 - Full admin management tool
 - Subscription/billing
 - Detailed audit logs
 - User management
+- File-based, intent-matched guidance
 
-> The standalone `Dashboard.tsx` and `Setup.tsx` pages were retired during
-> the Studio consolidation — the files remain on disk (stashed, unrouted)
-> and `/dashboard` + `/setup` redirect to `/studio`.
+The standalone `Dashboard.tsx` and `Setup.tsx` pages are retired and unrouted. Their
+files remain on disk, while `/dashboard` and `/setup` redirect to `/studio`.

@@ -9,7 +9,6 @@ export type TabType =
   | "roles"
   | "members"
   | "templates"
-  | "settings"
   | "drift";
 
 export interface Tab {
@@ -45,8 +44,6 @@ function defaultTitle(type: TabType, channelId?: string): string {
       return "Members";
     case "templates":
       return "Templates";
-    case "settings":
-      return "Settings";
     case "drift":
       return "Drift";
   }
@@ -71,6 +68,18 @@ export interface ActiveTemplate {
 }
 
 // ── Store ──────────────────────────────────────────────────────────────────
+
+const ACTIVE_GUILD_KEY = "active-guild-id";
+
+function readActiveGuild(): string | null {
+  return typeof window === "undefined" ? null : window.localStorage.getItem(ACTIVE_GUILD_KEY);
+}
+
+function persistActiveGuild(guildId: string | null): void {
+  if (typeof window === "undefined") return;
+  if (guildId) window.localStorage.setItem(ACTIVE_GUILD_KEY, guildId);
+  else window.localStorage.removeItem(ACTIVE_GUILD_KEY);
+}
 
 interface StudioState {
   // Guild
@@ -117,8 +126,11 @@ interface StudioState {
 
 export const useStudioStore = create<StudioState>((set) => ({
   // Guild
-  selectedGuild: null,
-  setSelectedGuild: (guildId) => set({ selectedGuild: guildId }),
+  selectedGuild: readActiveGuild(),
+  setSelectedGuild: (guildId) => {
+    persistActiveGuild(guildId);
+    set({ selectedGuild: guildId });
+  },
 
   // Selection
   selectedItems: [],

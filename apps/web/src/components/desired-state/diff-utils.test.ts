@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { diffChannels, diffRoles, diffMemberRoles, computeFullDiff } from "./diff-utils";
+import {
+  diffChannels,
+  diffRoles,
+  diffMemberRoles,
+  computeFullDiff,
+  summarizeFullDiff,
+} from "./diff-utils";
 import type { ChannelBase, Role, MemberRoleAssignment, ServerState } from "./types";
 
 function ch(overrides: Partial<ChannelBase> & { id: string; name: string }): ChannelBase {
@@ -156,5 +162,29 @@ describe("computeFullDiff", () => {
     expect(result!.channels.byKey.get("$sym-1")).toBe("new");
     expect(result!.channels.removed[0].id).toBe("c1");
     expect(result!.roles.byKey.get("r1")).toBe("unchanged");
+  });
+
+  it("summarizes additions, modifications, and removals across the full diff", () => {
+    const current: ServerState = {
+      guildId: "g1",
+      guildName: "Test",
+      memberCount: 1,
+      channels: [ch({ id: "c1", name: "renamed" }), ch({ id: "c2", name: "deleted" })],
+      roles: [role({ id: "r1", name: "Changed" })],
+      overwrites: [],
+      memberRoles: [member("u1", ["r1"])],
+    };
+    const desired = {
+      channels: {
+        c1: ch({ id: "c1", name: "renamed-again" }),
+        $new: ch({ id: "$new", name: "new" }),
+      },
+      roles: { r1: role({ id: "r1", name: "Changed" }) },
+      overwrites: {},
+      memberRoles: { u1: member("u1", ["r1", "r2"]) },
+    };
+
+    const diff = computeFullDiff(desired, current, []);
+    expect(summarizeFullDiff(diff)).toEqual({ added: 1, modified: 2, removed: 1 });
   });
 });

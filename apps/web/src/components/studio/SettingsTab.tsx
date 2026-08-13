@@ -11,7 +11,7 @@ interface Rule {
 }
 
 /**
- * Settings tab for the Studio right panel. Hosts per-guild rules —
+ * Server rules section used by the Studio settings dialog. Hosts per-guild rules —
  * constraints the planner must respect during validation. Formerly
  * lived on the Dashboard's RulesSection; moved here when the Dashboard
  * route was retired.
@@ -246,4 +246,3 @@ export default function SettingsTab({ guildId }: { guildId: string }) {
     </div>
   );
 }
-

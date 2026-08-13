@@ -108,7 +108,7 @@ describe("executePlan — per-step deadline", () => {
     expect(events.some((e) => e.type === "plan_failed")).toBe(true);
   });
 
-  it("fails a step that exceeds its deadline after exhausting retries", async () => {
+  it("fails a step that exceeds its deadline without retrying an uncertain mutation", async () => {
     vi.useFakeTimers();
     try {
       let calls = 0;
@@ -134,14 +134,45 @@ describe("executePlan — per-step deadline", () => {
         stepTimeoutMs: 100,
       });
 
-      // Drive the deadline timeouts + backoff delays (4 attempts total).
-      await vi.advanceTimersByTimeAsync(60_000);
+      // Drive the single deadline. A timed-out Discord request may still settle remotely.
+      await vi.advanceTimersByTimeAsync(100);
       const result = await promise;
 
       expect(result.success).toBe(false);
-      expect(calls).toBe(4); // 1 initial + MAX_RETRIES (3)
-      expect(events.filter((e) => e.type === "step_retry")).toHaveLength(3);
+      expect(calls).toBe(1);
+      expect(events.filter((e) => e.type === "step_retry")).toHaveLength(0);
       expect(events.some((e) => e.type === "plan_failed")).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry a timed-out mutation that may have completed remotely", async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      const mockCtx: ExecuteContext = {
+        guildId: "g1",
+        addRoleToMember: () => {
+          calls++;
+          return new Promise<void>(() => {});
+        },
+      } as unknown as ExecuteContext;
+
+      const promise = executePlan({
+        planId: "plan-1",
+        steps: [makeStep()],
+        symbolTable: {},
+        ctx: mockCtx,
+        emit: async () => {},
+        stepTimeoutMs: 100,
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+      const result = await promise;
+
+      expect(result.success).toBe(false);
+      expect(calls).toBe(1);
     } finally {
       vi.useRealTimers();
     }

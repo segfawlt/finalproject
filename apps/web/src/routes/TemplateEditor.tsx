@@ -64,6 +64,7 @@ interface TemplateDetail {
 export default function TemplateEditor() {
   const { guildId, templateId } = useParams<{ guildId: string; templateId: string }>();
   const navigate = useNavigate();
+  const templateApi = guildId ? `/api/guilds/${guildId}/templates` : "/api/templates";
 
   const [template, setTemplate] = useState<TemplateDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,7 +85,7 @@ export default function TemplateEditor() {
     if (!guildId || !templateId) return;
     setLoading(true);
     setError("");
-    apiFetch(`/api/guilds/${guildId}/templates/${templateId}`)
+    apiFetch(`${templateApi}/${templateId}`)
       .then(async (res) => {
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -101,15 +102,15 @@ export default function TemplateEditor() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
-  }, [guildId, templateId]);
+  }, [templateApi, templateId]);
 
   async function save() {
-    if (!guildId || !templateId || !template) return;
+    if (!templateId || !template) return;
     if (saving) return;
     setSaving(true);
     setError("");
     try {
-      const res = await apiFetch(`/api/guilds/${guildId}/templates/${templateId}`, {
+      const res = await apiFetch(`${templateApi}/${templateId}`, {
         method: "PUT",
         body: {
           name,
@@ -135,20 +136,20 @@ export default function TemplateEditor() {
   }
 
   async function deleteTemplate() {
-    if (!guildId || !templateId) return;
+    if (!templateId) return;
     if (!window.confirm(`Delete template "${name}"?`)) return;
     if (deleting) return;
     setDeleting(true);
     setError("");
     try {
-      const res = await apiFetch(`/api/guilds/${guildId}/templates/${templateId}`, {
+      const res = await apiFetch(`${templateApi}/${templateId}`, {
         method: "DELETE",
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error || "Delete failed");
       }
-      navigate(`/templates/${guildId}`);
+      navigate(guildId ? `/templates/${guildId}` : "/templates");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -157,13 +158,13 @@ export default function TemplateEditor() {
   }
 
   async function fork() {
-    if (!guildId || !template) return;
+    if (!template) return;
     if (forking) return;
     setForking(true);
     setError("");
     try {
       const newId = `${template.id}-fork-${Date.now()}`;
-      const res = await apiFetch(`/api/guilds/${guildId}/templates`, {
+      const res = await apiFetch(templateApi, {
         method: "POST",
         body: {
           id: newId,
@@ -180,7 +181,7 @@ export default function TemplateEditor() {
         throw new Error(data.error || "Fork failed");
       }
       const created = (await res.json()) as TemplateDetail;
-      navigate(`/templates/${guildId}/${created.id}`);
+      navigate(`/templates/studio/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -194,12 +195,12 @@ export default function TemplateEditor() {
   }
 
   async function saveStructure() {
-    if (!guildId || !templateId || !edit.editableState) return;
+    if (!templateId || !edit.editableState) return;
     if (savingStructure) return;
     setSavingStructure(true);
     setError("");
     try {
-      const res = await apiFetch(`/api/guilds/${guildId}/templates/${templateId}`, {
+      const res = await apiFetch(`${templateApi}/${templateId}`, {
         method: "PUT",
         body: { structure: edit.editableState.active },
       });
@@ -219,9 +220,7 @@ export default function TemplateEditor() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center text-shell-text-muted">
-        Loading…
-      </div>
+      <div className="flex-1 flex items-center justify-center text-shell-text-muted">Loading…</div>
     );
   }
 
@@ -362,7 +361,9 @@ export default function TemplateEditor() {
           <div className="p-3 bg-shell-canvas border border-shell-border rounded max-h-[32rem] overflow-auto">
             <DesiredStateView
               desiredState={
-                edit.editing ? edit.editableState : wrapStructure(template.structure, template.name, template.version)
+                edit.editing
+                  ? edit.editableState
+                  : wrapStructure(template.structure, template.name, template.version)
               }
               editing={edit.editing}
               onChannelChange={edit.patchChannel}

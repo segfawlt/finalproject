@@ -1,0 +1,82 @@
+<style>
+  @property --ga { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+  @property --gao { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+  @property --gp { syntax: "<percentage>"; initial-value: 5%; inherits: false; }
+  @property --gs { syntax: "<color>"; initial-value: white; inherits: false; }
+
+  .shiny-preview { max-width: 860px; margin: 32px auto 0; color: #f5f5f5; }
+  .shiny-preview h1 { font-size: 42px; letter-spacing: -0.04em; margin-bottom: 10px; }
+  .shiny-preview .lede { color: #85858d; max-width: 560px; margin-bottom: 38px; }
+
+  .shiny-card { background: #0c0c0e; border: 1px solid #24242a; border-radius: 18px; padding: 10px; box-shadow: 0 18px 60px rgba(0,0,0,.3); }
+
+  .shiny-row {
+    --hl: #6d5cff;
+    --hs: #8b7cff;
+    --dur: 3s;
+    isolation: isolate;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    border-radius: 12px;
+    margin: 4px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    border: 1px solid transparent;
+    color: #f5f5f5;
+    background: linear-gradient(#0c0c0e, #0c0c0e) padding-box,
+      conic-gradient(
+        from calc(var(--ga) - var(--gao)),
+        transparent,
+        var(--hl) var(--gp),
+        var(--gs) calc(var(--gp) * 2),
+        var(--hl) calc(var(--gp) * 3),
+        transparent calc(var(--gp) * 4)
+      ) border-box;
+    transition: var(--dur) cubic-bezier(0.25, 1, 0.5, 1);
+    transition-property: --gao, --gp, --gs;
+  }
+  .shiny-row::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset-inline-start: 50%;
+    inset-block-start: 50%;
+    translate: -50% -50%;
+    width: 100%;
+    aspect-ratio: 1;
+    z-index: -1;
+    background: linear-gradient(-50deg, transparent, var(--hl), transparent);
+    mask-image: radial-gradient(circle at bottom, transparent 40%, black);
+    opacity: 0.6;
+  }
+  .shiny-row { animation: gradient-angle linear infinite var(--dur); animation-play-state: paused; }
+  .shiny-row:hover, .shiny-row.lit { --gp: 20%; --gao: 95deg; --gs: var(--hs); animation-play-state: running; }
+  @keyframes gradient-angle { to { --ga: 360deg; } }
+
+  .mark { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; background: #f5f5f5; color: #0c0c0e; font-weight: 700; }
+  .copy { flex: 1; min-width: 0; }
+  .copy strong { display: block; font-size: 16px; }
+  .copy span { color: #85858d; font-size: 13px; }
+  .arrow { color: #77777f; font-size: 20px; }
+  .shiny-note { text-align: center; color: #66666f; font-size: 12px; margin-top: 18px; }
+</style>
+<div class="shiny-preview">
+  <h1>Choose a server</h1>
+  <p class="lede">Select a Discord server to open its Studio workspace.</p>
+  <div class="shiny-card">
+    <div class="shiny-row lit" data-choice="a" onclick="this.classList.toggle('lit')">
+      <div class="mark">N</div>
+      <div class="copy"><strong>Northstar Community</strong><span>12 channels · 846 members</span></div>
+      <div class="arrow">↗</div>
+    </div>
+    <div class="shiny-row" data-choice="b" onclick="this.classList.toggle('lit')">
+      <div class="mark">C</div>
+      <div class="copy"><strong>Creators Circle</strong><span>8 channels · 214 members</span></div>
+      <div class="arrow">↗</div>
+    </div>
+  </div>
+  <p class="shiny-note">Hover a row (or click the lit one) — the conic gradient sweep runs. Northstar is already lit to preview the choose/loading state.</p>
+</div>

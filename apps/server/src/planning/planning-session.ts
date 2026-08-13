@@ -4,6 +4,8 @@ import type { ServerState, DesiredState, PlanResult } from "@repo/shared";
 import { formatGuildForLLM } from "../bot/formatter";
 import { buildLLMRequest } from "./llm-request";
 import { parseOpenRouterStream } from "./stream-parser";
+import { SERVER_PLANNER_PROMPT, SHARED_CORE_PROMPT } from "./system-prompts";
+import type { ConversationModelConfig } from "./model-config";
 
 export type PlanningStatus = "idle" | "planning" | "waiting_for_user" | "completed" | "error";
 
@@ -43,6 +45,28 @@ export interface LLMMessage {
     function: { name: string; arguments: string };
   }>;
   tool_call_id?: string;
+  /** Internal provenance only. Never included in provider requests. */
+  modelId?: string;
+  reasoning?: string;
+  reasoning_details?: unknown[];
+}
+
+/**
+ * Remove model-specific reasoning from history when a different provider model
+ * would receive it. The returned messages are safe to send to OpenRouter.
+ */
+export function prepareMessagesForModel(messages: LLMMessage[], modelId: string): LLMMessage[] {
+  return messages.map(({ modelId: messageModelId, ...message }) => {
+    if (message.role === "assistant" && messageModelId && messageModelId !== modelId) {
+      const {
+        reasoning: _reasoning,
+        reasoning_details: _reasoningDetails,
+        ...compatible
+      } = message;
+      return compatible;
+    }
+    return message;
+  });
 }
 
 interface PlanningSessionOptions {
@@ -59,6 +83,8 @@ interface PlanningSessionOptions {
   repairPrompt?: string;
   /** Authorised guild policy guidance included in every system-prompt rebuild. */
   guildRules?: string[];
+  /** Reads the conversation row at each completion so PATCH affects only the next one. */
+  getModelConfig?: () => Promise<ConversationModelConfig>;
 }
 
 /**
@@ -86,11 +112,18 @@ export class PlanningSession {
   lastReasoning = "";
   private readonly planningBaseState: ServerState;
   private readonly guildRules: string[];
+  private readonly getModelConfig: () => Promise<ConversationModelConfig>;
   private abortController: AbortController = new AbortController();
   private preTurnSnapshot: DesiredState | null = null;
 
   // Active templates injected into system prompt
-  activeTemplates: Array<{ id: string; name: string; summary: string }> = [];
+  activeTemplates: Array<{
+    id: string;
+    name: string;
+    description: string;
+    version: number;
+    structure: unknown;
+  }> = [];
 
   // Track ask_user pause state
   private pendingAskUser: {
@@ -111,6 +144,9 @@ export class PlanningSession {
     this.store = DesiredStateStore.fork(options.serverState);
     this.emit = options.emit;
     this.onTurnComplete = options.onTurnComplete;
+    this.getModelConfig =
+      options.getModelConfig ??
+      (async () => ({ modelId: process.env.LLM_MODEL ?? "openai/gpt-4o-mini" }));
 
     // Repair sessions retain prior conversation context but always replace the
     // old system message: the fresh server state is the only planning base.
@@ -120,7 +156,7 @@ export class PlanningSession {
 
     if (options.repairPrompt) {
       this.messages.push({ role: "user", content: options.repairPrompt });
-    } else if (priorMessages.length === 0) {
+    } else {
       this.messages.push({ role: "user", content: options.userPrompt });
     }
   }
@@ -137,11 +173,7 @@ export class PlanningSession {
     try {
       await this.runLoop();
     } catch (err) {
-      this.status = "error";
-      const error = err instanceof Error ? err.message : String(err);
-      logger.error({ conversationId: this.conversationId, error }, "[planning-session] failed");
-      await this.emit({ type: "error", error });
-      throw err;
+      await this.handleFailure(err);
     }
   }
 
@@ -169,10 +201,7 @@ export class PlanningSession {
     try {
       await this.runLoop();
     } catch (err) {
-      this.status = "error";
-      const error = err instanceof Error ? err.message : String(err);
-      await this.emit({ type: "error", error });
-      throw err;
+      await this.handleFailure(err);
     }
   }
 
@@ -189,10 +218,7 @@ export class PlanningSession {
     try {
       await this.runLoop();
     } catch (err) {
-      this.status = "error";
-      const error = err instanceof Error ? err.message : String(err);
-      await this.emit({ type: "error", error });
-      throw err;
+      await this.handleFailure(err);
     }
   }
 
@@ -205,7 +231,13 @@ export class PlanningSession {
   }
 
   /** Add a template to the conversation context. Rebuilds system prompt. */
-  addTemplate(template: { id: string; name: string; summary: string }): void {
+  addTemplate(template: {
+    id: string;
+    name: string;
+    description: string;
+    version: number;
+    structure: unknown;
+  }): void {
     if (this.activeTemplates.some((t) => t.id === template.id)) return;
     this.activeTemplates.push(template);
     this.rebuildSystemPrompt();
@@ -231,9 +263,7 @@ export class PlanningSession {
     this.status = "idle";
     this.abortController.abort(reason);
     // Revert to pre-turn snapshot if available
-    if (this.preTurnSnapshot) {
-      this.store.revert(this.preTurnSnapshot);
-    }
+    this.rollbackToTurnStart();
   }
 
   // ── Core Loop ──────────────────────────────────────────────────────────────
@@ -244,8 +274,9 @@ export class PlanningSession {
 
     while (this.status === "planning" && maxTurns-- > 0) {
       turnNumber += 1;
-      // Save snapshot before this turn for possible cancellation
-      this.preTurnSnapshot = this.store.snapshot();
+      // Keep the original snapshot across ask_user pause/resume and all turns
+      // in this completion so a later failure rolls back the whole turn.
+      if (!this.preTurnSnapshot) this.preTurnSnapshot = this.store.snapshot();
 
       logger.info(
         { conversationId: this.conversationId, turnNumber, maxTurns },
@@ -255,6 +286,8 @@ export class PlanningSession {
       await this.emit({ type: "turn_started" });
 
       const response = await this.callLLM();
+
+      if (this.status !== "planning") return;
 
       const turnResult = await this.processTurn(response);
 
@@ -268,10 +301,10 @@ export class PlanningSession {
       await this.onTurnComplete?.(this);
 
       if (turnResult === "completed") {
+        this.preTurnSnapshot = null;
         await this.emit({
           type: "completed",
           summary: this.lastSummary,
-          reasoning: this.lastReasoning,
         });
         return;
       }
@@ -283,6 +316,7 @@ export class PlanningSession {
     if (maxTurns <= 0) {
       this.status = "completed";
       this.lastSummary = "Planning reached maximum number of turns.";
+      this.preTurnSnapshot = null;
       await this.emit({
         type: "completed",
         summary: this.lastSummary,
@@ -291,22 +325,71 @@ export class PlanningSession {
   }
 
   private async processTurn(response: LLMMessage): Promise<"completed" | "ask_user" | "continue"> {
-    // If ask_user was triggered during streaming, status is already set
-    if (this.status === "waiting_for_user") {
-      return "ask_user";
-    }
+    this.messages.push(response);
 
     if (!response.tool_calls || response.tool_calls.length === 0) {
       // LLM stopped calling tools — planning complete
       this.status = "completed";
       this.lastSummary = response.content;
-      this.lastReasoning = response.content;
+      this.lastReasoning = response.reasoning ?? "";
       return "completed";
     }
 
-    // Tool calls were already dispatched during streaming.
-    // Just return continue so the loop proceeds.
+    for (const toolCall of response.tool_calls) {
+      const result = await this.dispatchTool(toolCall);
+      if (result.type === "ask_user") {
+        for (const skippedToolCall of response.tool_calls.slice(
+          response.tool_calls.indexOf(toolCall) + 1
+        )) {
+          this.messages.push({
+            role: "tool",
+            content: JSON.stringify({
+              error: "Skipped because planning is waiting for user input",
+            }),
+            tool_call_id: skippedToolCall.id,
+          });
+        }
+        this.status = "waiting_for_user";
+        this.pendingAskUser = {
+          toolCallId: toolCall.id,
+          question: result.question,
+          options: result.options,
+          multiSelect: result.multiSelect,
+          allowCustom: result.allowCustom,
+        };
+        await this.emit({
+          type: "ask_user",
+          question: result.question,
+          options: result.options,
+          multiSelect: result.multiSelect,
+          allowCustom: result.allowCustom,
+        });
+        return "ask_user";
+      }
+      if (result.type === "error") {
+        throw new Error(`Tool ${toolCall.function.name} failed: ${result.result.error}`);
+      }
+      this.messages.push({
+        role: "tool",
+        content: JSON.stringify(result.result),
+        tool_call_id: toolCall.id,
+      });
+    }
+
     return "continue";
+  }
+
+  private rollbackToTurnStart(): void {
+    if (this.preTurnSnapshot) this.store.revert(this.preTurnSnapshot);
+  }
+
+  private async handleFailure(err: unknown): Promise<never> {
+    this.rollbackToTurnStart();
+    this.status = "error";
+    const error = err instanceof Error ? err.message : String(err);
+    logger.error({ conversationId: this.conversationId, error }, "[planning-session] failed");
+    await this.emit({ type: "error", error });
+    throw err;
   }
 
   // ── Tool Dispatch ──────────────────────────────────────────────────────────
@@ -385,9 +468,10 @@ export class PlanningSession {
   private async callLLM(): Promise<LLMMessage> {
     const functions = getOpenAIFunctionDefinitions();
     this.trimMessages();
+    const modelConfig = await this.getModelConfig();
 
     const baseUrl = process.env.LLM_BASE_URL ?? "https://openrouter.ai/api/v1";
-    const model = process.env.LLM_MODEL ?? "openai/gpt-4o-mini";
+    const model = modelConfig.modelId;
     const apiKey = process.env.LLM_API_KEY;
     const isDevEnv = process.env.NODE_ENV !== "production";
 
@@ -404,8 +488,9 @@ export class PlanningSession {
       baseUrl,
       apiKey,
       model,
-      messages: this.messages,
+      messages: prepareMessagesForModel(this.messages, model),
       functions,
+      reasoning: modelConfig.reasoning,
       webAppUrl: process.env.WEB_APP_URL ?? "http://localhost:5173",
       abortSignal: this.abortController.signal,
     });
@@ -440,14 +525,7 @@ export class PlanningSession {
       throw new Error("LLM provider returned empty body");
     }
 
-    // Parse streaming response, dispatching tool calls incrementally
-    const result = await parseOpenRouterStream(fetchResponse.body, {
-      onToolCall: async (tc) => {
-        // Stop dispatching further tool calls if ask_user was triggered
-        if (this.status === "waiting_for_user") return;
-        await this.handleStreamedToolCall(tc);
-      },
-    });
+    const result = await parseOpenRouterStream(fetchResponse.body);
 
     logger.info(
       {
@@ -455,22 +533,26 @@ export class PlanningSession {
         status: fetchResponse.status,
         durationMs: Date.now() - fetchStart,
         toolCallCount: result.toolCalls.length,
-        thinkingChars: result.thinking.length,
+        contentChars: result.content.length,
+        reasoningChars: result.reasoning.length,
       },
       "[planning-session] LLM response received"
     );
 
-    // Emit turn completion with thinking text
+    // Only emit displayable assistant content. Provider reasoning remains in
+    // persisted history for compatible follow-up calls and plan audit data.
     await this.emit({
       type: "turn_completed",
-      summary: result.thinking.slice(0, 200),
-      reasoning: result.thinking,
+      summary: result.content.slice(0, 200),
     });
 
     // Build final LLM message from accumulated result
     return {
       role: "assistant",
-      content: result.thinking,
+      content: result.content,
+      modelId: model,
+      reasoning: result.reasoning || undefined,
+      reasoning_details: result.reasoningDetails.length ? result.reasoningDetails : undefined,
       tool_calls: result.toolCalls.map((tc) => ({
         id: tc.id,
         type: tc.type as "function",
@@ -480,56 +562,6 @@ export class PlanningSession {
         },
       })),
     };
-  }
-
-  private async handleStreamedToolCall(tc: {
-    id: string;
-    type: string;
-    function: { name: string; arguments: string };
-  }): Promise<void> {
-    const toolCall = {
-      id: tc.id,
-      type: "function" as const,
-      function: {
-        name: tc.function.name,
-        arguments: tc.function.arguments,
-      },
-    };
-
-    const result = await this.dispatchTool(toolCall);
-
-    // Push assistant message (contains tool call)
-    this.messages.push({
-      role: "assistant",
-      content: "",
-      tool_calls: [toolCall],
-    });
-
-    if (result.type === "ask_user") {
-      this.status = "waiting_for_user";
-      this.pendingAskUser = {
-        toolCallId: toolCall.id,
-        question: result.question,
-        options: result.options,
-        multiSelect: result.multiSelect,
-        allowCustom: result.allowCustom,
-      };
-      await this.emit({
-        type: "ask_user",
-        question: result.question,
-        options: result.options,
-        multiSelect: result.multiSelect,
-        allowCustom: result.allowCustom,
-      });
-      return;
-    }
-
-    // Add tool result
-    this.messages.push({
-      role: "tool",
-      content: JSON.stringify(result.result),
-      tool_call_id: toolCall.id,
-    });
   }
 
   private mockLLMResponse(): LLMMessage {
@@ -543,100 +575,45 @@ export class PlanningSession {
   // ── System Prompt ──────────────────────────────────────────────────────────
 
   private buildSystemPrompt(serverState: ServerState): string {
-    const lines: string[] = [];
+    const sections = [
+      SHARED_CORE_PROMPT,
+      SERVER_PLANNER_PROMPT,
+      [
+        "## Current Server State",
+        "<current_server_state>",
+        formatGuildForLLM(serverState.guildId, serverState.guildName, serverState.memberCount),
+        "</current_server_state>",
+      ].join("\n"),
+    ];
 
-    lines.push("You are a Discord server configuration assistant.");
-    lines.push("");
-    lines.push(
-      "Your job: help administrators configure their Discord server by calling the provided tools."
-    );
-    lines.push("");
-    lines.push("Current server state:");
-    lines.push(
-      formatGuildForLLM(serverState.guildId, serverState.guildName, serverState.memberCount)
-    );
-    lines.push("");
-    lines.push("Planning phases (complete each before moving to the next):");
-    lines.push("  Phase 1 — Foundation: Roles only (create/edit/delete/move_role).");
-    lines.push("           Do NOT create categories, channels, or set overwrites in this phase.");
-    lines.push("  Phase 2 — Server Layout: Categories + channel structure.");
-    lines.push("           Tools: create/edit/delete_category, create/edit/delete/move_channel.");
-    lines.push("           Default lock_permissions: true on channels under categories.");
-    lines.push("           Do NOT modify roles or set permission overwrites in this phase.");
-    lines.push("  Phase 3 — Access Control: Channel/category overwrites.");
-    lines.push("           Tools: set_overwrite, remove_overwrite, batch_set_overwrite.");
-    lines.push("");
-    lines.push("  PERMISSION STRATEGY:");
-    lines.push("  - Convention: channels with no lock marker are synced to their category.");
-    lines.push("    Only [unsynced] channels have independent overwrites.");
-    lines.push("  - Default: lock_permissions: true on channels under a category.");
-    lines.push("    Set overwrites on the CATEGORY, not individual channels.");
-    lines.push("  - Scan channels within each category for identical overwrite patterns.");
-    lines.push("    When found, propose consolidation: move overwrites to the category");
-    lines.push("    level and sync the channels.");
-    lines.push("  - If ONE channel needs different permissions than its category:");
-    lines.push("    lock_permissions: false on that channel, add specific overwrites.");
-    lines.push("  - If MOST channels in a category need different permissions:");
-    lines.push("    skip category-level overwrites entirely. Set per-channel.");
-    lines.push("  - When uncertain whether a channel should be synced or independent,");
-    lines.push("    use ask_user to clarify. Do not guess.");
-    lines.push("  - Do NOT set the same overwrites on every channel in a category.");
-    lines.push("    Put them on the category once.");
-    lines.push("  - Do NOT create new channels or modify roles in this phase.");
-    lines.push("  Phase 4 — People: Member role assignments.");
-    lines.push("           Tools: add_role_to_member, remove_role_from_member.");
-    lines.push("           Do NOT create roles or modify permissions in this phase.");
-    lines.push("");
-    lines.push("Important rules:");
-    lines.push(
-      "- Use edit_* tools to rename or modify existing resources. Do NOT delete and recreate."
-    );
-    lines.push("- Use create_* tools only for genuinely new resources.");
-    lines.push("- Use move_* tools to change position or parent.");
-    lines.push("- Use ask_user when the request is ambiguous or missing critical details.");
-    lines.push("- Always use edit_role to change role permissions, not delete+create.");
-    lines.push(
-      "- When creating channels inside a category, set parent_id to the category's ID (shown as 'id:...' in the server state above) or a symbol for a category being created in this plan."
-    );
-    lines.push(
-      "- If a create_category tool call returned a symbol, use that symbol as the parent_id for channels inside that category. Do NOT ask the user for category IDs or symbols — the symbol from the previous tool result IS the answer."
-    );
-    lines.push(
-      "- Permission names must be exact: VIEW_CHANNEL, SEND_MESSAGES, MANAGE_CHANNELS, etc."
-    );
-    lines.push("- Channel names should be lowercase with hyphens (e.g., 'general-chat').");
-    lines.push("- Only plan what the user asked for. Do not expand scope.");
-    lines.push(
-      "- If the user asks for Phase N+1 work without Phases 1..N complete, you MAY proceed but MUST note the risk in your summary."
-    );
-    lines.push("");
     if (this.guildRules.length > 0) {
-      lines.push("Guild-specific rules (the proposal must respect all of them):");
-      for (const [index, rule] of this.guildRules.entries()) {
-        lines.push(`${index + 1}. ${rule}`);
-      }
-      lines.push(
-        "If the request conflicts with a guild rule, explain the conflict and use ask_user instead of planning a violating state."
+      sections.push(
+        [
+          "## Guild-Specific Rules",
+          "<guild_rules>",
+          ...this.guildRules.map((rule, index) => `${index + 1}. ${rule}`),
+          "</guild_rules>",
+        ].join("\n")
       );
-      lines.push("");
     }
+
     if (this.activeTemplates.length > 0) {
-      lines.push("Available template layouts for inspiration:");
-      for (const tmpl of this.activeTemplates) {
-        lines.push(`- ${tmpl.name}: ${tmpl.summary}`);
-      }
-      lines.push("");
+      sections.push(
+        [
+          "## Attached Template Baselines",
+          "<attached_templates>",
+          JSON.stringify(this.activeTemplates, null, 2),
+          "</attached_templates>",
+        ].join("\n")
+      );
     }
 
-    lines.push("Available tools:");
+    const toolLines = ["## Available Tools"];
     for (const tool of getOpenAIFunctionDefinitions()) {
-      lines.push(`- ${tool.function.name}: ${tool.function.description}`);
+      toolLines.push(`- ${tool.function.name}: ${tool.function.description}`);
     }
-    lines.push("");
-    lines.push(
-      "Think step by step. Call tools one at a time. When you're done, stop calling tools and summarize the changes."
-    );
+    sections.push(toolLines.join("\n"));
 
-    return lines.join("\n");
+    return sections.join("\n\n");
   }
 }

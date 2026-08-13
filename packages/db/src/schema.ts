@@ -89,6 +89,14 @@ export const guilds = pgTable("guilds", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ── App Settings ───────────────────────────────────────────────────────────────
+
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // ── Plans ──────────────────────────────────────────────────────────────────────
 
 export const plans = pgTable(
@@ -157,6 +165,8 @@ export const conversations = pgTable(
     userPrompt: text("user_prompt").notNull(),
     messages: jsonb("messages").notNull().default([]),
     forkStateHash: text("fork_state_hash").notNull(),
+    modelId: text("model_id"),
+    reasoning: jsonb("reasoning"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -215,14 +225,59 @@ export const templates = pgTable(
     validationRules: jsonb("validation_rules").notNull().default([]),
     category: text("category"),
     tags: text("tags").array().notNull().default([]),
-    guildId: text("guild_id").references(() => guilds.id),
-    authorId: text("author_id").references(() => users.id),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => users.id),
     isOfficial: boolean("is_official").notNull().default(false),
     status: text("status").notNull().default("draft"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [index("idx_templates_guild_id").on(table.guildId)]
+  (table) => []
+);
+
+export const templateAuthoringTurns = pgTable(
+  "template_authoring_turns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    templateId: text("template_id")
+      .notNull()
+      .references(() => templates.id, { onDelete: "cascade" }),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => users.id),
+    prompt: text("prompt").notNull(),
+    baseVersion: integer("base_version").notNull(),
+    messages: jsonb("messages").notNull().default([]),
+    status: text("status").notNull().default("planning"),
+    summary: text("summary"),
+    error: text("error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_template_turns_template_created").on(table.templateId, table.createdAt),
+    index("idx_template_turns_author").on(table.authorId),
+  ]
+);
+
+export const templateVersions = pgTable(
+  "template_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    templateId: text("template_id")
+      .notNull()
+      .references(() => templates.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    structure: jsonb("structure").notNull(),
+    source: text("source").notNull(),
+    authoringTurnId: uuid("authoring_turn_id").references(() => templateAuthoringTurns.id),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_template_versions_template_created").on(table.templateId, table.createdAt),
+    uniqueIndex("uniq_template_versions_template_version").on(table.templateId, table.version),
+  ]
 );
 
 // ── Drift Events ──────────────────────────────────────────────────────────────
@@ -252,6 +307,7 @@ export const driftEvents = pgTable(
 export const usersRelations = relations(users, ({ many }) => ({
   plans: many(plans),
   templates: many(templates),
+  templateAuthoringTurns: many(templateAuthoringTurns),
   sessions: many(sessions),
   accounts: many(accounts),
 }));
@@ -269,7 +325,6 @@ export const guildsRelations = relations(guilds, ({ many }) => ({
   snapshots: many(snapshots),
   rules: many(rules),
   conversations: many(conversations),
-  templates: many(templates),
 }));
 
 export const plansRelations = relations(plans, ({ one, many }) => ({
@@ -305,9 +360,29 @@ export const rulesRelations = relations(rules, ({ one }) => ({
   guild: one(guilds, { fields: [rules.guildId], references: [guilds.id] }),
 }));
 
-export const templatesRelations = relations(templates, ({ one }) => ({
-  guild: one(guilds, { fields: [templates.guildId], references: [guilds.id] }),
+export const templatesRelations = relations(templates, ({ one, many }) => ({
   author: one(users, { fields: [templates.authorId], references: [users.id] }),
+  authoringTurns: many(templateAuthoringTurns),
+  versions: many(templateVersions),
+}));
+
+export const templateAuthoringTurnsRelations = relations(templateAuthoringTurns, ({ one }) => ({
+  template: one(templates, {
+    fields: [templateAuthoringTurns.templateId],
+    references: [templates.id],
+  }),
+  author: one(users, { fields: [templateAuthoringTurns.authorId], references: [users.id] }),
+}));
+
+export const templateVersionsRelations = relations(templateVersions, ({ one }) => ({
+  template: one(templates, {
+    fields: [templateVersions.templateId],
+    references: [templates.id],
+  }),
+  authoringTurn: one(templateAuthoringTurns, {
+    fields: [templateVersions.authoringTurnId],
+    references: [templateAuthoringTurns.id],
+  }),
 }));
 
 export const driftEventsRelations = relations(driftEvents, ({ one }) => ({

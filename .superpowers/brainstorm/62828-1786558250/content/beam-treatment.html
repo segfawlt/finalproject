@@ -1,0 +1,29 @@
+<h2>Border Beam Treatment</h2>
+<p class="subtitle">Choose how the Studio chatbar should signal an active submission.</p>
+
+<div class="split">
+  <div class="card" data-choice="submit-only" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d0d0f;padding:28px 18px;min-height:180px;display:flex;align-items:center;justify-content:center">
+      <div style="position:relative;width:100%;max-width:330px;background:#1d1d1d;border-radius:18px;padding:18px;color:#aaa;box-shadow:0 0 0 1px #34343d">
+        <div style="font:12px system-ui;color:#555;margin-bottom:32px">What should we change?</div>
+        <div style="display:flex;justify-content:flex-end"><span style="background:#292933;border-radius:999px;padding:5px 10px;color:#bbb;font:11px system-ui">Planning…</span></div>
+        <div style="position:absolute;inset:-2px;border:2px solid #8b7cff;border-radius:20px;opacity:.9"></div>
+      </div>
+    </div>
+    <div class="card-body"><h3>Submit-only pulse</h3><p>Beam appears for a few seconds after clicking Plan or Revise, then fades while the normal planning state remains.</p></div>
+  </div>
+  <div class="card" data-choice="planning-active" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d0d0f;padding:28px 18px;min-height:180px;display:flex;align-items:center;justify-content:center">
+      <div style="position:relative;width:100%;max-width:330px;background:#1d1d1d;border-radius:18px;padding:18px;color:#aaa;box-shadow:0 0 0 1px #34343d">
+        <div style="font:12px system-ui;color:#555;margin-bottom:32px">What should we change?</div>
+        <div style="display:flex;justify-content:flex-end"><span style="background:#292933;border-radius:999px;padding:5px 10px;color:#bbb;font:11px system-ui">Planning…</span></div>
+        <div style="position:absolute;inset:-2px;border:2px solid #8b7cff;border-radius:20px;box-shadow:0 0 20px #6d5df055;animation:pulse 1.4s ease-in-out infinite"></div>
+      </div>
+    </div>
+    <div class="card-body"><h3>Planning-active beam</h3><p>Beam remains animated for the full planning lifecycle and stops when planning completes, pauses, or errors.</p></div>
+  </div>
+</div>
+
+<style>
+@keyframes pulse { 0%,100% { opacity:.5; transform:scale(1) } 50% { opacity:1; transform:scale(1.015) } }
+</style>

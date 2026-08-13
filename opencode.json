@@ -14,7 +14,15 @@
         "--executable-path",
         "/usr/sbin/chromium"
       ],
-      "enabled": true
+      "enabled": false
+    },
+    "stitch": {
+      "type": "remote",
+      "url": "https://stitch.googleapis.com/mcp",
+      "enabled": true,
+      "headers": {
+        "X-Goog-Api-Key": "AQ.Ab8RN6LGTVqowbzYwv1yNIyF0vDgXdd9C0JluTJadL1f3tVsTA"
+      }
     }
   },
   "agent": {
@@ -25,11 +33,10 @@
       "prompt": "{file:./.opencode/prompts/explore-guideline.md}"
     },
     "executor": {
-      "description": "Default execution subagent for bash commands, tests, builds, and validation",
-      "model": "opencode/deepseek-v4-flash-free",
+      "description": "Fast scoped worker for bounded implementation, focused tests, and validation",
+      "model": "openai/gpt-5.6-luna",
       "mode": "subagent",
-      "hidden": true,
-      "permission": { "edit": "deny", "task": "deny" },
+      "permission": { "task": "deny" },
       "prompt": "{file:./.opencode/prompts/executor-guideline.md}"
     }
   }

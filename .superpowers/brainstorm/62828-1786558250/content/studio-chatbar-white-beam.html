@@ -1,0 +1,33 @@
+<h2>White Beam Preview</h2>
+<p class="subtitle">The beam travels continuously around the composer while planning is active.</p>
+
+<div class="mockup" style="background:#050505;border-color:#24242d;padding:0;overflow:hidden">
+  <div class="mockup-header" style="background:#0b0b0d;border-color:#202027;color:#aaa">Studio · Planning state</div>
+  <div style="min-height:400px;background:linear-gradient(180deg,#09090b 0%,#0d0d10 65%,#08080a 100%);position:relative;padding:54px 28px 150px">
+    <div style="max-width:430px;margin:0 auto;color:#f5f5f5;font:14px/1.5 system-ui">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:18px">
+        <div style="background:#302b58;border:1px solid #57508f;border-radius:16px 16px 4px 16px;padding:11px 14px;max-width:250px">Create a welcome channel and assign the moderator role.</div>
+      </div>
+      <div style="display:flex;margin-bottom:20px">
+        <div style="background:#151519;border:1px solid #2a2a32;border-left:2px solid #887cff;border-radius:16px 16px 16px 4px;padding:12px 14px;color:#c9c9d0">Planning…<div style="color:#777783;font-size:12px;margin-top:5px">Thinking about your request…</div></div>
+      </div>
+    </div>
+    <div style="position:absolute;left:20px;right:20px;bottom:24px;max-width:520px;margin:auto">
+      <div style="position:relative;border-radius:24px;padding:2px;overflow:visible;background:#101010;box-shadow:0 0 0 1px #303039,0 18px 45px #0009">
+        <div style="position:absolute;inset:-3px;border-radius:26px;padding:2px;background:conic-gradient(from var(--beam-angle),transparent 0deg,transparent 285deg,#fff 326deg,#bfc3cc 344deg,transparent 360deg);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;filter:drop-shadow(0 0 5px #fff) drop-shadow(0 0 13px #c9ced8);animation:white-beam 2.2s linear infinite;pointer-events:none"></div>
+        <div style="position:relative;background:#101010;border-radius:22px;padding:9px 10px 10px;box-shadow:inset 0 0 0 1px #292932">
+          <div style="color:#777783;font-size:13px;padding:8px 8px 25px">Create a welcome channel and assign the moderator role.</div>
+          <div style="border-top:1px solid #292932;padding:9px 4px 0;display:flex;align-items:center;gap:8px;color:#666672;font-size:11px">
+            <span style="background:#1d1d24;color:#c3c1d0;border-radius:999px;padding:5px 9px">Agent⌄</span><span>Auto</span><span style="flex:1">Takes effect on the next turn.</span><span style="display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#393743;color:#fff;font-size:17px">↑</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+@property --beam-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes white-beam { to { --beam-angle: 360deg; } }
+@media (prefers-reduced-motion: reduce) { @keyframes white-beam { to { --beam-angle: 0deg; } } }
+</style>

@@ -9,6 +9,7 @@ interface RoleListProps {
   diffs?: Map<string, DiffStatus>;
   /** Fallback diff status for items not present in `diffs`. */
   defaultDiffStatus?: DiffStatus;
+  diffVersion?: number;
   editing?: boolean;
   onChange?: (id: string, next: Role) => void;
   onDelete?: (id: string) => void;
@@ -19,6 +20,7 @@ export default function RoleList({
   roles,
   diffs,
   defaultDiffStatus,
+  diffVersion,
   editing,
   onChange,
   onDelete,
@@ -46,7 +48,10 @@ export default function RoleList({
             <RoleItem
               key={r.id}
               role={r}
-              diffStatus={diffs?.get(r.id) ?? defaultDiffStatus}
+              diffStatus={
+                diffs?.get(r.id) ?? defaultDiffStatus ?? (r.id.startsWith("$") ? "new" : undefined)
+              }
+              diffVersion={diffVersion}
               editing={editing}
               onChange={onChange ? (next) => onChange(r.id, next) : undefined}
               onDelete={onDelete ? () => onDelete(r.id) : undefined}

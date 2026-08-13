@@ -8,6 +8,7 @@ interface ChannelItemProps {
   /** Looked-up category name for the parent, if any. */
   parentName?: string | null;
   diffStatus?: DiffStatus;
+  diffVersion?: number;
   /**
    * When true, swap read-only name/type/position displays for inline inputs.
    * `onChange` propagates the modified channel back to the parent. The parent
@@ -51,6 +52,7 @@ export default function ChannelItem({
   channel,
   parentName,
   diffStatus,
+  diffVersion,
   editing,
   onChange,
   onDelete,
@@ -113,9 +115,7 @@ export default function ChannelItem({
     <li
       onClick={onClick}
       className={`px-3 py-2 bg-shell-surface2 border border-shell-border rounded text-sm flex items-center gap-2 ${
-        onClick
-          ? "cursor-pointer hover:border-shell-accent hover:bg-shell-surface2 transition"
-          : ""
+        onClick ? "cursor-pointer hover:border-shell-accent hover:bg-shell-surface2 transition" : ""
       }`}
     >
       <Icon size={14} className="text-shell-text-muted shrink-0" />
@@ -126,7 +126,7 @@ export default function ChannelItem({
           <span className="text-shell-text-muted text-xs">pos {channel.position}</span>
           {parentName && <span className="text-shell-text-muted text-xs">in {parentName}</span>}
           {channel.nsfw && <span className="text-error text-xs">NSFW</span>}
-          {diffStatus && <DiffBadge status={diffStatus} />}
+          {diffStatus && <DiffBadge status={diffStatus} version={diffVersion} />}
         </div>
         {channel.topic && (
           <div className="text-shell-text-muted text-xs mt-1 truncate">{channel.topic}</div>

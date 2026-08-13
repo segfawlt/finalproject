@@ -1,0 +1,32 @@
+<style>
+  .reference-shell { max-width: 860px; margin: 32px auto 0; color: #202020; }
+  .reference-shell h1 { font-size: 42px; letter-spacing: -0.04em; margin-bottom: 10px; }
+  .reference-shell .lede { color: #777; max-width: 560px; margin-bottom: 38px; }
+  .chooser-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 18px; padding: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.06); }
+  .server-row { display:flex; align-items:center; gap:14px; padding: 16px 18px; border-radius: 12px; }
+  .server-row:hover { background:#f5f5f5; }
+  .server-mark { width:42px; height:42px; border-radius:14px; display:grid; place-items:center; background:#202020; color:#fff; font-weight:700; }
+  .server-copy { flex:1; }
+  .server-copy strong { display:block; font-size:16px; }
+  .server-copy span { color:#888; font-size:13px; }
+  .server-row button { border:0; background:#202020; color:#fff; border-radius:999px; padding:10px 16px; font:inherit; cursor:pointer; }
+  .server-row button:active { transform:scale(.97); }
+  .note { text-align:center; color:#999; font-size:12px; margin-top:18px; }
+</style>
+<div class="reference-shell">
+  <h1>Choose a server</h1>
+  <p class="lede">Select a Discord server to open its Studio workspace.</p>
+  <div class="chooser-card">
+    <div class="server-row" data-choice="server-a" onclick="toggleSelect(this)">
+      <div class="server-mark">N</div>
+      <div class="server-copy"><strong>Northstar Community</strong><span>12 channels · 846 members</span></div>
+      <button type="button">Open Studio</button>
+    </div>
+    <div class="server-row" data-choice="server-b" onclick="toggleSelect(this)">
+      <div class="server-mark">C</div>
+      <div class="server-copy"><strong>Creators Circle</strong><span>8 channels · 214 members</span></div>
+      <button type="button">Open Studio</button>
+    </div>
+  </div>
+  <p class="note">Reference direction: one heading, one supporting sentence, one action per server.</p>
+</div>

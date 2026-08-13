@@ -13,13 +13,22 @@ export interface AssumptionResult {
  */
 export function evaluateAssumptions(
   assumptions: Assumption[],
-  state: ServerState
+  state: ServerState,
+  plannedSymbols: ReadonlySet<string> = new Set()
 ): AssumptionResult[] {
-  return assumptions.map((a) => evaluateOne(a, state));
+  return assumptions.map((a) => evaluateOne(a, state, plannedSymbols));
 }
 
-function evaluateOne(assumption: Assumption, state: ServerState): AssumptionResult {
+function evaluateOne(
+  assumption: Assumption,
+  state: ServerState,
+  plannedSymbols: ReadonlySet<string>
+): AssumptionResult {
   const { type, value, resourceType, excludeId } = assumption;
+
+  if (value.startsWith("$") && plannedSymbols.has(value)) {
+    return { passed: true, message: `Planned symbol "${value}" will be created` };
+  }
 
   switch (type) {
     case "exists": {

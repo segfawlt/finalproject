@@ -8,6 +8,7 @@ interface MemberListProps {
   diffs?: Map<string, DiffStatus>;
   /** Fallback diff status for items not present in `diffs`. */
   defaultDiffStatus?: DiffStatus;
+  diffVersion?: number;
   /** Read-only section; flag is passed through to children. */
   editing?: boolean;
 }
@@ -17,6 +18,7 @@ export default function MemberList({
   roleNames,
   diffs,
   defaultDiffStatus,
+  diffVersion,
   editing,
 }: MemberListProps) {
   if (assignments.length === 0) {
@@ -30,6 +32,7 @@ export default function MemberList({
           assignment={a}
           roleNames={roleNames}
           diffStatus={diffs?.get(a.memberId) ?? defaultDiffStatus}
+          diffVersion={diffVersion}
           editing={editing}
         />
       ))}

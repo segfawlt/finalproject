@@ -21,7 +21,7 @@ export default function TombstoneList({ tombstones }: TombstoneListProps) {
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className="text-error line-through font-medium">{t.name}</span>
               <span className="text-error text-xs">{t.resourceType}</span>
-              <span className="text-error/70 text-xs">v{t.deletedInVersion}</span>
+              <span className="text-error/70 text-xs">Deleted in v{t.deletedInVersion}</span>
             </div>
             <div className="text-error/70 text-xs font-mono">id: {t.discordId}</div>
           </div>

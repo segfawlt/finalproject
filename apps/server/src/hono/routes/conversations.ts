@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { db, conversations, planIterations, plans } from "@repo/db";
+import { db, conversations, planIterations, plans, templates } from "@repo/db";
 import { eq, desc, and } from "drizzle-orm";
 import { hashServerState } from "@repo/shared";
 import { userHasManageGuild } from "../../auth/helpers";
@@ -9,7 +9,7 @@ import { requireUser } from "../../auth/middleware";
 import { checkGuildOperable } from "../../planning/guild-check";
 import { loadGuildRuleTexts } from "../../planning/guild-rules";
 import { isGuildLocked } from "../../planning/locking";
-import { PlanningSession } from "../../planning/planning-session";
+import { PlanningSession, type LLMMessage } from "../../planning/planning-session";
 import {
   getSession,
   setSession,
@@ -18,6 +18,8 @@ import {
   clearSessionTimeout,
 } from "../../planning/session-manager";
 import { emitConversationEvent } from "../../planning/planning-event-bus";
+import type { ConversationModelConfig } from "../../planning/model-config";
+import { resolveDeploymentModelConfig } from "../../planning/deployment-model-config";
 import { logger } from "../../utils/logger";
 import { guildCache } from "../../bot/cache";
 import { botClient } from "../../bot/client";
@@ -100,6 +102,22 @@ function buildServerState(guildId: string): ServerState {
   };
 }
 
+async function getPersistedConversationModelConfig(
+  conversationId: string
+): Promise<ConversationModelConfig> {
+  const [conversation] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, conversationId));
+  if (conversation?.modelId) {
+    return resolveDeploymentModelConfig({
+      modelId: conversation.modelId,
+      reasoning: (conversation.reasoning ?? undefined) as ConversationModelConfig["reasoning"],
+    });
+  }
+  return resolveDeploymentModelConfig();
+}
+
 // ── List + Fetch (existing) ─────────────────────────────────────────────────
 
 conversationsApp.get("/", async (c) => {
@@ -161,13 +179,36 @@ conversationsApp.get("/:convId", async (c) => {
     .where(eq(planIterations.conversationId, convId))
     .orderBy(planIterations.version);
 
-  return c.json({ ...conv, iterations });
+  const messages = (conv.messages as unknown as LLMMessage[]).map((message) => {
+    if (message.role !== "assistant") return message;
+    const {
+      reasoning: _reasoning,
+      reasoning_details: _reasoningDetails,
+      modelId: _modelId,
+      ...safe
+    } = message;
+    return safe;
+  });
+
+  return c.json({ ...conv, messages, iterations });
 });
 
 // ── Create conversation + start planning ────────────────────────────────────
 
 const createConversationSchema = z.object({
   userPrompt: z.string().min(1),
+  templateIds: z.array(z.string().min(1)).max(20).optional(),
+  modelConfig: z
+    .object({
+      modelId: z.string().min(1),
+      reasoning: z
+        .object({
+          effort: z.string().min(1).optional(),
+          maxTokens: z.number().int().positive().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
 conversationsApp.post("/", zValidator("json", createConversationSchema), async (c) => {
@@ -193,6 +234,26 @@ conversationsApp.post("/", zValidator("json", createConversationSchema), async (
     );
   }
   const guildRules = await loadGuildRuleTexts(guildId);
+  const requestedTemplates = [];
+  for (const templateId of [...new Set(body.templateIds ?? [])]) {
+    const [template] = await db
+      .select()
+      .from(templates)
+      .where(and(eq(templates.id, templateId), eq(templates.authorId, user.id)));
+    if (!template) {
+      return c.json({ error: "Template not found" }, 404);
+    }
+    requestedTemplates.push(template);
+  }
+  let modelConfig: ConversationModelConfig;
+  try {
+    modelConfig = await resolveDeploymentModelConfig(body.modelConfig);
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "Invalid model configuration" },
+      400
+    );
+  }
 
   // Insert conversation row
   const [conversation] = await db
@@ -204,6 +265,8 @@ conversationsApp.post("/", zValidator("json", createConversationSchema), async (
       userPrompt: body.userPrompt,
       messages: [],
       forkStateHash,
+      modelId: modelConfig.modelId,
+      reasoning: modelConfig.reasoning,
     })
     .returning();
 
@@ -215,6 +278,7 @@ conversationsApp.post("/", zValidator("json", createConversationSchema), async (
     serverState,
     forkStateHash,
     guildRules,
+    getModelConfig: () => getPersistedConversationModelConfig(conversation.id),
     emit: async (event) => {
       emitConversationEvent(conversation.id, event);
 
@@ -281,6 +345,16 @@ conversationsApp.post("/", zValidator("json", createConversationSchema), async (
     },
   });
 
+  for (const template of requestedTemplates) {
+    session.addTemplate({
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      version: template.version,
+      structure: template.structure,
+    });
+  }
+
   setSession(conversation.id, session);
 
   // Fire-and-forget — planning events flow through SSE
@@ -291,6 +365,62 @@ conversationsApp.post("/", zValidator("json", createConversationSchema), async (
 
   return c.json(conversation, 201);
 });
+
+// ── Update next-turn model configuration ─────────────────────────────────────
+
+const modelConfigSchema = z.object({
+  modelId: z.string().min(1),
+  reasoning: z
+    .object({
+      effort: z.string().min(1).optional(),
+      maxTokens: z.number().int().positive().optional(),
+    })
+    .optional(),
+});
+
+conversationsApp.patch(
+  "/:convId/model-config",
+  zValidator("json", modelConfigSchema),
+  async (c) => {
+    const guildId = c.req.param("guildId")!;
+    const convId = c.req.param("convId")!;
+    const body = c.req.valid("json");
+
+    const access = await checkGuildAccess(c, guildId);
+    if (!access.allowed) {
+      return c.json({ error: access.error }, access.status as 401 | 403 | 404);
+    }
+
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, convId));
+    if (!conversation || conversation.guildId !== guildId) {
+      return c.json({ error: "Conversation not found" }, 404);
+    }
+
+    let modelConfig: ConversationModelConfig;
+    try {
+      modelConfig = await resolveDeploymentModelConfig(body);
+    } catch (err) {
+      return c.json(
+        { error: err instanceof Error ? err.message : "Invalid model configuration" },
+        400
+      );
+    }
+
+    await db
+      .update(conversations)
+      .set({
+        modelId: modelConfig.modelId,
+        reasoning: modelConfig.reasoning,
+        updatedAt: new Date(),
+      })
+      .where(eq(conversations.id, convId));
+
+    return c.json(modelConfig);
+  }
+);
 
 // ── Respond to ask_user ─────────────────────────────────────────────────────
 
@@ -425,7 +555,6 @@ conversationsApp.post("/:convId/approve", async (c) => {
   const planData = {
     llmResponse: {
       summary: session?.lastSummary ?? "Approved from a persisted completed conversation.",
-      reasoning: session?.lastReasoning ?? "",
     },
     desiredState: latestIteration.desiredState,
   };
@@ -711,8 +840,6 @@ conversationsApp.post("/:convId/edit-state", zValidator("json", editStateSchema)
 
 const templateContextSchema = z.object({
   templateId: z.string().min(1),
-  name: z.string().min(1),
-  summary: z.string().min(1),
 });
 
 conversationsApp.post(
@@ -738,10 +865,21 @@ conversationsApp.post(
       return c.json({ error: "No active planning session for this conversation" }, 409);
     }
 
+    const user = requireUser(c);
+    const [template] = await db
+      .select()
+      .from(templates)
+      .where(and(eq(templates.id, body.templateId), eq(templates.authorId, user.id)));
+    if (!template) {
+      return c.json({ error: "Template not found" }, 404);
+    }
+
     session.addTemplate({
-      id: body.templateId,
-      name: body.name,
-      summary: body.summary,
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      version: template.version,
+      structure: template.structure,
     });
 
     return c.json({ added: true });

@@ -8,7 +8,13 @@ export { default as MemberList } from "./MemberList";
 export { default as MemberItem } from "./MemberItem";
 export { default as TombstoneList } from "./TombstoneList";
 export { CATEGORY_TYPE, channelTypeLabel, roleColorHex } from "./types";
-export { computeFullDiff, diffChannels, diffRoles, diffMemberRoles } from "./diff-utils";
+export {
+  computeFullDiff,
+  diffChannels,
+  diffRoles,
+  diffMemberRoles,
+  summarizeFullDiff,
+} from "./diff-utils";
 export type {
   ChannelBase,
   Role,
@@ -18,4 +24,4 @@ export type {
   ServerState,
   DiffStatus,
 } from "./types";
-export type { DiffResult, FullDiff } from "./diff-utils";
+export type { DiffResult, FullDiff, DiffSummary } from "./diff-utils";

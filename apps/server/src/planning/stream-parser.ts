@@ -9,36 +9,111 @@ interface ToolCallAccumulator {
   };
 }
 
-interface StreamParseResult {
+export interface StreamParseResult {
+  /** @deprecated Use content for normal assistant text. */
   thinking: string;
+  content: string;
+  reasoning: string;
+  reasoningDetails: unknown[];
   toolCalls: ToolCallAccumulator[];
-}
-
-interface StreamParseOptions {
-  onToolCall?: (toolCall: ToolCallAccumulator) => void | Promise<void>;
 }
 
 /**
  * Parse an OpenRouter SSE stream.
  *
- * Accumulates thinking text and tool call arguments from streaming deltas.
- * Calls onToolCall for each tool call as soon as its arguments are complete.
- *
- * Returns the full accumulated result after the stream ends.
+ * Returns the full assistant response only after the stream ends.
  */
 export async function parseOpenRouterStream(
-  stream: ReadableStream<Uint8Array>,
-  options?: StreamParseOptions
+  stream: ReadableStream<Uint8Array>
 ): Promise<StreamParseResult> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
 
-  let thinking = "";
+  let content = "";
+  let reasoning = "";
+  const reasoningDetails = new Map<number, Record<string, unknown>>();
   const toolCallAccumulators = new Map<number, ToolCallAccumulator>();
-  const completedToolCalls: ToolCallAccumulator[] = [];
 
   let buffer = "";
   let malformedLineCount = 0;
+
+  const accumulateDelta = (delta: {
+    content?: string;
+    reasoning?: string;
+    reasoning_details?: Array<Record<string, unknown> & { index?: number }>;
+    tool_calls?: Array<{
+      index: number;
+      id?: string;
+      type?: string;
+      function?: { name?: string; arguments?: string };
+    }>;
+  }) => {
+    // Keep displayable answer text independent from provider reasoning.
+    if (delta.content) {
+      content += delta.content;
+    }
+    if (delta.reasoning) {
+      reasoning += delta.reasoning;
+    }
+    if (delta.reasoning_details) {
+      for (const detail of delta.reasoning_details) {
+        if (typeof detail.index !== "number") continue;
+        const current = reasoningDetails.get(detail.index) ?? { index: detail.index };
+        for (const [key, value] of Object.entries(detail)) {
+          if (key === "text" && typeof value === "string") {
+            current.text = `${typeof current.text === "string" ? current.text : ""}${value}`;
+          } else if (value !== undefined && isNonEmpty(value)) {
+            current[key] = value;
+          }
+        }
+        reasoningDetails.set(detail.index, current);
+      }
+    }
+
+    if (delta.tool_calls) {
+      for (const tcDelta of delta.tool_calls) {
+        const index = tcDelta.index;
+        let accumulator = toolCallAccumulators.get(index);
+
+        if (!accumulator) {
+          accumulator = {
+            id: tcDelta.id ?? "",
+            type: tcDelta.type ?? "function",
+            function: {
+              name: tcDelta.function?.name ?? "",
+              arguments: tcDelta.function?.arguments ?? "",
+            },
+          };
+          toolCallAccumulators.set(index, accumulator);
+        } else {
+          if (tcDelta.id) accumulator.id = tcDelta.id;
+          if (tcDelta.type) accumulator.type = tcDelta.type;
+          if (tcDelta.function?.name) {
+            accumulator.function.name = tcDelta.function.name;
+          }
+          if (tcDelta.function?.arguments) {
+            accumulator.function.arguments += tcDelta.function.arguments;
+          }
+        }
+      }
+    }
+  };
+
+  const accumulateDataRecord = (data: string) => {
+    if (data === "[DONE]") return;
+    try {
+      const parsed = JSON.parse(data) as {
+        choices?: Array<{
+          delta?: Parameters<typeof accumulateDelta>[0];
+        }>;
+      };
+      const delta = parsed.choices?.[0]?.delta;
+      if (delta) accumulateDelta(delta);
+    } catch {
+      // Ignore malformed JSON in SSE stream.
+      malformedLineCount += 1;
+    }
+  };
 
   logger.debug("[stream-parser] starting");
 
@@ -49,125 +124,27 @@ export async function parseOpenRouterStream(
 
       buffer += decoder.decode(value, { stream: true });
 
-      // Process complete SSE lines from buffer
+      // Process complete SSE lines from buffer.
       const lines = buffer.split("\n");
       // Keep the last incomplete line in the buffer
       buffer = lines.pop() ?? "";
 
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimmed.startsWith("data: ")) continue;
+        if (!trimmed.startsWith("data:")) continue;
 
-        const data = trimmed.slice(6); // Remove "data: " prefix
-        if (data === "[DONE]") continue;
-
-        try {
-          const parsed = JSON.parse(data) as {
-            choices?: Array<{
-              delta?: {
-                content?: string;
-                tool_calls?: Array<{
-                  index: number;
-                  id?: string;
-                  type?: string;
-                  function?: { name?: string; arguments?: string };
-                }>;
-              };
-            }>;
-          };
-
-          const delta = parsed.choices?.[0]?.delta;
-          if (!delta) continue;
-
-          // Accumulate thinking text
-          if (delta.content) {
-            thinking += delta.content;
-          }
-
-          // Accumulate tool calls
-          if (delta.tool_calls) {
-            for (const tcDelta of delta.tool_calls) {
-              const index = tcDelta.index;
-              let accumulator = toolCallAccumulators.get(index);
-
-              if (!accumulator) {
-                accumulator = {
-                  id: tcDelta.id ?? "",
-                  type: tcDelta.type ?? "function",
-                  function: {
-                    name: tcDelta.function?.name ?? "",
-                    arguments: tcDelta.function?.arguments ?? "",
-                  },
-                };
-                toolCallAccumulators.set(index, accumulator);
-              } else {
-                // Merge deltas
-                if (tcDelta.id) accumulator.id = tcDelta.id;
-                if (tcDelta.type) accumulator.type = tcDelta.type;
-                if (tcDelta.function?.name) {
-                  accumulator.function.name = tcDelta.function.name;
-                }
-                if (tcDelta.function?.arguments) {
-                  accumulator.function.arguments += tcDelta.function.arguments;
-                }
-              }
-
-              // Check if this tool call is complete (has both name and full arguments)
-              // We detect completion when the next delta is a different index or content
-              // For now, we'll detect completion heuristically
-            }
-          }
-
-          // Detect completed tool calls: if we received content after tool calls,
-          // or if there's a gap in tool call indices, previous ones are complete
-          if (delta.content && toolCallAccumulators.size > 0) {
-            for (const [idx, tc] of toolCallAccumulators) {
-              if (tc.function.name && tc.function.arguments) {
-                completedToolCalls.push(tc);
-                logger.debug(
-                  { toolName: tc.function.name, index: idx },
-                  "[stream-parser] tool call complete"
-                );
-                await options?.onToolCall?.(tc);
-                toolCallAccumulators.delete(idx);
-              }
-            }
-          }
-        } catch {
-          // Ignore malformed JSON in SSE stream
-          malformedLineCount += 1;
-        }
+        accumulateDataRecord(trimmed.slice(5).trimStart());
       }
     }
 
-    // Process remaining buffer
+    buffer += decoder.decode();
+    // Process remaining buffer. Providers normally terminate each SSE record
+    // with a newline, but accept a final unterminated content delta too.
     if (buffer.trim()) {
       const trimmed = buffer.trim();
-      if (trimmed.startsWith("data: ")) {
-        const data = trimmed.slice(6);
-        if (data !== "[DONE]") {
-          try {
-            const parsed = JSON.parse(data) as {
-              choices?: Array<{ delta?: { content?: string; tool_calls?: unknown[] } }>;
-            };
-            const delta = parsed.choices?.[0]?.delta;
-            if (delta?.content) {
-              thinking += delta.content;
-            }
-          } catch {
-            // Ignore
-          }
-        }
+      if (trimmed.startsWith("data:")) {
+        accumulateDataRecord(trimmed.slice(5).trimStart());
       }
-    }
-
-    // Flush remaining tool calls
-    for (const [idx, tc] of toolCallAccumulators) {
-      if (tc.function.name && tc.function.arguments) {
-        completedToolCalls.push(tc);
-        await options?.onToolCall?.(tc);
-      }
-      toolCallAccumulators.delete(idx);
     }
   } finally {
     reader.releaseLock();
@@ -175,15 +152,30 @@ export async function parseOpenRouterStream(
 
   logger.debug(
     {
-      toolCallCount: completedToolCalls.length,
-      thinkingChars: thinking.length,
+      toolCallCount: toolCallAccumulators.size,
+      contentChars: content.length,
+      reasoningChars: reasoning.length,
       malformedLineCount,
     },
     "[stream-parser] finished"
   );
 
   return {
-    thinking,
-    toolCalls: completedToolCalls,
+    thinking: content,
+    content,
+    reasoning,
+    reasoningDetails: [...reasoningDetails.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, detail]) => detail),
+    toolCalls: [...toolCallAccumulators.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, toolCall]) => toolCall)
+      .filter((toolCall) => toolCall.function.name && toolCall.function.arguments),
   };
+}
+
+function isNonEmpty(value: unknown): boolean {
+  if (typeof value === "string") return value.length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return value !== null;
 }

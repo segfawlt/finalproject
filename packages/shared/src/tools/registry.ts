@@ -69,6 +69,24 @@ export interface ToolDefinition {
   getAssumptions?: (params: unknown) => Assumption[];
 }
 
+export const TEMPLATE_TOOL_NAMES = [
+  "create_category",
+  "edit_category",
+  "delete_category",
+  "create_channel",
+  "edit_channel",
+  "delete_channel",
+  "move_channel",
+  "create_role",
+  "edit_role",
+  "delete_role",
+  "move_role",
+  "set_overwrite",
+  "remove_overwrite",
+  "batch_set_overwrite",
+  "ask_user",
+] as const;
+
 /**
  * Unified tool registry. Maps tool names to their Zod schemas (for validation)
  * and plan() functions (for modifying DesiredState).
@@ -533,8 +551,8 @@ export function getTool(name: string): ToolDefinition {
 }
 
 /** Get all tool definitions as OpenAI function definitions. */
-export function getOpenAIFunctionDefinitions() {
-  return TOOL_REGISTRY.map((t) => ({
+export function getOpenAIFunctionDefinitions(allowlist?: readonly string[]) {
+  return TOOL_REGISTRY.filter((tool) => !allowlist || allowlist.includes(tool.name)).map((t) => ({
     type: "function" as const,
     function: {
       name: t.name,

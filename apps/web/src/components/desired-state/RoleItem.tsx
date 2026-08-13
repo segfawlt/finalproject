@@ -6,6 +6,7 @@ import { roleColorHex } from "./types";
 interface RoleItemProps {
   role: Role;
   diffStatus?: DiffStatus;
+  diffVersion?: number;
   editing?: boolean;
   onChange?: (next: Role) => void;
   onDelete?: () => void;
@@ -18,7 +19,14 @@ function parseHexColor(input: string): number {
   return parseInt(trimmed.padEnd(6, "0"), 16);
 }
 
-export default function RoleItem({ role, diffStatus, editing, onChange, onDelete }: RoleItemProps) {
+export default function RoleItem({
+  role,
+  diffStatus,
+  diffVersion,
+  editing,
+  onChange,
+  onDelete,
+}: RoleItemProps) {
   if (editing) {
     return (
       <li className="px-3 py-2 bg-shell-surface2 border border-shell-border rounded text-sm flex items-center gap-2">
@@ -80,7 +88,7 @@ export default function RoleItem({ role, diffStatus, editing, onChange, onDelete
           </span>
           {role.hoist && <span className="text-warning text-xs">hoist</span>}
           {role.mentionable && <span className="text-shell-text-link text-xs">mentionable</span>}
-          {diffStatus && <DiffBadge status={diffStatus} />}
+          {diffStatus && <DiffBadge status={diffStatus} version={diffVersion} />}
         </div>
         {role.permissions.length > 0 && (
           <div className="text-shell-text-muted text-xs mt-1 truncate">

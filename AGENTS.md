@@ -30,8 +30,23 @@ AI-driven Discord server management platform. Administrators describe server con
 ### Goal-Driven Execution
 
 - Define verifiable success criteria before implementing.
-- For multi-step tasks, state a brief plan with verification checkpoints.
+- Generate a specification or plan file only when the user asks for one or the work is genuinely complex enough to require it.
+- For straightforward tasks, work directly from the request without creating a specification or plan file.
 - Loop until verified — don't stop at "should work now."
+- When the user asks to implement an approved, detailed, task-structured plan file or explicitly
+  requests worker-led implementation, invoke `plan-driven-subagent-orchestration`. Keep
+  orchestration, review, integration, and complex work with the primary agent; use `executor`
+  only for bounded, explicitly scoped implementation or validation assignments.
+
+### Worktrees
+
+- Ask about a worktree only for major breaking changes or when the user explicitly requests one.
+- Do not pause straightforward work to ask about worktree setup.
+
+### Visual UI Work
+
+- For major UI changes, implement the visual work directly; do not ask the user to open a website or local URL for preview.
+- For lightweight visual changes, make the change immediately without asking for a preview session.
 
 ### Keep Docs In Sync
 
@@ -368,4 +383,3 @@ For the TDD red/green loop, run tests yourself so you see the actual error messa
 - [ProjectDescription.md](./ProjectDescription.md) — Full project overview
 - [docs/design/](./docs/design/) — System design documents
 - [docs/issues/open-design-issues.md](./docs/issues/open-design-issues.md) — Resolved decisions and open questions
-

@@ -1,19 +1,26 @@
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, FileText, Settings } from "lucide-react";
+import type { ReactNode } from "react";
+import { ArrowLeft, History, Settings } from "lucide-react";
 import { useGuildName } from "../../hooks/useGuildName";
-import { makeTab, useStudioStore } from "../../stores/studioStore";
 
 /**
  * Contextual header for the Studio route. Renders below the top-level
  * AppHeader and shows the active guild with a back-to-picker affordance.
  */
-export default function StudioHeader() {
+export default function StudioHeader({
+  onOpenSettings,
+  onOpenHistory,
+  historyCount = 0,
+}: {
+  onOpenSettings?: () => void;
+  onOpenHistory?: () => void;
+  historyCount?: number;
+}) {
   const { guildId } = useParams<{ guildId: string }>();
   const guildName = useGuildName(guildId);
-  const openTab = useStudioStore((state) => state.openTab);
 
   return (
-    <div className="h-12 shrink-0 border-b border-shell-border bg-shell-surface flex items-center px-4 gap-3">
+    <div className="h-14 shrink-0 border-b border-shell-border bg-black flex items-center px-6 gap-4">
       {guildId ? (
         <Link
           to="/studio"
@@ -23,13 +30,13 @@ export default function StudioHeader() {
           <span className="text-sm">Pick a server</span>
         </Link>
       ) : (
-        <span className="text-sm text-shell-text-muted">Studio</span>
+        <span className="text-sm font-semibold tracking-tight text-shell-text">Studio</span>
       )}
 
       {guildId && (
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-shell-text-subtle text-xs">/</span>
-          <span className="text-shell-text font-medium text-sm truncate">
+          <span className="text-shell-text font-semibold text-sm truncate">
             {guildName ?? guildId}
           </span>
         </div>
@@ -37,25 +44,27 @@ export default function StudioHeader() {
 
       <div className="flex-1" />
 
-      {guildId && (
-        <div className="flex items-center gap-1">
-          <Link
-            to={`/templates/${guildId}`}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-shell-text-muted hover:text-shell-text hover:bg-shell-surface2 rounded text-xs transition-colors"
-          >
-            <FileText size={13} />
-            Templates
-          </Link>
+      <div className="flex items-center gap-1">
+        {onOpenHistory && (
           <button
             type="button"
-            onClick={() => openTab(makeTab("settings"))}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-shell-text-muted hover:text-shell-text hover:bg-shell-surface2 rounded text-xs transition-colors"
+            onClick={onOpenHistory}
+            disabled={historyCount === 0}
+            className="inline-flex items-center gap-1.5 rounded px-3 py-2 text-xs text-shell-text-muted transition-colors hover:bg-shell-surface2 hover:text-shell-text disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Settings size={13} />
-            Settings
+            <History size={13} />
+            History{historyCount > 0 ? ` (${historyCount})` : ""}
           </button>
-        </div>
-      )}
+        )}
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="inline-flex items-center gap-1.5 px-3 py-2 text-shell-text-muted hover:text-shell-text hover:bg-shell-surface2 rounded text-xs transition-colors"
+        >
+          <Settings size={13} />
+          Settings
+        </button>
+      </div>
     </div>
   );
 }

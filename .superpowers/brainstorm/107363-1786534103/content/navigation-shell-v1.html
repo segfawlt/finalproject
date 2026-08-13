@@ -1,0 +1,64 @@
+<style>
+  body { background:#0f1012; color:#eee; font-family:Inter,system-ui,sans-serif; }
+  .note { max-width:1180px; margin:0 auto 18px; }
+  .note p { color:#a4a7a5; margin:6px 0; }
+  .app { max-width:1180px; height:570px; margin:auto; display:flex; overflow:hidden; border:1px solid #34373b; border-radius:16px; background:#16181b; box-shadow:0 20px 60px #0008; }
+  .nav { width:235px; flex:0 0 235px; background:#1b1e21; border-right:1px solid #35383c; display:flex; flex-direction:column; padding:18px 12px 14px; }
+  .brand { padding:0 10px 20px; font-weight:750; letter-spacing:.02em; }
+  .brand small { display:block; color:#8e928f; font-size:10px; font-weight:500; margin-top:5px; }
+  .button { display:flex; align-items:center; gap:9px; border:0; color:#e9e9e4; background:transparent; border-radius:8px; padding:10px; font:inherit; font-size:13px; text-align:left; }
+  .button.active { background:#30353a; color:#fff; }
+  .button.primary { background:#d6c49a; color:#1a1916; font-weight:700; margin:0 3px 16px; justify-content:center; }
+  .section { color:#777c79; font-size:10px; text-transform:uppercase; letter-spacing:.11em; padding:12px 10px 7px; }
+  .recent { overflow:hidden; }
+  .conversation { padding:9px 10px; color:#b8bbb8; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-radius:7px; }
+  .conversation.selected { color:#fff; background:#25292d; }
+  .server { margin-top:auto; border-top:1px solid #35383c; padding:14px 10px 0; display:flex; align-items:center; gap:9px; font-size:12px; }
+  .avatar { width:28px; height:28px; border-radius:8px; background:#758b82; display:grid; place-items:center; font-size:11px; font-weight:800; color:#17201d; }
+  .server span { display:block; color:#8e928f; font-size:10px; margin-top:3px; }
+  .handle { width:5px; background:#292d31; cursor:col-resize; border-left:1px solid #3d4145; border-right:1px solid #101113; }
+  .main { min-width:0; flex:1; display:flex; flex-direction:column; }
+  .header { height:58px; display:flex; align-items:center; justify-content:space-between; padding:0 22px; border-bottom:1px solid #303337; }
+  .header strong { font-size:14px; } .header span { color:#858986; font-size:12px; }
+  .chat { flex:1; padding:30px; max-width:700px; width:100%; margin:auto; }
+  .message { color:#b9bcb9; font-size:13px; line-height:1.55; margin-bottom:20px; }
+  .message.user { color:#f0eee6; background:#252a2e; padding:13px 15px; border-radius:10px; }
+  .composer { margin-top:190px; border:1px solid #45494b; background:#1c1f22; border-radius:10px; padding:12px 14px; color:#777c79; font-size:13px; }
+  .preview { width:365px; flex:0 0 365px; border-left:1px solid #35383c; background:#1b1e21; padding:18px; }
+  .preview h3 { font-size:13px; margin:2px 0 17px; } .preview .tabs { color:#d6c49a; font-size:11px; border-bottom:1px solid #44484b; padding-bottom:9px; }
+  .tree { margin-top:18px; color:#c2c5c1; font-size:12px; line-height:2; } .tree b { color:#e6e2d5; font-weight:600; }
+  .tag { display:inline-block; border:1px solid #49504e; color:#9ea8a2; border-radius:4px; padding:2px 5px; font-size:10px; margin-left:5px; }
+  @media (max-width:900px) { .nav { width:205px; flex-basis:205px; } .preview { width:300px; flex-basis:300px; } }
+</style>
+<div class="note">
+  <h2>Resizable Studio Shell</h2>
+  <p>Navigation is persistent across Studio and Templates. The center remains flexible; both outer panels can be resized or hidden.</p>
+</div>
+<div class="app">
+  <nav class="nav">
+    <div class="brand">DISCORD PLATFORM<small>server management studio</small></div>
+    <button class="button primary">＋ New chat</button>
+    <div class="section">Workspace</div>
+    <button class="button active">◈ <b>Studio</b></button>
+    <button class="button">▦ <b>Templates</b></button>
+    <div class="section">Recent conversations</div>
+    <div class="recent">
+      <div class="conversation selected">Set up a welcoming server</div>
+      <div class="conversation">Add moderator permissions</div>
+      <div class="conversation">Create an events category</div>
+      <div class="conversation">Review channel structure</div>
+    </div>
+    <div class="server"><div class="avatar">DS</div><div>Domixi Server<span>Active server</span></div><span style="margin-left:auto">⌄</span></div>
+  </nav>
+  <div class="handle"></div>
+  <main class="main">
+    <header class="header"><div><strong>Studio</strong><span>  /  Domixi Server</span></div><span>☰ Hide panels</span></header>
+    <section class="chat">
+      <div class="message user">Set up a welcoming server with clear channels for new members.</div>
+      <div class="message">I drafted a structure with onboarding, community, and support areas. Review the proposed changes in the preview.</div>
+      <div class="composer">Describe a change to your server...</div>
+    </section>
+  </main>
+  <div class="handle"></div>
+  <aside class="preview"><h3>Desired structure</h3><div class="tabs">Channels &nbsp;&nbsp; Roles &nbsp;&nbsp; Members</div><div class="tree"><b>▾ ONBOARDING</b><br>&nbsp;&nbsp;# welcome<br>&nbsp;&nbsp;# rules<br><br><b>▾ COMMUNITY</b><br>&nbsp;&nbsp;# general <span class="tag">new</span><br>&nbsp;&nbsp;# events<br><br><b>Roles</b><br>&nbsp;&nbsp;@ Moderator<br>&nbsp;&nbsp;@ Member</div></aside>
+</div>

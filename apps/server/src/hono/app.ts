@@ -17,6 +17,7 @@ import plansApp from "./routes/plans";
 import conversationsApp from "./routes/conversations";
 import templatesApp from "./routes/templates";
 import botApp from "./routes/bot";
+import settingsApp from "./routes/settings";
 import { rateLimit } from "./middleware/rate-limit";
 import { logger } from "../utils/logger";
 
@@ -201,7 +202,6 @@ api.get("/conversations/:id/stream", async (c) => {
           multiSelect: event.multiSelect,
           allowCustom: event.allowCustom,
           summary: event.summary,
-          reasoning: event.reasoning,
           error: event.error,
         }),
       });
@@ -226,7 +226,9 @@ api.route("/guilds/:guildId", stateApp);
 api.route("/guilds/:guildId/plans", plansApp);
 api.route("/guilds/:guildId/conversations", conversationsApp);
 api.route("/guilds/:guildId/templates", templatesApp);
+api.route("/templates", templatesApp);
 api.route("/bot", botApp);
+api.route("/settings", settingsApp);
 
 app.route("/api", api);
 

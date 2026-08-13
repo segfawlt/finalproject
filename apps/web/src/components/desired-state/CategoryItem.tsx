@@ -5,6 +5,7 @@ import type { ChannelBase, DiffStatus } from "./types";
 interface CategoryItemProps {
   channel: ChannelBase;
   diffStatus?: DiffStatus;
+  diffVersion?: number;
   editing?: boolean;
   onChange?: (next: ChannelBase) => void;
   onDelete?: () => void;
@@ -13,6 +14,7 @@ interface CategoryItemProps {
 export default function CategoryItem({
   channel,
   diffStatus,
+  diffVersion,
   editing,
   onChange,
   onDelete,
@@ -68,7 +70,7 @@ export default function CategoryItem({
               {channel.lockPermissions ? "locked" : "unlocked"}
             </span>
           )}
-          {diffStatus && <DiffBadge status={diffStatus} />}
+          {diffStatus && <DiffBadge status={diffStatus} version={diffVersion} />}
         </div>
         <div className="text-shell-text-muted text-xs">id: {channel.id}</div>
       </div>

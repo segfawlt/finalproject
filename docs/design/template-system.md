@@ -2,161 +2,115 @@
 
 ## Templates
 
-Templates are **reference layouts** injected into the system prompt as ideas for
-the LLM. They are NOT conversation-starters that load as the initial DesiredState.
-Think of them like context files in Cursor or Copilot — the LLM sees them as
-available inspiration, not a mandatory merge target.
+Templates are creator-owned global structures injected into the system prompt as
+full structured JSON reference layouts. They are not tied to a Discord server and are not conversation
+starters that replace the initial DesiredState. Server Studio can use a template as
+conversation context; Template Studio edits the reusable structure itself.
 
 ### Storage
 
-Stored as JSONB in PostgreSQL with metadata (unchanged from original design):
+The `templates` table stores the current materialized structure and metadata:
 
 - id, name, description, version, author_id
 - structure (roles, categories, channels with symbols and overwrites)
-- validation_rules
-- category, tags, is_official, status
-- guildId — templates are **per-server**, not global
+- validation_rules, category, tags, is_official, status
+- created_at, updated_at
 
-### Template Format (unchanged)
+Only the authenticated creator can list, read, edit, fork, revert, or delete a
+template. Non-owned resources are returned as not found. Templates have no guild
+ownership.
 
-```json
-{
-  "id": "gaming_tournament",
-  "name": "Gaming Tournament Server",
-  "description": "Team-based tournament layout",
-  "tags": ["gaming", "tournament", "teams"],
-  "structure": {
-    "roles": [
-      { "symbol": "$role_organizer", "name": "Organizer", "permissions": ["MANAGE_CHANNELS"] }
-    ],
-    "categories": [{ "symbol": "$cat_general", "name": "General", "position": 0 }],
-    "channels": [
-      { "symbol": "$ch_rules", "name": "rules", "type": "text", "parent": "$cat_general" }
-    ]
-  }
-}
-```
+`template_versions` stores immutable structural snapshots with their version number,
+source (`initial`, `manual`, `ai`, or `revert`), optional authoring-turn ID, and
+creation time. `template_authoring_turns` stores creator-scoped natural-language
+authoring prompts, cumulative provider messages, status, summary/error, and timing.
+Metadata updates do not create a structural version.
 
-### Template Library
+### Canonical Routes
 
-Per-server library browsable from the Studio's `TemplatesTab` (right panel)
-and the standalone `/templates/:guildId` page:
+The web routes are:
 
-- Browse by tags, search by name/description
-- Card preview for each template (name, description, tags, structure tree)
-- Detail page (read-only, shows structure as visual tree)
+- `/templates` — creator's global library
+- `/templates/:templateId` — read-only viewer
+- `/templates/:templateId/studio` — dedicated Template Studio
 
-### Three Levels of Template Usage
+The API lifecycle is under `/api/templates`: list/search, blank or seeded creation,
+metadata update, delete, fork, immutable version listing/reading, manual save, and
+revert. Guild-scoped reads remain a creator-filtered compatibility alias for Server
+Studio. The retired merge endpoint returns `410 Gone`.
 
-Templates interact with the LLM at three levels — all via the system prompt:
+### Library and Viewer
 
-```
-Level 1: Passive ideas
-  User opens template sidebar in a conversation → clicks "Add to context"
-  Template summary injected into system prompt as:
-    "Available template layouts for inspiration:
-     - Gaming Tournament: 4 team categories, roles for organizer/player..."
-  LLM sees these as ideas; may or may not use them
-  No explicit prompt — the template is just additional context
+The library supports search, blank creation, viewer navigation, immediate fork, and
+immediate delete. Fork creates an independent version 1 named `Fork of <name>` and
+navigates to its Template Studio. The viewer is read-only and shows metadata, the
+current version, category/channel hierarchy, and roles, with creator-only actions
+for editing, forking, and deleting.
 
-Level 2: User asks to merge
-  User types: "merge the gaming template into our server"
-  LLM receives same template context + explicit merge instruction from user
-  Standard planning loop handles it — LLM adapts template to existing structure
+### Server Studio Context
 
-Level 3: Merge button
-  "Merge Template" button next to active templates in the sidebar
-  Sends a crafted prompt via revise:
-    "Merge the '{templateName}' template into the current server configuration.
-     Adapt it to fit existing channels and roles. Do not delete anything unless
-     it clearly conflicts with the template's intent."
-  More reliable than relying on user to craft a good merge prompt
-```
+In Server Studio, `TemplatePanel` and `TemplatesTab` let the user attach or detach a
+template from the conversation context. Its full structure is included in the planning
+prompt as an adaptable reference baseline. The server loads the current
+creator-owned template by ID rather than accepting template content from the client.
+Before a conversation exists, `TemplatesTab` holds selected templates as local pending
+context; the next submitted prompt sends their IDs when it creates the conversation.
+No empty conversation is created for template selection.
+The context actions are explicitly
+`Use` and `Stop using`; they do not execute Discord changes or start a template
+merge flow.
 
-### View, Fork & Edit Flow
+### Template Studio Authoring
 
-```
-Template Library / Template List Sidebar
-  │
-  ├─ [View in Studio] — accessible anywhere (library, sidebar, detail page)
-  │     Opens a read-only Studio view of the template (layout preview only)
-  │
-  └─ [Fork & Edit] — also accessible anywhere
-        Creates a new template entry immediately: "Fork of Gaming Tournament"
-        Opens an editable Studio loaded with the forked template as DesiredState
-        │
-        ├─ All edits are auto-saved via DesiredStateStore snapshots
-        │   (same pattern as conversation iterations)
-        │
-        ├─ [Revert] — rewinds to the fork point (original template content)
-        │
-        ├─ [Discard] — deletes the forked template entry entirely
-        │
-        └─ Close/switch — work is preserved via auto-save, no explicit save needed
-```
+Template Studio provides a shared natural-language composer and a live structure
+preview. Each prompt starts a creator-scoped planning-only authoring session. The
+session can mutate an in-memory DesiredState using category, channel, role,
+permission-overwrite, and `ask_user` tools. It has no Discord execution context,
+guild state, member-role tools, plan approval, or execution tools.
 
-Naming: "Fork of Gaming Tournament" → "Fork of Gaming Tournament (2)" on collision.
+Successful AI authoring auto-commits exactly one `ai` version when the final
+structure changed; unchanged turns create no redundant version. Failed or cancelled
+turns leave the current version unchanged. Authoring turns and terminal SSE state
+are persisted so completed history remains available after refresh or restart.
+
+Direct structure editing is explicit: `Edit structure` creates a local draft,
+`Save structure` creates one `manual` version, and `Cancel` discards the draft.
+Navigation, version selection, revert, AI authoring, and refreshed server data are
+guarded while a local draft is dirty.
+
+Selecting a historical version previews its immutable snapshot read-only. Reverting
+copies that snapshot into a new highest-numbered `revert` version; it never rewrites
+or removes newer history. There is no AI review or approval gate.
 
 ### Template-to-LLM Flow
 
-1. User adds template to conversation context via sidebar
-2. System injects template summary into system prompt as JSON structure section
-3. LLM receives: server state + template summaries + tool definitions + user prompt
-4. LLM uses templates as reference when relevant; no forced merge
-
-### Template Authoring
-
-- Phase 1 (now): JSON editor in web app
-- Phase 2 (later): Visual template builder via Fork & Edit in Studio
-- Phase 3 (community): Submission + review flow
+1. Server Studio attaches a template to existing conversation context, or holds it as
+   pending context until the next prompt creates a conversation.
+2. The server loads the authenticated creator's current template record.
+3. The system prompt includes its full structure as delimited JSON reference data.
+4. The LLM receives server state, template context, tool definitions, and the user prompt.
+5. Template Studio authoring instead starts from the current template structure and
+   commits only through the immutable template-version service.
 
 ---
 
 ## LLM Guidance System
 
-Guidance encodes **reasoning** — HOW and WHY to create things. Best practices
-knowledge loaded into the planning prompt.
-
-Complements templates: templates = WHAT (structure), guidance = HOW/WHY (reasoning).
-
-### How It Works (Phase 2)
-
-- Guidance files are Markdown documents with best practices for common scenarios
-- During planning, the system matches user intent to relevant guidance files
-- Loaded into planning prompt as context
-- Always applied (system-driven), unlike templates (user-chosen)
-- Fills gaps when no template matches
-
-### Example
-
-```
-Action: "Create staff space"
-Guidance:
-  - Create a private category
-  - Find existing roles with MANAGE_SERVER/ADMINISTRATOR, add to category
-  - Create channels: #staff-chat, #mod-logs (minimum)
-  - @everyone -view on category
-  - Suggest audit log channel if none exists
-  - If server <50 members, skip #admin-only
-```
+Guidance encodes reasoning: how and why to create things. It complements templates,
+which describe reusable structure. Static instructions live in
+`apps/server/src/prompts/shared-core.md`, `server-planner.md`, and
+`template-authoring.md`. They are loaded once when their module is imported and composed
+with delimited dynamic context by the planning sessions. Configured server rules are
+also loaded and revalidated by planning. Intent-matched guidance remains future work.
 
 ### Example Server-Specific Guidance
 
-```
-Server: NSFW policy
-Guidance: "Never create NSFW or age-restricted channels."
-
+```text
 Server: Naming conventions
-Guidance: "Channel names should be descriptive and self-explanatory.
-  Prefer 'community-help-desk' over 'help'. Keep category names under 20 chars."
+Guidance: "Channel names should be descriptive and self-explanatory."
 ```
-
-### Current State (Phase 1)
-
-Hardcoded rules in `buildSystemPrompt()` cover the basics. The guidance system
-(Phase 2) replaces these with file-based, intent-matched guidance that supports
-server-specific customization.
 
 ### Storage
 
-Markdown files. Can evolve into database entries if dynamic updates needed.
+Configured server rules are persisted in the database. A future intent-matching layer
+may evolve separately if dynamic guidance selection is needed.

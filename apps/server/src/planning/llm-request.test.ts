@@ -75,4 +75,26 @@ describe("buildLLMRequest", () => {
       stream: true,
     });
   });
+
+  it("includes an OpenRouter reasoning effort when configured", () => {
+    const result = buildLLMRequest({
+      ...baseInput,
+      reasoning: { effort: "high" },
+    });
+
+    expect(JSON.parse(result.fetchOptions.body)).toMatchObject({
+      reasoning: { effort: "high" },
+    });
+  });
+
+  it("includes an OpenRouter reasoning token budget when configured", () => {
+    const result = buildLLMRequest({
+      ...baseInput,
+      reasoning: { maxTokens: 2048 },
+    });
+
+    expect(JSON.parse(result.fetchOptions.body)).toMatchObject({
+      reasoning: { max_tokens: 2048 },
+    });
+  });
 });

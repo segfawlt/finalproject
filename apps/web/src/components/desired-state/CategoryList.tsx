@@ -8,6 +8,7 @@ interface CategoryListProps {
   diffs?: Map<string, DiffStatus>;
   /** Fallback diff status for items not present in `diffs`. */
   defaultDiffStatus?: DiffStatus;
+  diffVersion?: number;
   editing?: boolean;
   onChange?: (id: string, next: ChannelBase) => void;
   onDelete?: (id: string) => void;
@@ -18,6 +19,7 @@ export default function CategoryList({
   categories,
   diffs,
   defaultDiffStatus,
+  diffVersion,
   editing,
   onChange,
   onDelete,
@@ -43,7 +45,10 @@ export default function CategoryList({
             <CategoryItem
               key={c.id}
               channel={c}
-              diffStatus={diffs?.get(c.id) ?? defaultDiffStatus}
+              diffStatus={
+                diffs?.get(c.id) ?? defaultDiffStatus ?? (c.id.startsWith("$") ? "new" : undefined)
+              }
+              diffVersion={diffVersion}
               editing={editing}
               onChange={onChange ? (next) => onChange(c.id, next) : undefined}
               onDelete={onDelete ? () => onDelete(c.id) : undefined}

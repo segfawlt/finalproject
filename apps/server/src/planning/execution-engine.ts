@@ -542,6 +542,12 @@ export async function executePlan(options: ExecutionOptions): Promise<ExecutionR
           break;
         }
 
+        // A timeout only means the caller stopped waiting. The Discord request
+        // may still complete remotely, so retrying could duplicate a mutation.
+        if (err instanceof StepTimeoutError) {
+          break;
+        }
+
         if (isTransientError(err) && attempt < MAX_RETRIES) {
           const backoff = computeBackoff(attempt);
           logger.warn(

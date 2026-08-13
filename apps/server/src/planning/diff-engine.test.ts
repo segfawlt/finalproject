@@ -200,6 +200,47 @@ describe("diffEngine — role permissions", () => {
   });
 });
 
+describe("diffEngine — channel properties", () => {
+  it("emits channel property changes for an existing channel", () => {
+    const real = makeServerState({
+      channels: [
+        {
+          id: "channel-1",
+          name: "voice",
+          type: 2,
+          parentId: null,
+          position: 0,
+          bitrate: 64000,
+          userLimit: 5,
+        },
+      ],
+    });
+    const desired = makeDesiredState({
+      active: {
+        channels: {
+          "channel-1": {
+            id: "channel-1",
+            name: "voice",
+            type: 2,
+            parentId: null,
+            position: 0,
+            bitrate: 96000,
+            userLimit: 10,
+          },
+        },
+        roles: {},
+        overwrites: {},
+        memberRoles: {},
+      },
+    });
+
+    const result = diffEngine(real, desired);
+    const editStep = result.steps.find((step) => step.toolName === "edit_channel");
+
+    expect(editStep?.params).toMatchObject({ bitrate: 96000, user_limit: 10 });
+  });
+});
+
 describe("diffEngine — external deletions", () => {
   it("reports a missing active channel without throwing", () => {
     const real = makeServerState();

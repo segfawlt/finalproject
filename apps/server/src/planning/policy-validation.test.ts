@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { validatePlan } from "./validation";
 import type { DesiredState, PlanStep, SymbolTable } from "@repo/shared";
+import { appSettings } from "@repo/db";
 
 const policyMocks = vi.hoisted(() => ({
   guildRules: [] as Array<{ ruleText: string }>,
+  settingRows: [] as Array<{ value: unknown }>,
   selectError: null as Error | null,
   validatedEnv: {
     LLM_API_KEY: null as string | null,
@@ -31,19 +33,36 @@ vi.mock("../env-validated", () => ({
 vi.mock("@repo/db", () => ({
   db: {
     select: vi.fn(() => ({
-      from: vi.fn(() => ({
+      from: vi.fn((table: unknown) => ({
         where: vi.fn(async () => {
           if (policyMocks.selectError) throw policyMocks.selectError;
+          if (table === appSettings) {
+            return policyMocks.settingRows;
+          }
           return policyMocks.guildRules;
         }),
       })),
     })),
   },
   rules: { guildId: "guild_id" },
+  appSettings: { key: "key" },
 }));
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn(() => ({})),
+}));
+
+vi.mock("./openrouter-models", () => ({
+  getOpenRouterModels: vi.fn(async () => [
+    {
+      id: "qwen/qwen3.7-flash",
+      reasoning: {
+        supportedEfforts: ["high"],
+        supportsMaxTokens: true,
+        maxTokens: 8192,
+      },
+    },
+  ]),
 }));
 
 const desiredState: DesiredState = {
@@ -95,6 +114,20 @@ async function runValidation() {
   });
 }
 
+async function runValidationWithModelConfig(modelConfig: {
+  modelId: string;
+  reasoning?: { effort?: string; maxTokens?: number };
+}) {
+  return validatePlan({
+    steps,
+    symbolTable,
+    desiredState,
+    guildId: "g1",
+    status: "draft",
+    modelConfig,
+  });
+}
+
 function policyIssues(result: Awaited<ReturnType<typeof runValidation>>) {
   return result.issues.filter((issue) => issue.group === "Stage 2: Policy");
 }
@@ -113,6 +146,7 @@ function makePolicyResponse(content: string, status = 200): Response {
 
 beforeEach(() => {
   policyMocks.guildRules = [];
+  policyMocks.settingRows = [];
   policyMocks.selectError = null;
   policyMocks.validatedEnv.LLM_API_KEY = null;
 });
@@ -214,6 +248,66 @@ describe("validatePlan Stage 2 policy availability", () => {
 
     expect(policyIssues(result)).toEqual([]);
     expect(result.passed).toBe(true);
+  });
+
+  it("uses the supplied conversation model and reasoning effort", async () => {
+    policyMocks.guildRules = [{ ruleText: "Never delete the announcements channel." }];
+    policyMocks.settingRows = [{ value: ["qwen/qwen3.7-flash"] }];
+    policyMocks.validatedEnv.LLM_API_KEY = "test-key";
+    let requestBody: unknown;
+    const fetchMock = vi.fn(async (_input: unknown, init?: { body?: unknown }) => {
+      requestBody = init?.body;
+      return makePolicyResponse(JSON.stringify({ violations: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runValidationWithModelConfig({
+      modelId: "qwen/qwen3.7-flash",
+      reasoning: { effort: "high" },
+    });
+
+    const request = JSON.parse(String(requestBody));
+    expect(request).toMatchObject({
+      model: "qwen/qwen3.7-flash",
+      reasoning: { effort: "high" },
+    });
+  });
+
+  it("uses the supplied conversation reasoning token budget", async () => {
+    policyMocks.guildRules = [{ ruleText: "Never delete the announcements channel." }];
+    policyMocks.settingRows = [{ value: ["qwen/qwen3.7-flash"] }];
+    policyMocks.validatedEnv.LLM_API_KEY = "test-key";
+    let requestBody: unknown;
+    const fetchMock = vi.fn(async (_input: unknown, init?: { body?: unknown }) => {
+      requestBody = init?.body;
+      return makePolicyResponse(JSON.stringify({ violations: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runValidationWithModelConfig({
+      modelId: "qwen/qwen3.7-flash",
+      reasoning: { maxTokens: 4096 },
+    });
+
+    const request = JSON.parse(String(requestBody));
+    expect(request).toMatchObject({
+      model: "qwen/qwen3.7-flash",
+      reasoning: { max_tokens: 4096 },
+    });
+  });
+
+  it("blocks a model removed from the deployment allowlist without calling the policy provider", async () => {
+    policyMocks.guildRules = [{ ruleText: "Never delete the announcements channel." }];
+    policyMocks.settingRows = [{ value: ["test-model"] }];
+    policyMocks.validatedEnv.LLM_API_KEY = "test-key";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runValidationWithModelConfig({ modelId: "removed/model" });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.passed).toBe(false);
+    expect(policyIssues(result)[0]?.message).toContain("not enabled for this deployment");
   });
 
   it("preserves valid policy blockers and warnings", async () => {

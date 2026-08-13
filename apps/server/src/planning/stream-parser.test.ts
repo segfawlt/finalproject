@@ -29,6 +29,65 @@ describe("parseOpenRouterStream", () => {
     expect(result.toolCalls[0].function.arguments).toBe('{"name":"staff-chat"}');
   });
 
+  it("keeps answer content separate from streamed reasoning and merges reasoning details", async () => {
+    const result = await parseOpenRouterStream(
+      createStream([
+        { reasoning: "Inspect ", content: "I will " },
+        {
+          reasoning: "channels.",
+          reasoning_details: [{ index: 0, type: "reasoning.text", text: "Inspect " }],
+          content: "make the change.",
+        },
+        {
+          reasoning_details: [
+            { index: 0, type: "reasoning.text", text: "channels.", format: "native" },
+          ],
+        },
+      ])
+    );
+
+    expect(result.content).toBe("I will make the change.");
+    expect(result.reasoning).toBe("Inspect channels.");
+    expect(result.reasoningDetails).toEqual([
+      { index: 0, type: "reasoning.text", text: "Inspect channels.", format: "native" },
+    ]);
+  });
+
+  it("accumulates every delta from an unterminated final SSE record", async () => {
+    const finalDelta = {
+      content: "Done.",
+      reasoning: "Final reasoning.",
+      reasoning_details: [{ index: 0, type: "reasoning.text", text: "Final reasoning." }],
+      tool_calls: [
+        {
+          index: 0,
+          id: "call-1",
+          function: { name: "create_channel", arguments: '{"name":"staff"}' },
+        },
+      ],
+    };
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: finalDelta }] })}`)
+        );
+        controller.close();
+      },
+    });
+
+    await expect(parseOpenRouterStream(stream)).resolves.toMatchObject({
+      content: "Done.",
+      reasoning: "Final reasoning.",
+      reasoningDetails: [{ index: 0, type: "reasoning.text", text: "Final reasoning." }],
+      toolCalls: [
+        {
+          id: "call-1",
+          function: { name: "create_channel", arguments: '{"name":"staff"}' },
+        },
+      ],
+    });
+  });
+
   it("handles multiple tool calls", async () => {
     const chunks = [
       {
@@ -50,7 +109,7 @@ describe("parseOpenRouterStream", () => {
     expect(result.toolCalls[1].function.name).toBe("create_role");
   });
 
-  it("yields completed tool calls as they finish", async () => {
+  it("returns tool calls only after the stream ends", async () => {
     const chunks = [
       { content: "Let me" },
       {
@@ -61,21 +120,18 @@ describe("parseOpenRouterStream", () => {
       { tool_calls: [{ index: 0, function: { arguments: '{"name":"chat"}' } }] },
     ];
 
-    const yielded: unknown[] = [];
-    await parseOpenRouterStream(createStream(chunks), {
-      onToolCall: (tc) => {
-        yielded.push(tc);
-      },
-    });
+    const result = await parseOpenRouterStream(createStream(chunks));
 
-    expect(yielded).toHaveLength(1);
-    expect((yielded[0] as { function: { name: string } }).function.name).toBe("create_channel");
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0]?.function.name).toBe("create_channel");
   });
 });
 
 function createStream(
   chunks: Array<{
     content?: string;
+    reasoning?: string;
+    reasoning_details?: Array<Record<string, unknown> & { index: number }>;
     tool_calls?: Array<{
       index: number;
       id?: string;

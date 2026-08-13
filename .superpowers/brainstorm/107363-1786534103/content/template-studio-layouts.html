@@ -1,0 +1,37 @@
+<style>
+  body { background:#101113; color:#f1f1ed; font-family:Inter,system-ui,sans-serif; }
+  .intro { max-width:900px; margin:0 auto 22px; }
+  .intro p { color:#a8aaa6; }
+  .layouts { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; max-width:1100px; margin:auto; }
+  .layout { background:#191b1e; border:1px solid #34373b; border-radius:14px; padding:14px; cursor:pointer; }
+  .layout:hover { border-color:#d5c6a1; }
+  .layout h3 { margin:10px 0 5px; font-size:16px; }
+  .layout p { color:#a8aaa6; font-size:13px; line-height:1.4; margin:0 0 14px; }
+  .screen { height:220px; display:flex; gap:6px; background:#0d0e10; border-radius:9px; padding:8px; }
+  .left,.right { width:25%; background:#202328; border-radius:5px; padding:7px; color:#878a88; font-size:9px; }
+  .center { flex:1; background:#17191c; border-radius:5px; padding:8px; }
+  .line { height:7px; background:#34383c; border-radius:4px; margin-bottom:7px; }
+  .line.short { width:60%; }
+  .bubble { background:#2b3035; border-radius:5px; height:30px; margin-top:35px; }
+  .preview { background:#282c2f; height:75px; border-radius:5px; margin-top:22px; }
+  .wide .left { width:19%; } .wide .right { width:32%; }
+  .stack { display:block; } .stack .left,.stack .right { width:auto; height:35px; margin-bottom:6px; } .stack .center { height:112px; }
+</style>
+<div class="intro">
+  <h2>Template Studio Layout</h2>
+  <p>Choose the spatial model for version history, natural-language authoring, and the live structure preview. The visual language stays close to Server Studio.</p>
+</div>
+<div class="layouts">
+  <div class="layout" data-choice="three-column" onclick="toggleSelect(this)">
+    <div class="screen"><div class="left">v3<br><br>v2<br><br>v1</div><div class="center"><div class="line"></div><div class="line short"></div><div class="bubble"></div></div><div class="right"><div class="preview"></div></div></div>
+    <h3>A · Three-column Studio</h3><p>Persistent versions, composer, and preview. Fast context switching and closest to the approved spec.</p>
+  </div>
+  <div class="layout wide" data-choice="wide-preview" onclick="toggleSelect(this)">
+    <div class="screen"><div class="left">v3<br><br>v2<br><br>v1</div><div class="center"><div class="line"></div><div class="line short"></div><div class="bubble"></div></div><div class="right"><div class="preview"></div><div class="line"></div><div class="line short"></div></div></div>
+    <h3>B · Wide preview</h3><p>Gives the structure more room for editing and inspection, at the cost of a narrower authoring area.</p>
+  </div>
+  <div class="layout stack" data-choice="responsive-stack" onclick="toggleSelect(this)">
+    <div class="screen stack"><div class="left">Version history</div><div class="center"><div class="line"></div><div class="bubble"></div></div><div class="right"><div class="preview"></div></div></div>
+    <h3>C · Responsive stack</h3><p>Prioritizes mobile and small windows by stacking the panels, but loses persistent spatial comparison.</p>
+  </div>
+</div>

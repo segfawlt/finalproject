@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   Check,
   CircleAlert,
+  History,
   Library,
   Loader,
   Pencil,
@@ -16,8 +17,7 @@ import SaveTemplateModal from "./SaveTemplateModal";
 import DesiredStateView from "../DesiredStateView";
 import type { DesiredState, ChannelBase, Role } from "../desired-state/types";
 import type { UseConversationResult, PlanningEvent, ExecEvent } from "../../hooks/useConversation";
-import IterationHistoryModal from "./IterationHistoryModal";
-import { History } from "lucide-react";
+import SharedComposer from "./SharedComposer";
 
 // ── Edit-mode prop bundle ─────────────────────────────────────────────────
 
@@ -39,47 +39,27 @@ export interface ChatAreaEditProps {
 interface ChatAreaProps {
   c: UseConversationResult;
   guildId: string;
-  guildName: string;
   edit: ChatAreaEditProps;
+  onOpenHistory: () => void;
 }
+
+export const DESIRED_STATE_CARD_CLASS =
+  "mt-3 rounded-lg border border-shell-border bg-shell-surface p-4 overflow-hidden";
 
 // ── ChatArea ──────────────────────────────────────────────────────────────
 
-export default function ChatArea({ c, guildId, guildName, edit }: ChatAreaProps) {
-  const [historyOpen, setHistoryOpen] = useState(false);
+export default function ChatArea({ c, guildId, edit, onOpenHistory }: ChatAreaProps) {
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
-  const iterationsCount = c.iterations.length;
-  const currentVersion =
-    iterationsCount > 0 ? Math.max(...c.iterations.map((i) => i.version)) : null;
 
-  // Empty state → welcome screen (handles prompt entry)
+  // Empty state uses the same docked composer as an ongoing conversation.
   if (!c.conversationId) {
-    return (
-      <WelcomeShell
-        guildName={guildName}
-        onPromptSelect={c.createConversation}
-        disabled={c.inFlight}
-      />
-    );
+    return <FreshChat onSubmit={c.createConversation} c={c} />;
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      {/* Chat toolbar — small top bar with a History button. */}
-      {iterationsCount > 0 && (
-        <div className="flex items-center justify-end px-4 py-2 border-b border-shell-border bg-shell-surface/50">
-          <button
-            onClick={() => setHistoryOpen(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs text-shell-text-muted hover:text-shell-text hover:bg-shell-surface2 transition-colors"
-          >
-            <History size={13} />
-            History ({iterationsCount})
-          </button>
-        </div>
-      )}
-
+    <div className="relative flex-1 flex flex-col min-h-0">
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto w-full p-6 space-y-4">
+        <div className="max-w-4xl mx-auto w-full px-8 py-10 pb-40 space-y-6">
           {/* User prompt bubble */}
           {c.prompt && <UserBubble prompt={c.prompt} />}
 
@@ -120,7 +100,7 @@ export default function ChatArea({ c, guildId, guildName, edit }: ChatAreaProps)
                 {c.summary}
               </div>
               {c.desiredState && (
-                <div className="mt-3 rounded-lg border border-shell-border bg-shell-surface overflow-hidden">
+                <div className={DESIRED_STATE_CARD_CLASS}>
                   <DesiredStateView
                     desiredState={edit.editing ? edit.editableState : c.desiredState}
                     currentState={edit.editing ? null : c.currentState}
@@ -139,7 +119,7 @@ export default function ChatArea({ c, guildId, guildName, edit }: ChatAreaProps)
               )}
               {!edit.editing && c.iterations.length > 0 && (
                 <button
-                  onClick={() => setHistoryOpen(true)}
+                  onClick={onOpenHistory}
                   className="inline-flex items-center gap-1.5 text-xs text-shell-text-muted hover:text-shell-text transition-colors"
                 >
                   <History size={13} />
@@ -244,28 +224,27 @@ export default function ChatArea({ c, guildId, guildName, edit }: ChatAreaProps)
       </div>
 
       {/* Revise input — only after the plan is ready */}
-      {c.phase === "completed" && !edit.editing && (
-        <ReviseInput
-          value={c.prompt}
-          onChange={c.setPrompt}
-          onSubmit={() => c.revise(c.prompt)}
-          inFlight={c.inFlight}
-        />
-      )}
-
-      <IterationHistoryModal
-        open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        iterations={c.iterations}
-        currentVersion={currentVersion}
-        onRevert={c.revert}
-      />
+      {(c.phase === "completed" || c.phase === "planning" || c.phase === "ask_user") &&
+        !edit.editing && (
+          <SharedComposer
+            value={c.prompt}
+            onChange={c.setPrompt}
+            placeholder="Ask for a revision…"
+            submitLabel="Revise"
+            onSubmit={(prompt) => c.revise(prompt)}
+            inFlight={c.inFlight}
+            models={c.models}
+            modelConfig={c.modelConfig}
+            modelsLoading={c.modelsLoading}
+            onModelChange={c.updateModelConfig}
+            active={c.phase === "planning" || c.phase === "ask_user"}
+          />
+        )}
 
       {c.desiredState && (
         <SaveTemplateModal
           open={saveTemplateOpen}
           onClose={() => setSaveTemplateOpen(false)}
-          guildId={guildId}
           desiredState={c.desiredState}
         />
       )}
@@ -273,24 +252,39 @@ export default function ChatArea({ c, guildId, guildName, edit }: ChatAreaProps)
   );
 }
 
-// ── Welcome shell (re-uses WelcomeScreen's empty state when no convo) ────
-
-import WelcomeScreen from "./WelcomeScreen";
-
-function WelcomeShell({
-  guildName,
-  onPromptSelect,
-  disabled,
+function FreshChat({
+  c,
+  onSubmit,
 }: {
-  guildName: string;
-  onPromptSelect: (p: string) => void;
-  disabled: boolean;
+  c: UseConversationResult;
+  onSubmit: (prompt?: string) => Promise<void>;
 }) {
   return (
-    <div className="flex-1 overflow-y-auto">
-      <WelcomeScreen guildName={guildName} onPromptSelect={onPromptSelect} disabled={disabled} />
+    <div className="relative flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col items-center justify-center px-8 pb-32 text-center">
+        <h1 className="text-3xl font-light tracking-[-0.03em] text-shell-text">{timeGreeting()}</h1>
+        <p className="mt-2 text-sm text-shell-text-subtle">What would you like to plan?</p>
+      </div>
+      <SharedComposer
+        placeholder="What should we change?"
+        submitLabel="Plan"
+        onSubmit={onSubmit}
+        inFlight={c.inFlight}
+        models={c.models}
+        modelConfig={c.modelConfig}
+        modelsLoading={c.modelsLoading}
+        onModelChange={c.updateModelConfig}
+        active={c.phase === "planning" || c.phase === "ask_user"}
+      />
     </div>
   );
+}
+
+export function timeGreeting(date = new Date()): string {
+  const hour = date.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
 }
 
 // ── Bubble components ────────────────────────────────────────────────────
@@ -298,7 +292,7 @@ function WelcomeShell({
 function UserBubble({ prompt }: { prompt: string }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[80%] rounded-2xl rounded-br-md bg-shell-accent text-shell-accent-fg px-4 py-2.5 text-sm whitespace-pre-wrap">
+      <div className="max-w-[80%] rounded-2xl rounded-br-md bg-shell-accent text-shell-accent-fg px-5 py-3 text-sm leading-relaxed whitespace-pre-wrap shadow-[0_8px_24px_rgba(255,255,255,0.06)]">
         {prompt}
       </div>
     </div>
@@ -318,11 +312,9 @@ function AssistantBubble({
   return (
     <div className="flex">
       <div
-        className={`max-w-[90%] rounded-2xl rounded-bl-md border border-shell-border bg-shell-surface px-4 py-3 border-l-2 ${accentClass}`}
+        className={`max-w-[90%] rounded-2xl rounded-bl-md border border-shell-border bg-shell-surface px-5 py-4 border-l-2 shadow-[0_10px_30px_rgba(0,0,0,0.14)] ${accentClass}`}
       >
-        <div className="text-[10px] uppercase tracking-wider text-shell-text-muted font-semibold mb-1.5">
-          {label}
-        </div>
+        <div className="text-xs text-shell-text-muted font-semibold mb-1.5">{label}</div>
         {children}
       </div>
     </div>
@@ -466,49 +458,6 @@ function StepBadge({ type }: { type: ExecEvent["type"] }) {
 }
 
 // ── Inputs / actions ────────────────────────────────────────────────────
-
-function ReviseInput({
-  value,
-  onChange,
-  onSubmit,
-  inFlight,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit: () => void;
-  inFlight: boolean;
-}) {
-  const [draft, setDraft] = useState(value);
-  return (
-    <div className="border-t border-shell-border bg-shell-surface px-4 py-3">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!draft.trim() || inFlight) return;
-          onChange(draft);
-          onSubmit();
-        }}
-        className="max-w-3xl mx-auto flex items-end gap-2"
-      >
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          rows={2}
-          placeholder="Ask for a revision…"
-          className="flex-1 px-3 py-2 rounded-md bg-shell-surface2 text-shell-text text-sm border border-shell-border focus:border-shell-accent focus:outline-none resize-none"
-        />
-        <button
-          type="submit"
-          disabled={!draft.trim() || inFlight}
-          className="inline-flex items-center gap-1 px-3 py-2 bg-shell-accent text-shell-accent-fg hover:bg-shell-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-sm font-medium transition-colors"
-        >
-          {inFlight ? <Loader size={13} className="animate-spin" /> : <Send size={13} />}
-          Revise
-        </button>
-      </form>
-    </div>
-  );
-}
 
 function ActionRow({ children }: { children: React.ReactNode }) {
   return <div className="mt-3 flex flex-wrap items-center gap-2">{children}</div>;

@@ -12,6 +12,8 @@ import { botHasAdministrator, getBotHighestRolePosition } from "../bot/permissio
 import { guildCache } from "../bot/cache";
 import { validatedEnv } from "../env-validated";
 import { logger } from "../utils/logger";
+import type { ConversationModelConfig } from "./model-config";
+import { resolveDeploymentModelConfig } from "./deployment-model-config";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -545,7 +547,19 @@ function parsePolicyViolations(
   return parsed;
 }
 
-async function validateWithLLM(steps: PlanStep[], guildId: string): Promise<ValidationIssue[]> {
+function getOpenRouterReasoning(
+  reasoning: ConversationModelConfig["reasoning"]
+): { effort: string } | { max_tokens: number } | undefined {
+  if (reasoning?.effort !== undefined) return { effort: reasoning.effort };
+  if (reasoning?.maxTokens !== undefined) return { max_tokens: reasoning.maxTokens };
+  return undefined;
+}
+
+async function validateWithLLM(
+  steps: PlanStep[],
+  guildId: string,
+  modelConfig?: ConversationModelConfig
+): Promise<ValidationIssue[]> {
   let guildRules: Array<{ ruleText: string }>;
   try {
     guildRules = await db.select().from(rules).where(eq(rules.guildId, guildId));
@@ -567,6 +581,17 @@ async function validateWithLLM(steps: PlanStep[], guildId: string): Promise<Vali
 
   const rulesText = guildRules.map((r, i) => `${i + 1}. ${r.ruleText}`).join("\n");
 
+  let resolvedModelConfig = modelConfig;
+  if (modelConfig) {
+    try {
+      resolvedModelConfig = await resolveDeploymentModelConfig(modelConfig);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "model configuration is invalid";
+      logger.error({ err, guildId }, "[validateWithLLM] policy model configuration is invalid");
+      return policyUnavailable(message);
+    }
+  }
+
   try {
     const response = await fetch(`${validatedEnv.LLM_BASE_URL}/chat/completions`, {
       method: "POST",
@@ -577,7 +602,7 @@ async function validateWithLLM(steps: PlanStep[], guildId: string): Promise<Vali
         "X-Title": "Discord Platform",
       },
       body: JSON.stringify({
-        model: validatedEnv.LLM_MODEL,
+        model: resolvedModelConfig?.modelId ?? validatedEnv.LLM_MODEL,
         messages: [
           {
             role: "system",
@@ -597,6 +622,9 @@ async function validateWithLLM(steps: PlanStep[], guildId: string): Promise<Vali
         temperature: 0.1,
         response_format: { type: "json_object" },
         max_tokens: 1024,
+        ...(getOpenRouterReasoning(resolvedModelConfig?.reasoning)
+          ? { reasoning: getOpenRouterReasoning(resolvedModelConfig?.reasoning) }
+          : {}),
       }),
       signal: AbortSignal.timeout(POLICY_VALIDATION_TIMEOUT_MS),
     });
@@ -648,6 +676,7 @@ export interface ValidatePlanOptions {
   desiredState: DesiredState;
   guildId: string;
   status: string;
+  modelConfig?: ConversationModelConfig;
 }
 
 /**
@@ -659,7 +688,7 @@ export interface ValidatePlanOptions {
  * Returns passed=true only if there are zero block-level issues.
  */
 export async function validatePlan(options: ValidatePlanOptions): Promise<ValidationResult> {
-  const { steps, symbolTable, desiredState, guildId, status } = options;
+  const { steps, symbolTable, desiredState, guildId, status, modelConfig } = options;
 
   const issues: ValidationIssue[] = [
     ...validatePermissions(steps, guildId),
@@ -668,7 +697,7 @@ export async function validatePlan(options: ValidatePlanOptions): Promise<Valida
     ...validateSafetyGuards(steps),
     ...validateOverwriteConsolidation(steps, desiredState),
     ...validatePlanIntegrity(steps, status),
-    ...(await validateWithLLM(steps, guildId)),
+    ...(await validateWithLLM(steps, guildId, modelConfig)),
   ];
 
   const hasBlockers = issues.some((i) => i.severity === "block");

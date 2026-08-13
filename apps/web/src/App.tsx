@@ -4,7 +4,8 @@ import { useEffect } from "react";
 import Login from "./routes/Login";
 import Studio from "./routes/Studio";
 import Templates from "./routes/Templates";
-import TemplateEditor from "./routes/TemplateEditor";
+import TemplateStudio from "./routes/TemplateStudio";
+import TemplateViewer from "./routes/TemplateViewer";
 import NotFound from "./routes/NotFound";
 import AppLayout from "./components/AppLayout";
 
@@ -12,6 +13,21 @@ import AppLayout from "./components/AppLayout";
 function DashboardRedirect() {
   const { guildId } = useParams<{ guildId: string }>();
   return <Navigate to={guildId ? `/studio/${guildId}` : "/studio"} replace />;
+}
+
+function LegacyTemplateViewerRedirect() {
+  const { templateId } = useParams<{ templateId: string }>();
+  return <Navigate to={`/templates/${templateId}`} replace />;
+}
+
+function LegacyTemplateStudioRedirect() {
+  const { templateId } = useParams<{ templateId: string }>();
+  return <Navigate to={`/templates/${templateId}/studio`} replace />;
+}
+
+function LegacyGuildTemplateRedirect() {
+  const { templateId } = useParams<{ templateId: string }>();
+  return <Navigate to={`/templates/${templateId}/studio`} replace />;
 }
 
 function App() {
@@ -48,9 +64,12 @@ function App() {
         <Route path="/studio/:guildId" element={<Studio />} />
         <Route path="/dashboard" element={<Navigate to="/studio" replace />} />
         <Route path="/dashboard/:guildId" element={<DashboardRedirect />} />
-        <Route path="/templates" element={<Navigate to="/studio" replace />} />
-        <Route path="/templates/:guildId" element={<Templates />} />
-        <Route path="/templates/:guildId/:templateId" element={<TemplateEditor />} />
+        <Route path="/templates" element={<Templates />} />
+        <Route path="/templates/:templateId/studio" element={<TemplateStudio />} />
+        <Route path="/templates/:templateId" element={<TemplateViewer />} />
+        <Route path="/templates/view/:templateId" element={<LegacyTemplateViewerRedirect />} />
+        <Route path="/templates/studio/:templateId" element={<LegacyTemplateStudioRedirect />} />
+        <Route path="/templates/:guildId/:templateId" element={<LegacyGuildTemplateRedirect />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

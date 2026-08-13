@@ -3,6 +3,12 @@ import { apiFetch } from "../lib/api";
 import { parseSseData } from "../lib/sse";
 import { useStudioStore } from "../stores/studioStore";
 import type { DesiredState, ServerState } from "../components/desired-state";
+import { type ModelConfig, type StudioModel } from "../components/studio/ModelSelector";
+import {
+  createModelConfigSaveQueue,
+  getDeploymentModelSelection,
+  type DeploymentModelSettings,
+} from "./conversation-model-config";
 
 // ── Phase + event types ───────────────────────────────────────────────────
 
@@ -91,6 +97,11 @@ export interface UseConversationResult {
   activeTemplates: ActiveTemplate[];
   showTemplatePanel: boolean;
 
+  // Model configuration
+  models: StudioModel[];
+  modelsLoading: boolean;
+  modelConfig: ModelConfig | null;
+
   // Setters for child-controlled inputs (useState setters — accept value
   // or a functional updater, matching React's standard signature)
   setAskUserSelected: React.Dispatch<React.SetStateAction<string[]>>;
@@ -99,6 +110,8 @@ export interface UseConversationResult {
   setShowTemplatePanel: (v: boolean) => void;
   setPrompt: (v: string) => void;
   setError: (v: string) => void;
+  updateModelConfig: (config: ModelConfig) => Promise<void>;
+  updateDeploymentModels: (settings: DeploymentModelSettings) => Promise<void>;
 
   // Actions
   createConversation: (initialPrompt?: string) => Promise<void>;
@@ -144,6 +157,39 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
   const [prompt, setPrompt] = useState("");
   const [inFlight, setInFlight] = useState(false);
   const [canAIRepair, setCanAIRepair] = useState(false);
+  const [models, setModels] = useState<StudioModel[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelConfig, setModelConfigState] = useState<ModelConfig | null>(null);
+  const modelConfigRef = useRef<ModelConfig | null>(null);
+  const setModelConfig = useCallback((config: ModelConfig | null) => {
+    modelConfigRef.current = config;
+    setModelConfigState(config);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setModelsLoading(true);
+    apiFetch("/api/settings/models")
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Failed to load models (${res.status})`);
+        return (await res.json()) as { modelIds: string[]; models: StudioModel[] };
+      })
+      .then((data) => {
+        if (cancelled) return;
+        const selection = getDeploymentModelSelection(data, modelConfigRef.current);
+        setModels(selection.models);
+        setModelConfig(selection.modelConfig);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [guildId]);
 
   // Refs
   const planningEsRef = useRef<EventSource | null>(null);
@@ -151,6 +197,7 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
   const esRefFailures = useRef(0);
   const inFlightRef = useRef(false);
   const askUserDataRef = useRef<AskUserData | null>(null);
+  const modelConfigSaveQueueRef = useRef(createModelConfigSaveQueue());
 
   // Keep the ask_user mirror in sync so SSE error listeners (which
   // capture stale closures) can see the latest value mid-ask_user.
@@ -242,7 +289,14 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
         try {
           const res = await apiFetch(`/api/guilds/${guildId}/conversations/${convId}`);
           if (res.ok) {
-            const convData = (await res.json()) as { iterations: IterationRow[] };
+            const convData = (await res.json()) as {
+              iterations: IterationRow[];
+              modelId?: string;
+              reasoning?: ModelConfig["reasoning"];
+            };
+            if (convData.modelId) {
+              setModelConfig({ modelId: convData.modelId, reasoning: convData.reasoning });
+            }
             const iters = convData.iterations ?? [];
             setIterations(iters);
             const latest = iters.length > 0 ? iters[iters.length - 1] : null;
@@ -405,7 +459,11 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
         try {
           const res = await apiFetch(`/api/guilds/${guildId}/conversations`, {
             method: "POST",
-            body: { userPrompt },
+            body: {
+              userPrompt,
+              modelConfig: modelConfig ?? undefined,
+              templateIds: activeTemplates.map((template) => template.id),
+            },
           });
           if (!res.ok) {
             const data = (await res.json()) as { error: string };
@@ -427,12 +485,21 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
         exitInFlight();
       }
     },
-    [guildId, prompt, enterInFlight, exitInFlight, clearError, showError, connectPlanningSSE]
+    [
+      guildId,
+      prompt,
+      modelConfig,
+      activeTemplates,
+      enterInFlight,
+      exitInFlight,
+      clearError,
+      showError,
+      connectPlanningSSE,
+    ]
   );
 
-  // Attach to a planning session the server already started (e.g. a template
-  // merge). Resets planning state and opens the SSE stream, same as the tail
-  // of createConversation but without POSTing a new conversation.
+  // Attach to a planning session the server already started, such as an AI
+  // re-plan. Resets planning state and opens the SSE stream.
   const beginPlanning = useCallback(
     (convId: string) => {
       clearError();
@@ -455,6 +522,12 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
     if (!conversationId) return;
     if (enterInFlight()) return;
     try {
+      try {
+        await modelConfigSaveQueueRef.current.wait();
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
+        return;
+      }
       const parts: string[] = [];
       if (askUserData?.multiSelect) {
         parts.push(...askUserSelected);
@@ -516,7 +589,10 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
         setAskUserData(null);
         setAskUserSelected([]);
         setAskUserCustom("");
+        setPrompt("");
         setSummary("");
+        setDesiredState(null);
+        setIterations([]);
         setError("");
         setPhase("completed");
         setActiveTemplates([]);
@@ -524,7 +600,21 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
         try {
           const res = await apiFetch(`/api/guilds/${guildId}/conversations/${convId}`);
           if (res.ok) {
-            const convData = (await res.json()) as { iterations: IterationRow[] };
+            const convData = (await res.json()) as {
+              userPrompt?: string;
+              messages?: Array<{ role: string; content?: string }>;
+              iterations: IterationRow[];
+              modelId?: string;
+              reasoning?: ModelConfig["reasoning"];
+            };
+            setPrompt(convData.userPrompt ?? "");
+            const lastAssistantMessage = [...(convData.messages ?? [])]
+              .reverse()
+              .find((message) => message.role === "assistant" && message.content?.trim());
+            setSummary(lastAssistantMessage?.content ?? "");
+            if (convData.modelId) {
+              setModelConfig({ modelId: convData.modelId, reasoning: convData.reasoning });
+            }
             const iters = convData.iterations ?? [];
             setIterations(iters);
             const latest = iters.length > 0 ? iters[iters.length - 1] : null;
@@ -746,6 +836,12 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
       }
       if (enterInFlight()) return;
       try {
+        try {
+          await modelConfigSaveQueueRef.current.wait();
+        } catch (err) {
+          showError(err instanceof Error ? err.message : String(err));
+          return;
+        }
         clearError();
         setPlanningEvents([]);
         setSummary("");
@@ -819,6 +915,49 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
 
   const stale = useStudioStore((s) => !!s.staleByGuild[guildId ?? ""]);
 
+  const updateModelConfig = useCallback(
+    async (config: ModelConfig) => {
+      if (!conversationId) {
+        setModelConfig(config);
+        return;
+      }
+
+      try {
+        await modelConfigSaveQueueRef.current.enqueue(async () => {
+          const res = await apiFetch(
+            `/api/guilds/${guildId}/conversations/${conversationId}/model-config`,
+            { method: "PATCH", body: config }
+          );
+          if (!res.ok) {
+            const data = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(data.error ?? `Failed to update model (${res.status})`);
+          }
+          const savedConfig = (await res.json()) as ModelConfig;
+          setModelConfig(savedConfig);
+          return savedConfig;
+        });
+      } catch (err) {
+        showError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [guildId, conversationId, setModelConfig, showError]
+  );
+
+  const updateDeploymentModels = useCallback(
+    async (settings: DeploymentModelSettings) => {
+      const selection = getDeploymentModelSelection(settings, modelConfigRef.current);
+      setModels(selection.models);
+      if (!selection.modelConfig) return;
+
+      const configChanged =
+        selection.modelConfig.modelId !== modelConfigRef.current?.modelId ||
+        selection.modelConfig.reasoning?.effort !== modelConfigRef.current?.reasoning?.effort ||
+        selection.modelConfig.reasoning?.maxTokens !== modelConfigRef.current?.reasoning?.maxTokens;
+      if (configChanged) await updateModelConfig(selection.modelConfig);
+    },
+    [updateModelConfig]
+  );
+
   return {
     // Lifecycle
     phase,
@@ -843,6 +982,9 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
     // Templates
     activeTemplates,
     showTemplatePanel,
+    models,
+    modelsLoading,
+    modelConfig,
     // Setters
     setAskUserSelected,
     setAskUserCustom,
@@ -850,6 +992,8 @@ export function useConversation({ guildId }: UseConversationArgs): UseConversati
     setShowTemplatePanel,
     setPrompt,
     setError: setErrorExplicit,
+    updateModelConfig,
+    updateDeploymentModels,
     // Actions
     createConversation,
     beginPlanning,

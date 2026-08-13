@@ -7,7 +7,7 @@ import type {
   MemberRoleAssignment,
 } from "./desired-state/types";
 import { CATEGORY_TYPE } from "./desired-state/types";
-import { computeFullDiff } from "./desired-state/diff-utils";
+import { computeFullDiff, summarizeFullDiff } from "./desired-state/diff-utils";
 import { CategoryList, ChannelList, RoleList, MemberList, TombstoneList } from "./desired-state";
 
 interface DesiredStateViewProps {
@@ -25,6 +25,8 @@ interface DesiredStateViewProps {
    * state — not meaningful for a draft the user is still building).
    */
   editing?: boolean;
+  showMembers?: boolean;
+  showTombstones?: boolean;
   onChannelChange?: (id: string, next: ChannelBase) => void;
   onChannelDelete?: (id: string) => void;
   onChannelAdd?: () => void;
@@ -47,6 +49,8 @@ export default function DesiredStateView({
   desiredState,
   currentState,
   editing,
+  showMembers = true,
+  showTombstones = true,
   onChannelChange,
   onChannelDelete,
   onChannelAdd,
@@ -115,7 +119,8 @@ export default function DesiredStateView({
     removedCategories.length > 0 ||
     removedChannels.length > 0 ||
     removedRoles.length > 0 ||
-    removedMembers.length > 0;
+    (showMembers && removedMembers.length > 0);
+  const summary = summarizeFullDiff(diff);
 
   return (
     <div className="space-y-6">
@@ -126,17 +131,17 @@ export default function DesiredStateView({
             v{desiredState.version}
           </span>
           {editing && (
-            <span className="ml-2 text-warning text-xs uppercase tracking-wide">
-              editing
-            </span>
+            <span className="ml-2 text-warning text-xs uppercase tracking-wide">editing</span>
           )}
         </h2>
+        {currentState && <ChangeSummary summary={summary} version={desiredState.version} />}
       </div>
 
       <Section title="Categories" count={categories.length}>
         <CategoryList
           categories={categories}
           diffs={categoryDiffs}
+          diffVersion={desiredState.version}
           editing={editing}
           onChange={onCategoryChange}
           onDelete={onCategoryDelete}
@@ -149,6 +154,7 @@ export default function DesiredStateView({
           channels={channels}
           categoryNames={categoryNames}
           diffs={channelDiffs}
+          diffVersion={desiredState.version}
           editing={editing}
           onChange={onChannelChange}
           onDelete={onChannelDelete}
@@ -160,6 +166,7 @@ export default function DesiredStateView({
         <RoleList
           roles={roles}
           diffs={roleDiffs}
+          diffVersion={desiredState.version}
           editing={editing}
           onChange={onRoleChange}
           onDelete={onRoleDelete}
@@ -167,14 +174,17 @@ export default function DesiredStateView({
         />
       </Section>
 
-      <Section title="Members" count={memberAssignments.length}>
-        <MemberList
-          assignments={memberAssignments}
-          roleNames={roleNames}
-          diffs={memberDiffs}
-          editing={editing}
-        />
-      </Section>
+      {showMembers && (
+        <Section title="Members" count={memberAssignments.length}>
+          <MemberList
+            assignments={memberAssignments}
+            roleNames={roleNames}
+            diffs={memberDiffs}
+            diffVersion={desiredState.version}
+            editing={editing}
+          />
+        </Section>
+      )}
 
       {hasRemoved && !editing && (
         <Section
@@ -190,7 +200,11 @@ export default function DesiredStateView({
           {removedCategories.length > 0 && (
             <div className="mb-3">
               <div className="text-xs text-shell-text-muted mb-1">Categories</div>
-              <CategoryList categories={removedCategories} defaultDiffStatus="removed" />
+              <CategoryList
+                categories={removedCategories}
+                defaultDiffStatus="removed"
+                diffVersion={desiredState.version}
+              />
             </div>
           )}
           {removedChannels.length > 0 && (
@@ -200,32 +214,75 @@ export default function DesiredStateView({
                 channels={removedChannels}
                 categoryNames={categoryNames}
                 defaultDiffStatus="removed"
+                diffVersion={desiredState.version}
               />
             </div>
           )}
           {removedRoles.length > 0 && (
             <div className="mb-3">
               <div className="text-xs text-shell-text-muted mb-1">Roles</div>
-              <RoleList roles={removedRoles} defaultDiffStatus="removed" />
+              <RoleList
+                roles={removedRoles}
+                defaultDiffStatus="removed"
+                diffVersion={desiredState.version}
+              />
             </div>
           )}
-          {removedMembers.length > 0 && (
+          {showMembers && removedMembers.length > 0 && (
             <div>
               <div className="text-xs text-shell-text-muted mb-1">Members</div>
               <MemberList
                 assignments={removedMembers}
                 roleNames={roleNames}
                 defaultDiffStatus="removed"
+                diffVersion={desiredState.version}
               />
             </div>
           )}
         </Section>
       )}
 
-      {tombstones.length > 0 && !editing && (
+      {showTombstones && tombstones.length > 0 && !editing && (
         <Section title="Already removed" count={tombstones.length} tone="danger">
           <TombstoneList tombstones={tombstones} />
         </Section>
+      )}
+    </div>
+  );
+}
+
+function ChangeSummary({
+  summary,
+  version,
+}: {
+  summary: { added: number; modified: number; removed: number };
+  version: number;
+}) {
+  if (summary.added === 0 && summary.modified === 0 && summary.removed === 0) {
+    return (
+      <div className="mt-3 text-xs text-shell-text-muted">
+        No changes from the current server state.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" aria-label="Planned changes">
+      <span className="text-shell-text-muted uppercase tracking-wide">Changes in v{version}</span>
+      {summary.added > 0 && (
+        <span className="rounded border border-green-700/50 bg-green-900/30 px-2 py-1 text-green-300">
+          +{summary.added} added
+        </span>
+      )}
+      {summary.modified > 0 && (
+        <span className="rounded border border-yellow-700/50 bg-yellow-900/30 px-2 py-1 text-yellow-200">
+          {summary.modified} modified
+        </span>
+      )}
+      {summary.removed > 0 && (
+        <span className="rounded border border-red-700/50 bg-red-900/30 px-2 py-1 text-red-300">
+          -{summary.removed} deleted
+        </span>
       )}
     </div>
   );

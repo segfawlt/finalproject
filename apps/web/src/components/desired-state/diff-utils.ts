@@ -143,6 +143,28 @@ export interface FullDiff {
   memberRoles: DiffResult<MemberRoleAssignment>;
 }
 
+export interface DiffSummary {
+  added: number;
+  modified: number;
+  removed: number;
+}
+
+export function summarizeFullDiff(diff: FullDiff | null): DiffSummary {
+  if (!diff) return { added: 0, modified: 0, removed: 0 };
+
+  const statuses = [
+    ...diff.channels.byKey.values(),
+    ...diff.roles.byKey.values(),
+    ...diff.memberRoles.byKey.values(),
+  ];
+  return {
+    added: statuses.filter((status) => status === "new").length,
+    modified: statuses.filter((status) => status === "modified").length,
+    removed:
+      diff.channels.removed.length + diff.roles.removed.length + diff.memberRoles.removed.length,
+  };
+}
+
 export function computeFullDiff(
   desired: DesiredState["active"],
   current: ServerState | null,
